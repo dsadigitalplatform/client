@@ -50,7 +50,7 @@ export type Config = {
 }
 
 const themeConfig: Config = {
-  templateName: 'Materio',
+  templateName: 'DSA Digital Platform',
   homePageUrl: '/home',
   settingsCookieName: 'materio-mui-next-demo',
   mode: 'system', // 'system', 'light', 'dark'

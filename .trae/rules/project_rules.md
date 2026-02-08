@@ -1,53 +1,279 @@
-# Project Rules: Folder Structure and Component Placement
 
-Adopt a strict separation between Next.js routes and feature modules. Pages are thin; all UI and logic live in features. Use the path aliases set in tsconfig for imports.
+# Project Rules: Folder Structure, Architecture, and AI Development
 
-## App Router
-- app/(public): Public routes only (e.g., login, signup). Uses BlankLayout via Providers.
-- app/(protected): Auth/tenant-protected routes. Contains thin pages that compose feature components only. Uses the protected layout.
-- app/api: Server API routes grouped by domain (e.g., customers, auth).
-- middleware.ts: Central place for auth/tenant gating. Avoid per-page guards inside UI components.
+This project follows a **feature-first, multi-tenant architecture** using **Next.js App Router**.  
+A **strict separation** is enforced between routing, features, and shared UI.  
+Pages are **thin composition layers only**. All UI, logic, and data access live outside `app/`.
 
-## Feature Modules
-- Location: src/features/<feature>
-- Structure:
-  - components/: UI components for the feature (presentation and event wiring only)
-  - hooks/: Client hooks that contain feature logic and state
-  - services/: Data access (fetch calls, adapters), no secrets in client code
-  - <feature>.types.ts: Shared types for the feature
-  - index.ts: Barrel exports for public API of the feature
+These rules are **mandatory** for all contributors and AI agents (including Trae).
 
-## Page Rules
-- Page files must be thin and contain no business logic.
-- Page files must import and render feature components only.
-- Place pages under app/(public) or app/(protected) according to access level.
-- Do not place reusable UI inside app/; keep it in features or shared.
+---
 
-## Naming Conventions
-- Components: PascalCase, .tsx (e.g., CustomersList.tsx, DashboardHome.tsx)
-- Hooks: useX.ts (e.g., useCustomers.ts)
-- Services: <feature>Service.ts (e.g., customersService.ts)
-- Types: <feature>.types.ts (e.g., customers.types.ts)
-- Barrels: index.ts per feature
+## 1. App Router Rules
 
-## Imports and Aliases
-- Use aliases: @features/*, @shared/*, @core/*, @layouts/*, @menu/*, @components/*, @configs/*, @views/*
-- Avoid deep relative imports (../../..). Prefer aliased absolute imports.
+### Route Groups
 
-## Example: Customers Feature
-- Feature:
-  - src/features/customers/components/CustomersList.tsx
-  - src/features/customers/hooks/useCustomers.ts
-  - src/features/customers/services/customersService.ts
-  - src/features/customers/customers.types.ts
-  - src/features/customers/index.ts
-- Page:
-  - app/(protected)/customers/page.tsx
-  - app/(protected)/customers/create/page.tsx
-- API:
-  - app/api/customers/route.ts
+#### `app/(public)`
+- Public routes only (e.g., login, signup)
+- No authentication or tenant assumptions
+- Uses `BlankLayout` via providers
 
-## Example Thin Page
+#### `app/(protected)`
+- Authenticated and tenant-protected routes only
+- Uses a single protected layout (`layout.tsx`) for:
+  - Authentication guard
+  - Tenant resolution
+  - Global navigation shell
+- Pages must remain **thin**
+
+#### `app/api`
+- Server-only API routes grouped by domain (e.g., customers, users)
+- API routes must **never trust client-provided tenant identifiers**
+
+#### `middleware.ts`
+- Centralized auth and tenant gating
+- Redirects and access checks only
+- ❌ No business logic
+- ❌ No database access
+
+---
+
+## 2. Feature Modules (Core Rule)
+
+All business functionality lives in **feature modules**.
+
+### Location
+```
+src/features/<feature>
+```
+
+### Required Structure
+```
+components/        # UI only (presentation + event wiring)
+hooks/             # Feature logic and state
+services/          # API calls, adapters, mappers
+<feature>.types.ts
+index.ts           # Public barrel exports
+```
+
+### Feature Rules
+- Features must **not import from `app/`**
+- Features may import from `shared/`
+- Features own their domain logic end-to-end
+- Features must not depend on other feature internals
+
+---
+
+## 3. Page Rules (Strict)
+
+- Page files must:
+  - Be **thin**
+  - Contain **no business logic**
+  - Contain **no data fetching**
+- Page files may:
+  - Import and compose feature components
+- Page files must not:
+  - Define reusable UI
+  - Call APIs directly
+  - Contain stateful logic
+
+Pages are **routing glue only**.
+
+---
+
+## 4. Naming Conventions
+
+- Components: `PascalCase.tsx`  
+  Example: `CustomersList.tsx`, `CustomerCreateForm.tsx`
+
+- Hooks: `useX.ts`  
+  Example: `useCustomers.ts`, `useCreateCustomer.ts`
+
+- Services:
+  - `<feature>Service.ts`
+  - `<feature>Api.ts` (fetch-only allowed)
+
+- Types:
+  - `<feature>.types.ts`
+
+- Barrels:
+  - `index.ts` (mandatory per feature)
+
+---
+
+## 5. Imports and Aliases
+
+- Always use **absolute imports via aliases**
+- Never use deep relative imports (`../../..`)
+
+### Approved Aliases
+```
+@features/*
+@shared/*
+@core/*
+@layouts/*
+@components/*
+@configs/*
+@assets/*
+```
+
+❌ Do not import from:
+- `app/` (outside routing)
+- Legacy or theme-specific folders
+
+---
+
+## 6. UI, Styling, and Theme Rules (Materio Replacement)
+
+⚠️ **Materio theme components and styles must NOT be used.**
+
+- Do not import Materio components, helpers, providers, or styles
+- No Materio-specific class names, tokens, or utilities
+- Use **only duplicated or custom components**
+
+### UI Placement Rules
+- Feature-specific UI → `features/<feature>/components`
+- Reusable UI → `shared/components`
+- Components must be theme-agnostic
+
+---
+
+## 7. Mobile-First Design (Mandatory)
+
+- All pages and components must be designed **mobile-first**:
+  - Default styles target small screens first; scale up at breakpoints
+  - Use responsive props and breakpoints (e.g., MUI `sx`, `theme.breakpoints`)
+  - Prefer fluid layouts with flex/grid and wrapping over fixed widths
+  - Images and tables must be responsive and accessible
+- Validate layouts at common breakpoints: `xs`, `sm`, `md`, `lg`, `xl`
+- Avoid hidden functionality on mobile; feature parity is required
+- Performance budgets must consider low-end mobile devices
+
+---
+
+## 8. Shared UI and Utilities
+
+### Location
+```
+src/shared/
+```
+
+Use for:
+- Generic UI components (Button, Input, Table)
+- Reusable hooks
+- Utilities
+- Cross-feature types
+
+Rules:
+- No business logic
+- No tenant assumptions
+- Must be reusable across multiple features
+
+---
+
+## 9. Multi-Tenancy Rules (Critical)
+
+- Tenant context is resolved in:
+  - `middleware.ts`
+  - `app/(protected)/layout.tsx`
+
+### Tenant Enforcement
+- Client code:
+  - ❌ Must NOT send `tenantId`
+- Server/API code:
+  - ✅ Must derive tenant from session/token
+  - ✅ Must scope all queries by tenantId
+
+Tenant isolation is enforced **server-side only**.
+
+---
+
+## 10. Server vs Client Boundaries
+
+- `app/api` routes are server-only
+- Client services:
+  - Must not contain secrets
+  - Must not enforce tenant or auth rules
+- Business enforcement happens **only on the server**
+
+Use:
+- API routes → validation and enforcement
+- Services → communication layer
+- Hooks → orchestration and state
+
+---
+
+## 11. State Management Rules
+
+- Feature-level state lives in:
+  - Feature hooks (`useX`)
+- Avoid global state unless:
+  - Truly cross-feature (e.g., auth, tenant)
+- Prefer:
+  - Local state
+  - Feature hooks
+  - Context only when required
+
+---
+
+## 12. API Guidelines
+
+- API routes grouped by domain:
+  ```
+  app/api/<domain>/route.ts
+  ```
+- Always:
+  - Validate inputs
+  - Return typed JSON
+  - Enforce auth and tenant scope
+- Client code must access APIs **only via feature services**
+
+---
+
+## 13. Testing Rules
+
+- Tests live close to features:
+  ```
+  src/features/<feature>/__tests__/
+  ```
+- Focus on:
+  - Hooks
+  - Services
+- Pages:
+  - Smoke tests only
+  - No deep logic testing
+
+---
+
+## 14. AI Agent (Trae) Guardrails
+
+When generating code, AI must:
+- Follow this structure exactly
+- Never introduce:
+  - New architectural patterns
+  - Theme-specific components
+  - Business logic in pages
+- Always:
+  - Place logic in hooks/services
+  - Place UI in feature/shared components
+  - Keep pages thin
+
+If unsure, **default to feature-based placement**.
+
+---
+
+## 15. CI Hygiene
+
+Before pushing code:
+- Run `npm run lint`
+- Run `npm run build`
+- Fix all errors and warnings
+- No broken imports or unused exports
+
+---
+
+## 16. Reference Example
+
 ```tsx
 // app/(protected)/customers/page.tsx
 import { CustomersList } from '@features/customers'
@@ -56,25 +282,3 @@ export default function Page() {
   return <CustomersList />
 }
 ```
-
-## Layout Usage
-- Public pages use BlankLayout via app/(public)/layout.tsx.
-- Protected pages use the existing protected LayoutWrapper (navigation, headers, footers) via app/(protected)/layout.tsx.
-
-## Shared UI
-- Reusable UI or utilities that are not tied to a single feature live in src/shared.
-- Keep shared components generic and style-agnostic where possible.
-
-## API Guidelines
-- Group API routes under app/api/<domain>.
-- Validate inputs on the server; return typed JSON responses consumed by services in features.
-
-## Testing
-- Place unit tests close to the feature (e.g., src/features/<feature>/__tests__).
-- Prefer testing hooks/services in isolation; pages should be smoke-tested only.
-
-## CI Hygiene
-- After changes:
-  - Run `npm run lint`
-  - Run `npm run build`
-  - Address any errors before pushing
