@@ -29,10 +29,10 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
   // Vars
   const darkImg = '/images/pages/auth-v2-mask-dark.png'
   const lightImg = '/images/pages/auth-v2-mask-light.png'
-  const darkIllustration = '/images/illustrations/auth/dsa-hero-pro-dark.svg'
-  const lightIllustration = '/images/illustrations/auth/dsa-hero-pro-light.svg'
-  const borderedDarkIllustration = '/images/illustrations/auth/dsa-hero-pro-dark.svg'
-  const borderedLightIllustration = '/images/illustrations/auth/dsa-hero-pro-light.svg'
+  const darkIllustration = '/images/illustrations/auth/v2-login-dark.png'
+  const lightIllustration = '/images/illustrations/auth/v2-login-light.png'
+  const borderedDarkIllustration = '/images/illustrations/auth/v2-login-light-border.png'
+  const borderedLightIllustration = '/images/illustrations/auth/v2-login-dark-border.png'
 
   // Hooks
   const router = useRouter()
@@ -106,6 +106,7 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
             <Button
               fullWidth
               variant='contained'
+              disabled
               onClick={handleFacebook}
               startIcon={<i className='ri-facebook-fill' />}
               sx={{
@@ -113,6 +114,7 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
                 backgroundColor: '#1877F2',
                 color: '#FFFFFF',
                 '&:hover': { backgroundColor: '#166FE5' },
+                '&.Mui-disabled': { opacity: 0.45, backgroundColor: '#1877F2', color: '#FFFFFF' },
                 '& i': { color: '#FFFFFF', fontSize: '20px' }
               }}
             >
