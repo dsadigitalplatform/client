@@ -69,7 +69,7 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
           <img
             src={characterIllustration}
             alt='Sales agent centered with ideas and profit graphs'
-            className='max-bs-[600px] is-auto bs-auto object-contain'
+            className='max-bs-[600px] is-auto bs-auto object-contain relative z-[1]'
           />
         </div>
         <Illustrations
@@ -84,13 +84,13 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
         </Link>
         <div className='flex flex-col gap-5 is-full sm:is-auto md:is-full sm:max-is-[400px] md:max-is-[unset]'>
           <div>
-            
+            <Typography variant='h4'>{`Welcome to ${themeConfig.templateName}!`}</Typography>
             
           </div>
           <div className='flex flex-col gap-4'>
             <Button
               fullWidth
-              variant='outlined'
+              variant='contained'
               onClick={handleGoogle}
               startIcon={<i className='ri-google-fill' />}
               sx={{
