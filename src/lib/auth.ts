@@ -2,6 +2,7 @@ import 'server-only'
 import type { NextAuthOptions } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { ObjectId } from 'mongodb'
+import { cookies } from 'next/headers'
 
 import { getDb } from '@/lib/mongodb'
 
@@ -20,17 +21,32 @@ export const authOptions: NextAuthOptions = {
     async redirect({ url, baseUrl }) {
       if (url.startsWith('/')) {
         const path = url.split('?')[0]
-        if (path === '/' || path === '/login') return `${baseUrl}/home`
+        if (path === '/' || path === '/login') return `${baseUrl}/post-login`
         return `${baseUrl}${url}`
       }
       try {
         const u = new URL(url)
-        if (u.origin === baseUrl) return url
+        if (u.origin === baseUrl) {
+          const p = u.pathname
+          if (p === '/' || p === '/login') return `${baseUrl}/post-login`
+          return url
+        }
       } catch {}
-      return `${baseUrl}/home`
+      return `${baseUrl}/post-login`
     },
     async jwt({ token, account, profile }) {
-      if (token.userId) return token
+      if (token.userId) {
+        const db = await getDb()
+        const memberships = await db
+          .collection('memberships')
+          .find({ userId: new ObjectId(token.userId), status: 'active' }, { projection: { tenantId: 1 } })
+          .toArray()
+        const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
+        token.tenantIds = tenantIds
+        token.currentTenantId = token.currentTenantId || tenantIds[0]
+
+        return token
+      }
       if (account?.provider === 'google') {
         const db = await getDb()
         const provider = 'google'
@@ -81,12 +97,21 @@ export const authOptions: NextAuthOptions = {
           lastLoginAt: now
         })
         token.userId = userIdObj.toHexString()
+        const memberships = await db
+          .collection('memberships')
+          .find({ userId: userIdObj, status: 'active' }, { projection: { tenantId: 1 } })
+          .toArray()
+        const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
+        token.tenantIds = tenantIds
+        token.currentTenantId = tenantIds[0]
       }
 
       return token
     },
     async session({ session, token }) {
       ;(session as any).userId = token.userId
+      ;(session as any).tenantIds = (token as any).tenantIds
+      ;(session as any).currentTenantId = (token as any).currentTenantId
 
       return session
     }

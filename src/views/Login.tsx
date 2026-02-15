@@ -2,7 +2,8 @@
 
 // Next Imports
 import { useRouter } from 'next/navigation'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
+import { useEffect } from 'react'
 
 // MUI Imports
 import Typography from '@mui/material/Typography'
@@ -37,6 +38,7 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
 
   // Hooks
   const router = useRouter()
+  const { status } = useSession()
   const { settings } = useSettings()
   const authBackground = useImageVariant(mode, lightImg, darkImg)
 
@@ -49,13 +51,19 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
   )
 
   const handleGoogle = async () => {
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/home` : '/home'
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/post-login` : '/post-login'
     await signIn('google', { callbackUrl: url })
   }
   
   const handleFacebook = () => {
     router.push('/')
   }
+  
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace('/post-login')
+    }
+  }, [status, router])
 
   return (
     <div className='flex bs-full justify-center'>
