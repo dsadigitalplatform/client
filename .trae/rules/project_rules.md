@@ -1,112 +1,214 @@
-
 # Project Rules: Folder Structure, Architecture, and AI Development
 
-This project follows a **feature-first, multi-tenant architecture** using **Next.js App Router**.  
-A **strict separation** is enforced between routing, features, and shared UI.  
-Pages are **thin composition layers only**. All UI, logic, and data access live outside `app/`.
+This project follows a **feature-first, multi-tenant architecture** using **Next.js App Router**.
 
-These rules are **mandatory** for all contributors and AI agents (including Trae).
+A strict separation is enforced between routing, core systems, features, and shared UI.  
+Pages are thin composition layers only.  
+All UI, logic, and data access live outside `app/`.
+
+These rules are mandatory for all contributors and AI agents.
 
 ---
 
-## 1. App Router Rules
+# 1. App Router Rules
 
-### Route Groups
+## Route Groups
 
-#### `app/(public)`
+### `app/(public)`
 - Public routes only (e.g., login, signup)
 - No authentication or tenant assumptions
 - Uses `BlankLayout` via providers
 
-#### `app/(protected)`
+### `app/(protected)`
 - Authenticated and tenant-protected routes only
 - Uses a single protected layout (`layout.tsx`) for:
   - Authentication guard
   - Tenant resolution
   - Global navigation shell
-- Pages must remain **thin**
+- Pages must remain thin
 
-#### `app/api`
-- Server-only API routes grouped by domain (e.g., customers, users)
-- API routes must **never trust client-provided tenant identifiers**
+### `app/api`
+- Server-only API routes grouped by domain
+- Must validate input
+- Must enforce authentication
+- Must enforce tenant isolation
+- Must never trust client-provided tenant identifiers
+- Must not contain business logic
 
-#### `middleware.ts`
-- Centralized auth and tenant gating
-- Redirects and access checks only
-- ❌ No business logic
-- ❌ No database access
+### `middleware.ts`
+- Redirect logic only
+- May check presence of session
+- Must not access database
+- Must not resolve memberships
+- Must not contain business logic
 
 ---
 
-## 2. Feature Modules (Core Rule)
+# 2. Core System Layer (Critical)
 
-All business functionality lives in **feature modules**.
+Core infrastructure lives under:
 
-### Location
+```
+src/@core/
+```
+
+Core includes:
+- Authentication
+- Database connection
+- Session helpers
+- Guards and enforcement utilities
+
+Core is not a feature.
+
+---
+
+# 3. Authentication Architecture (Mandatory)
+
+Authentication is a core cross-application system.
+
+## Required Folder Structure
+
+```
+src/@core/
+  auth/
+    authOptions.ts
+    session.ts
+    guards.ts
+    types.ts
+    index.ts
+  db/
+    mongodb.ts
+
+src/features/auth/
+  components/
+  hooks/
+  services/
+  index.ts
+
+app/api/auth/[...nextauth]/route.ts
+```
+
+## Auth Placement Rules
+
+- Auth logic must not live inside business features
+- No database logic inside `app/api`
+- No session mutation inside pages
+- Auth config must live in `@core/auth`
+- Mongo connection must live in `@core/db/mongodb`
+
+## Session Contract
+
+JWT session must include:
+
+```ts
+{
+  userId: string
+  isSuperAdmin: boolean
+  currentTenantId?: string
+  impersonatingTenantId?: string
+}
+```
+
+Rules:
+- Session is server-trusted only
+- Tenant must never be derived from client input
+- Tenant must not be stored in localStorage
+- Tenant switching must update JWT server-side
+
+## Auth + Tenant Flow
+
+1. User authenticates
+2. Memberships are checked
+3. Tenant context is established
+4. Protected routes require valid session + tenant
+
+## NextAuth Rules
+
+- Use JWT session strategy
+- Do not use database sessions
+- On first Google login:
+  - Create user in `users`
+  - Create authAccount in `authAccounts`
+- On login:
+  - Update `lastLoginAt`
+- Do not modify MongoDB schema
+- Do not create new collections
+
+## Environment Variables
+
+Must use:
+
+```
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+NEXTAUTH_SECRET
+NEXTAUTH_URL
+MONGODB_URI
+```
+
+Secrets must never be hardcoded.
+
+---
+
+# 4. Feature Modules
+
+All business functionality lives in:
+
 ```
 src/features/<feature>
 ```
 
-### Required Structure
+## Required Structure
+
 ```
-components/        # UI only (presentation + event wiring)
-hooks/             # Feature logic and state
-services/          # API calls, adapters, mappers
+components/
+hooks/
+services/
 <feature>.types.ts
-index.ts           # Public barrel exports
+index.ts
 ```
 
-### Feature Rules
-- Features must **not import from `app/`**
-- Features may import from `shared/`
-- Features own their domain logic end-to-end
-- Features must not depend on other feature internals
+## Feature Rules
+
+- Must not import from `app/`
+- May import from `@shared/`
+- Must not depend on other feature internals
+- Own domain logic end-to-end
 
 ---
 
-## 3. Page Rules (Strict)
+# 5. Page Rules
 
-- Page files must:
-  - Be **thin**
-  - Contain **no business logic**
-  - Contain **no data fetching**
-- Page files may:
-  - Import and compose feature components
-- Page files must not:
-  - Define reusable UI
-  - Call APIs directly
-  - Contain stateful logic
+Pages must:
+- Be thin
+- Contain no business logic
+- Contain no data fetching
+- Only compose feature components
 
-Pages are **routing glue only**.
-
----
-
-## 4. Naming Conventions
-
-- Components: `PascalCase.tsx`  
-  Example: `CustomersList.tsx`, `CustomerCreateForm.tsx`
-
-- Hooks: `useX.ts`  
-  Example: `useCustomers.ts`, `useCreateCustomer.ts`
-
-- Services:
-  - `<feature>Service.ts`
-  - `<feature>Api.ts` (fetch-only allowed)
-
-- Types:
-  - `<feature>.types.ts`
-
-- Barrels:
-  - `index.ts` (mandatory per feature)
+Pages must not:
+- Call APIs directly
+- Access database
+- Define reusable UI
+- Mutate session
 
 ---
 
-## 5. Imports and Aliases
+# 6. Naming Conventions
 
-- Always use **absolute imports via aliases**
-- Never use deep relative imports (`../../..`)
+Components: PascalCase.tsx  
+Hooks: useX.ts  
+Services: `<feature>Service.ts`  
+Types: `<feature>.types.ts`  
+Barrels: `index.ts` (mandatory)
 
-### Approved Aliases
+---
+
+# 7. Imports and Aliases
+
+Always use absolute imports.
+
+Approved aliases:
+
 ```
 @features/*
 @shared/*
@@ -117,168 +219,155 @@ Pages are **routing glue only**.
 @assets/*
 ```
 
-❌ Do not import from:
-- `app/` (outside routing)
-- Legacy or theme-specific folders
+No deep relative imports.  
+Do not import from `app/` outside routing.
 
 ---
 
-## 6. UI, Styling, and Theme Rules (Materio Replacement)
+# 8. UI and Theme Rules
 
-⚠️ **Materio theme components and styles must NOT be used.**
+Materio theme components must not be used.
 
-- Do not import Materio components, helpers, providers, or styles
-- No Materio-specific class names, tokens, or utilities
-- Use **only duplicated or custom components**
+- No Materio providers
+- No Materio tokens
+- No Materio utilities
 
-### UI Placement Rules
-- Feature-specific UI → `features/<feature>/components`
-- Reusable UI → `shared/components`
-- Components must be theme-agnostic
+Feature UI → `features/<feature>/components`  
+Shared UI → `shared/components`
 
----
-
-## 7. Mobile-First Design (Mandatory)
-
-- All pages and components must be designed **mobile-first**:
-  - Default styles target small screens first; scale up at breakpoints
-  - Use responsive props and breakpoints (e.g., MUI `sx`, `theme.breakpoints`)
-  - Prefer fluid layouts with flex/grid and wrapping over fixed widths
-  - Images and tables must be responsive and accessible
-- Validate layouts at common breakpoints: `xs`, `sm`, `md`, `lg`, `xl`
-- Avoid hidden functionality on mobile; feature parity is required
-- Performance budgets must consider low-end mobile devices
+Components must be theme-agnostic.
 
 ---
 
-## 8. Shared UI and Utilities
+# 9. Mobile-First Design
 
-### Location
+- Design mobile-first
+- Use responsive breakpoints (`xs`, `sm`, `md`, `lg`, `xl`)
+- No hidden mobile functionality
+- Layouts must scale progressively
+- Optimize for low-end mobile performance
+
+---
+
+# 10. Multi-Tenancy Rules
+
+Tenant context resolved in:
+
 ```
-src/shared/
+app/(protected)/layout.tsx
 ```
 
-Use for:
-- Generic UI components (Button, Input, Table)
-- Reusable hooks
-- Utilities
-- Cross-feature types
+Middleware may redirect but not resolve memberships.
 
-Rules:
-- No business logic
-- No tenant assumptions
-- Must be reusable across multiple features
+## Tenant Enforcement
 
----
+Client:
+- Must not send tenantId
 
-## 9. Multi-Tenancy Rules (Critical)
+Server:
+- Must derive tenantId from session
+- Must scope all queries by tenantId
+- Must validate membership status
 
-- Tenant context is resolved in:
-  - `middleware.ts`
-  - `app/(protected)/layout.tsx`
-
-### Tenant Enforcement
-- Client code:
-  - ❌ Must NOT send `tenantId`
-- Server/API code:
-  - ✅ Must derive tenant from session/token
-  - ✅ Must scope all queries by tenantId
-
-Tenant isolation is enforced **server-side only**.
+Tenant isolation is enforced server-side only.
 
 ---
 
-## 10. Server vs Client Boundaries
+# 11. Server vs Client Boundaries
 
-- `app/api` routes are server-only
-- Client services:
-  - Must not contain secrets
-  - Must not enforce tenant or auth rules
-- Business enforcement happens **only on the server**
+API routes:
+- Validation
+- Enforcement
+- Tenant scoping
 
-Use:
-- API routes → validation and enforcement
-- Services → communication layer
-- Hooks → orchestration and state
+Client services:
+- No secrets
+- No enforcement
 
----
-
-## 11. State Management Rules
-
-- Feature-level state lives in:
-  - Feature hooks (`useX`)
-- Avoid global state unless:
-  - Truly cross-feature (e.g., auth, tenant)
-- Prefer:
-  - Local state
-  - Feature hooks
-  - Context only when required
+Hooks:
+- Orchestration and state
 
 ---
 
-## 12. API Guidelines
+# 12. State Management
 
-- API routes grouped by domain:
-  ```
-  app/api/<domain>/route.ts
-  ```
-- Always:
-  - Validate inputs
-  - Return typed JSON
-  - Enforce auth and tenant scope
-- Client code must access APIs **only via feature services**
+- Feature state in feature hooks
+- Avoid unnecessary global state
+- Auth and tenant context may use controlled global context
 
 ---
 
-## 13. Testing Rules
+# 13. API Guidelines
 
-- Tests live close to features:
-  ```
-  src/features/<feature>/__tests__/
-  ```
-- Focus on:
-  - Hooks
-  - Services
-- Pages:
-  - Smoke tests only
-  - No deep logic testing
+Routes grouped by domain:
 
----
-
-## 14. AI Agent (Trae) Guardrails
-
-When generating code, AI must:
-- Follow this structure exactly
-- Never introduce:
-  - New architectural patterns
-  - Theme-specific components
-  - Business logic in pages
-- Always:
-  - Place logic in hooks/services
-  - Place UI in feature/shared components
-  - Keep pages thin
-
-If unsure, **default to feature-based placement**.
-
----
-
-## 15. CI Hygiene
-
-Before pushing code:
-- Run `npm run lint`
-- Run `npm run build`
-- Fix all errors and warnings
-- No broken imports or unused exports
-
----
-
-## 16. Reference Example
-
-```tsx
-// app/(protected)/customers/page.tsx
-import { CustomersList } from '@features/customers'
-
-export default function Page() {
-  return <CustomersList />
-}
 ```
+app/api/<domain>/route.ts
+```
+
+Always:
+- Validate input
+- Enforce auth
+- Enforce tenant
+- Return typed JSON
+
+Client must access APIs through feature services.
+
+---
+
+# 14. Testing Rules
+
+Tests live near features:
+
+```
+src/features/<feature>/__tests__/
+```
+
+Focus on:
+- Hooks
+- Services
+
+Pages:
+- Smoke tests only
+
+---
+
+# 15. AI Agent Guardrails
+
+AI must:
+- Follow this structure strictly
+- Never place logic in pages
+- Never access DB from pages
+- Never modify Mongo schema
+- Never bypass tenant enforcement
+- Never hardcode secrets
+
+If unsure:
+- Default to core for infrastructure
+- Default to features for business logic
+- Keep pages thin
+
+---
+
+# 16. CI Hygiene
+
+Before pushing:
+- Run lint
+- Run build
+- Fix all errors
+- No broken imports
+- No unused exports
+
+---
+
+# Final Architecture Principles
+
+- Users ≠ Tenants  
+- Membership is the bridge  
+- Authentication precedes tenant resolution  
+- Tenant context is mandatory  
+- Super admin never bypasses security  
+- All data is tenant-scoped  
+- Pages are thin  
+- Core handles infrastructure  
+- Features handle business logic  
