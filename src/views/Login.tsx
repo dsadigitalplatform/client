@@ -2,6 +2,7 @@
 
 // Next Imports
 import { useRouter } from 'next/navigation'
+import { signIn } from 'next-auth/react'
 
 // MUI Imports
 import Typography from '@mui/material/Typography'
@@ -47,8 +48,9 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
     borderedDarkIllustration
   )
 
-  const handleGoogle = () => {
-    router.push('/')
+  const handleGoogle = async () => {
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/home` : '/home'
+    await signIn('google', { callbackUrl: url })
   }
   
   const handleFacebook = () => {
