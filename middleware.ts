@@ -10,6 +10,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/assets') ||
+    pathname.startsWith('/images') ||
     pathname.startsWith('/api')
 
   if (isAsset) return NextResponse.next()
