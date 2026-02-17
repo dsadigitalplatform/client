@@ -8,7 +8,7 @@ import PerfectScrollbar from 'react-perfect-scrollbar'
 import type { VerticalMenuContextProps } from '@menu/components/vertical-menu/Menu'
 
 // Component Imports
-import { Menu, MenuItem } from '@menu/vertical-menu'
+import { Menu, MenuItem, SubMenu } from '@menu/vertical-menu'
 
 // Hook Imports
 import useVerticalNav from '@menu/hooks/useVerticalNav'
@@ -25,8 +25,13 @@ type RenderExpandIconProps = {
   transitionDuration?: VerticalMenuContextProps['transitionDuration']
 }
 
+type TenantInfo = {
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+}
+
 type Props = {
   scrollMenu: (container: any, isPerfectScrollbar: boolean) => void
+  tenant?: TenantInfo
 }
 
 const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) => (
@@ -35,7 +40,7 @@ const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) =
   </StyledVerticalNavExpandIcon>
 )
 
-const VerticalMenu = ({ scrollMenu }: Props) => {
+const VerticalMenu = ({ scrollMenu, tenant }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -51,13 +56,13 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
     <ScrollWrapper
       {...(isBreakpointReached
         ? {
-            className: 'bs-full overflow-y-auto overflow-x-hidden',
-            onScroll: container => scrollMenu(container, false)
-          }
+          className: 'bs-full overflow-y-auto overflow-x-hidden',
+          onScroll: container => scrollMenu(container, false)
+        }
         : {
-            options: { wheelPropagation: false, suppressScrollX: true },
-            onScrollY: container => scrollMenu(container, true)
-          })}
+          options: { wheelPropagation: false, suppressScrollX: true },
+          onScrollY: container => scrollMenu(container, true)
+        })}
     >
       {/* Incase you also want to scroll NavHeader to scroll with Vertical Menu, remove NavHeader from above and paste it below this comment */}
       {/* Vertical Menu */}
@@ -74,6 +79,20 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
         <MenuItem href='/about' icon={<i className='ri-information-line' />}>
           About
         </MenuItem>
+        {tenant?.role && tenant.role !== 'USER' && (
+          <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+            {tenant.role === 'OWNER' && (
+              <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                Invite User
+              </MenuItem>
+            )}
+            {tenant.role === 'OWNER' && (
+              <MenuItem href='/admin/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Tenant
+              </MenuItem>
+            )}
+          </SubMenu>
+        )}
       </Menu>
       {/* <Menu
         popoutMenuOffset={{ mainAxis: 10 }}

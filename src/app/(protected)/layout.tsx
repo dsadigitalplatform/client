@@ -49,7 +49,7 @@ const Layout = async (props: ChildrenType) => {
          systemMode={systemMode}
          verticalLayout={
           <VerticalLayout
-            navigation={<Navigation mode={mode} />}
+            navigation={<Navigation mode={mode} tenant={tenant} />}
             navbar={<Navbar user={user} tenant={tenant} />}
             footer={<VerticalFooter />}
           >

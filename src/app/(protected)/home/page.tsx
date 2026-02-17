@@ -35,7 +35,24 @@ const Page = async () => {
     .toArray()) as Membership[]
 
   if (memberships.length === 0) {
-    redirect('/create-tenant')
+    const email = (session.user?.email as string | undefined) || ''
+    const now = new Date()
+    const rx = email ? new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') : null
+    const invited = rx
+      ? await db
+        .collection('memberships')
+        .findOne({ email: rx, status: 'invited', expiresAt: { $gt: now } }, { projection: { role: 1 } })
+      : null
+    const activeByEmail = rx
+      ? await db
+        .collection('memberships')
+        .findOne({ email: rx, status: 'active' }, { projection: { role: 1 } })
+      : null
+    const isUserRole =
+      (invited && invited.role === 'USER') || (activeByEmail && activeByEmail.role === 'USER')
+    if (!isUserRole) {
+      redirect('/admin/create-tenant')
+    }
   }
 
   const tenantIds = memberships.map(m => m.tenantId)
@@ -47,23 +64,7 @@ const Page = async () => {
 
   const byId = new Map<string, Tenant>(tenants.map(t => [t._id.toHexString(), t]))
 
-  return (
-    <Box className='p-6 flex flex-col gap-2'>
-      <Typography variant='h4'>Home</Typography>
-      {memberships.map(m => {
-        const t = byId.get(m.tenantId.toHexString())
-        return (
-          <Box key={m.tenantId.toHexString()} className='flex items-center gap-2'>
-            <Typography color='text.primary'>{t?.name ?? 'Tenant'}</Typography>
-            <Typography variant='caption' color='text.secondary'>
-              Role: {m.role}
-            </Typography>
-          </Box>
-        )
-      })}
-      <DashboardHome />
-    </Box>
-  )
+  return (<DashboardHome />)
 }
 
 export default Page

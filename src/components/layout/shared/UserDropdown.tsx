@@ -41,6 +41,8 @@ type TenantInfo = {
 
 const roleLabel = (role?: TenantInfo['role']) => {
   if (role === 'OWNER') return 'Owner'
+  if (role === 'ADMIN') return 'Admin'
+  if (role === 'USER') return 'User'
   return 'Member'
 }
 
