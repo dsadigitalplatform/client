@@ -2,24 +2,46 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
-import { createTenant } from '@features/tenants'
+
+import { getDb } from '@/lib/mongodb'
+import { ObjectId } from 'mongodb'
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!session?.userId) return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
 
   let body: any
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'invalid_json' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'invalid_json' }, { status: 400 })
   }
 
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const type = body?.type === 'sole_trader' || body?.type === 'company' ? body.type : undefined
-  if (!name || !type) return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
+  if (!name || !type) return NextResponse.json({ success: false, error: 'invalid_input' }, { status: 400 })
 
-  const result = await createTenant({ name, type, createdById: session.userId! })
+  const db = await getDb()
+  const now = new Date()
+  const createdBy = new ObjectId(session.userId!)
 
-  return NextResponse.json(result, { status: 201 })
+  const insertTenant = await db.collection('tenants').insertOne({
+    name,
+    type,
+    status: 'active',
+    createdBy,
+    createdAt: now,
+    updatedAt: now
+  })
+
+  await db.collection('memberships').insertOne({
+    userId: createdBy,
+    tenantId: insertTenant.insertedId,
+    role: 'OWNER',
+    status: 'active',
+    createdAt: now,
+    activatedAt: now
+  })
+
+  return NextResponse.json({ success: true, tenantId: insertTenant.insertedId.toHexString() }, { status: 201 })
 }
