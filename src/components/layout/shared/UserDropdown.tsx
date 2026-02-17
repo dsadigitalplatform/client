@@ -1,13 +1,9 @@
 'use client'
 
-// React Imports
 import { useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
-
-// Next Imports
 import { useRouter } from 'next/navigation'
-
-// MUI Imports
+import { signOut } from 'next-auth/react'
 import { styled } from '@mui/material/styles'
 import Badge from '@mui/material/Badge'
 import Avatar from '@mui/material/Avatar'
@@ -20,8 +16,6 @@ import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
-
-// Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
 
 // Styled component for badge content
@@ -34,9 +28,26 @@ const BadgeContentSpan = styled('span')({
   boxShadow: '0 0 0 2px var(--mui-palette-background-paper)'
 })
 
-const UserDropdown = () => {
+type UserInfo = {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
+
+type TenantInfo = {
+  tenantName?: string
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+}
+
+const roleLabel = (role?: TenantInfo['role']) => {
+  if (role === 'OWNER') return 'Owner'
+  return 'Member'
+}
+
+const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
   // States
   const [open, setOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -63,8 +74,12 @@ const UserDropdown = () => {
   }
 
   const handleUserLogout = async () => {
-    // Redirect to login page
-    router.push('/login')
+    setLoggingOut(true)
+    try {
+      await signOut({ callbackUrl: '/login' })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -78,8 +93,8 @@ const UserDropdown = () => {
       >
         <Avatar
           ref={anchorRef}
-          alt='John Doe'
-          src='/images/avatars/1.png'
+          alt={user?.name ?? 'User'}
+          src={user?.image ?? '/images/avatars/1.png'}
           onClick={handleDropdownOpen}
           className='cursor-pointer bs-[38px] is-[38px]'
         />
@@ -103,15 +118,27 @@ const UserDropdown = () => {
               <ClickAwayListener onClickAway={e => handleDropdownClose(e as MouseEvent | TouchEvent)}>
                 <MenuList>
                   <div className='flex items-center plb-2 pli-4 gap-2' tabIndex={-1}>
-                    <Avatar alt='John Doe' src='/images/avatars/1.png' />
+                    <Avatar alt={user?.name ?? 'User'} src={user?.image ?? '/images/avatars/1.png'} />
                     <div className='flex items-start flex-col'>
                       <Typography className='font-medium' color='text.primary'>
-                        John Doe
+                        {user?.name ?? '—'}
                       </Typography>
-                      <Typography variant='caption'>admin@materio.com</Typography>
+                      <Typography variant='caption'>{user?.email ?? '—'}</Typography>
                     </div>
                   </div>
                   <Divider className='mlb-1' />
+                  {tenant && (
+                    <>
+                      <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
+                        <Typography color='text.secondary'>Tenant</Typography>
+                        <Typography color='text.primary'>{tenant.tenantName ?? '—'}</Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          Role: {roleLabel(tenant.role)}
+                        </Typography>
+                      </div>
+                      <Divider className='mlb-1' />
+                    </>
+                  )}
                   <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
                     <i className='ri-user-3-line' />
                     <Typography color='text.primary'>My Profile</Typography>
@@ -138,7 +165,7 @@ const UserDropdown = () => {
                       onClick={handleUserLogout}
                       sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                     >
-                      Logout
+                      {loggingOut ? 'Logging out…' : 'Logout'}
                     </Button>
                   </div>
                 </MenuList>

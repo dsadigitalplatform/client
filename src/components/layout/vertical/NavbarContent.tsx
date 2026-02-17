@@ -1,17 +1,23 @@
 'use client'
 
-// Third-party Imports
 import classnames from 'classnames'
-
-// Component Imports
 import NavToggle from './NavToggle'
 import ModeDropdown from '@components/layout/shared/ModeDropdown'
 import UserDropdown from '@components/layout/shared/UserDropdown'
-
-// Util Imports
 import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
 
-const NavbarContent = () => {
+type UserInfo = {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
+
+type TenantInfo = {
+  tenantName?: string
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+}
+
+const NavbarContent = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
   return (
     <div className={classnames(verticalLayoutClasses.navbarContent, 'flex items-center justify-between gap-4 is-full')}>
       <div className='flex items-center gap-4'>
@@ -19,7 +25,7 @@ const NavbarContent = () => {
         <ModeDropdown />
       </div>
       <div className='flex items-center'>
-        <UserDropdown />
+        <UserDropdown user={user} tenant={tenant} />
       </div>
     </div>
   )
