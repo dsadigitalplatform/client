@@ -42,5 +42,14 @@ export const subscriptionPlansService = {
       body: JSON.stringify(input)
     }),
   remove: (id: string) =>
-    api<{ success: boolean }>(`/api/super-admin/subscription-plans/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    api<{ success: boolean }>(`/api/super-admin/subscription-plans/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  getFeatures: (id: string) =>
+    api<{ features: Record<string, boolean> }>(
+      `/api/super-admin/subscription-plans/${encodeURIComponent(id)}/features`
+    ),
+  updateFeatures: (id: string, features: Record<string, boolean>) =>
+    api<{ features: Record<string, boolean> }>(
+      `/api/super-admin/subscription-plans/${encodeURIComponent(id)}/features`,
+      { method: 'PUT', body: JSON.stringify({ features }) }
+    )
 }

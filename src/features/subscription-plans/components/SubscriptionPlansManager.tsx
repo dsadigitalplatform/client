@@ -9,6 +9,8 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -36,6 +38,10 @@ export const SubscriptionPlansManager = () => {
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [featuresOpen, setFeaturesOpen] = useState(false)
+  const [featuresPlanId, setFeaturesPlanId] = useState<string | null>(null)
+  const [featuresMap, setFeaturesMap] = useState<Record<string, boolean>>({})
+  const [newFeature, setNewFeature] = useState('')
 
   const [form, setForm] = useState<FormState>({
     name: '',
@@ -103,6 +109,26 @@ export const SubscriptionPlansManager = () => {
 
   const closeDialog = () => setOpen(false)
 
+  const closeFeatures = () => {
+    setFeaturesOpen(false)
+    setFeaturesPlanId(null)
+    setFeaturesMap({})
+    setNewFeature('')
+  }
+
+  const openFeatures = async (p: SubscriptionPlan) => {
+    try {
+      setError(null)
+      const res = await subscriptionPlansService.getFeatures(p._id)
+
+      setFeaturesMap(res.features || {})
+      setFeaturesPlanId(p._id)
+      setFeaturesOpen(true)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load features')
+    }
+  }
+
   const handleChange = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(prev => ({ ...prev, [field]: e.target.value }))
   }
@@ -131,6 +157,32 @@ export const SubscriptionPlansManager = () => {
       await load()
     } catch (e: any) {
       setError(e?.message || 'Failed to save plan')
+    }
+  }
+
+  const toggleFeature = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked
+
+    setFeaturesMap(prev => ({ ...prev, [key]: checked }))
+  }
+
+  const addFeature = () => {
+    const k = newFeature.trim()
+
+    if (!k || featuresMap.hasOwnProperty(k)) return
+    setFeaturesMap(prev => ({ ...prev, [k]: true }))
+    setNewFeature('')
+  }
+
+  const saveFeatures = async () => {
+    if (!featuresPlanId) return
+
+    try {
+      await subscriptionPlansService.updateFeatures(featuresPlanId, featuresMap)
+      closeFeatures()
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save features')
     }
   }
 
@@ -179,6 +231,9 @@ export const SubscriptionPlansManager = () => {
                 <Button size='small' onClick={() => openEdit(p)} startIcon={<i className='ri-edit-2-line' />}>
                   Edit
                 </Button>
+                <Button size='small' onClick={() => openFeatures(p)} startIcon={<i className='ri-toggle-line' />}>
+                  Features
+                </Button>
                 <Button
                   color='error'
                   size='small'
@@ -216,6 +271,34 @@ export const SubscriptionPlansManager = () => {
         <DialogActions>
           <Button variant='text' onClick={closeDialog}>Cancel</Button>
           <Button variant='contained' onClick={submit}>{isEdit ? 'Update' : 'Create'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={featuresOpen} onClose={closeFeatures} fullWidth maxWidth='sm'>
+        <DialogTitle>Configure Features</DialogTitle>
+        <DialogContent className='flex flex-col gap-3'>
+          <Box className='flex flex-col gap-2'>
+            {Object.keys(featuresMap).length === 0 && <Typography color='text.secondary'>No features yet.</Typography>}
+            {Object.keys(featuresMap).sort().map(k => (
+              <FormControlLabel
+                key={k}
+                control={<Checkbox checked={Boolean(featuresMap[k])} onChange={toggleFeature(k)} />}
+                label={k}
+              />
+            ))}
+          </Box>
+          <Box className='flex items-center gap-2'>
+            <TextField
+              label='New Feature Key'
+              value={newFeature}
+              onChange={e => setNewFeature(e.target.value)}
+            />
+            <Button variant='outlined' onClick={addFeature}>Add</Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button variant='text' onClick={closeFeatures}>Cancel</Button>
+          <Button variant='contained' onClick={saveFeatures}>Save</Button>
         </DialogActions>
       </Dialog>
 

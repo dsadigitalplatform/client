@@ -17,6 +17,17 @@ function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1
 }
 
+function isValidFeatures(obj: unknown): obj is Record<string, boolean> {
+  if (typeof obj !== 'object' || obj == null) return false
+
+  for (const v of Object.values(obj as Record<string, unknown>)) {
+    if (typeof v !== 'boolean') return false
+  }
+
+  
+return true
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions)
 
@@ -61,6 +72,10 @@ export async function POST(req: Request) {
 
   if (!name || !slug || !description || Number.isNaN(priceMonthly) || Number.isNaN(maxUsers)) {
     return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
+  }
+
+  if (body?.features != null && !isValidFeatures(body.features)) {
+    return NextResponse.json({ error: 'invalid_features' }, { status: 400 })
   }
 
   const now = new Date()
