@@ -212,4 +212,59 @@ ensureIndex('auditLogs', { actorUserId: 1 }, { name: 'idx_actorUserId' })
 ensureIndex('auditLogs', { targetTenantId: 1 }, { name: 'idx_targetTenantId' })
 ensureIndex('auditLogs', { action: 1 }, { name: 'idx_action' })
 
+const subscriptionPlansValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['name', 'slug', 'description', 'priceMonthly', 'maxUsers', 'createdAt', 'updatedAt'],
+    properties: {
+      name: { bsonType: 'string' },
+      slug: { bsonType: 'string' },
+      description: { bsonType: 'string' },
+      priceMonthly: { bsonType: 'double' },
+      priceYearly: { bsonType: ['double', 'null'] },
+      currency: { bsonType: 'string' },
+      maxUsers: { bsonType: 'int' },
+      features: { bsonType: 'object' },
+      isActive: { bsonType: 'bool' },
+      isDefault: { bsonType: 'bool' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('subscriptionPlans', subscriptionPlansValidator)
+ensureIndex('subscriptionPlans', { name: 1 }, { unique: true, name: 'uniq_subscriptionplan_name' })
+ensureIndex('subscriptionPlans', { slug: 1 }, { unique: true, name: 'uniq_subscriptionplan_slug' })
+
 print('Database initialization complete.')
+
+if (typeof module !== 'undefined' && module.exports) {
+  const mongoose = require('mongoose')
+  const SubscriptionPlanSchema = new mongoose.Schema(
+    {
+      name: { type: String, required: true, unique: true, trim: true },
+      slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+      description: { type: String, required: true, trim: true },
+      priceMonthly: { type: Number, required: true, min: 0 },
+      priceYearly: { type: Number, min: 0 },
+      currency: { type: String, default: 'USD' },
+      maxUsers: { type: Number, required: true, min: 1 },
+      features: { type: Map, of: Boolean, default: {} },
+      isActive: { type: Boolean, default: true },
+      isDefault: { type: Boolean, default: false }
+    },
+    { timestamps: true }
+  )
+  SubscriptionPlanSchema.index({ name: 1 }, { unique: true })
+  SubscriptionPlanSchema.index({ slug: 1 }, { unique: true })
+  SubscriptionPlanSchema.pre('save', function (next) {
+    if (typeof this.name === 'string') this.name = this.name.trim()
+    if (typeof this.slug === 'string') this.slug = this.slug.toLowerCase().trim()
+    next()
+  })
+  const SubscriptionPlan =
+    mongoose.models.SubscriptionPlan || mongoose.model('SubscriptionPlan', SubscriptionPlanSchema)
+  module.exports.SubscriptionPlan = SubscriptionPlan
+}

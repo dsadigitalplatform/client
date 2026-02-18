@@ -82,8 +82,8 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
               Dashboard
             </MenuItem>
             <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
-              <MenuItem href='/about' icon={<i className='ri-information-line' />}>
-                About
+              <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
+                Subscription Plans
               </MenuItem>
             </SubMenu>
           </>
@@ -92,9 +92,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
               Home
             </MenuItem>
-            <MenuItem href='/about' icon={<i className='ri-information-line' />}>
-              About
-            </MenuItem>
+            
             {tenant?.role && tenant.role !== 'USER' && (
               <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
                 {tenant.role === 'OWNER' && (
@@ -114,9 +112,6 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
           <>
             <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
               Create Tenant
-            </MenuItem>
-            <MenuItem href='/about' icon={<i className='ri-information-line' />}>
-              About
             </MenuItem>
           </>
         )}
