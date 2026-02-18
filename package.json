@@ -13,7 +13,9 @@
     "build:icons": "tsx src/assets/iconify-icons/bundle-icons-css.ts",
     "postinstall": "npm run build:icons",
     "clean": "rm -rf .next",
-    "clear": "rm -rf node_modules .next"
+    "clear": "rm -rf node_modules .next",
+    "clear:db": "node database/mongo/clear-db.js",
+    "clear:db:yes": "node database/mongo/clear-db.js --yes"
   },
   "dependencies": {
     "@emotion/cache": "11.14.0",
