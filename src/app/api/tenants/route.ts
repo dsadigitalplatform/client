@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server'
+
 import { getServerSession } from 'next-auth'
+
+import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 
 import { getDb } from '@/lib/mongodb'
-import { ObjectId } from 'mongodb'
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
+
   if (!session?.userId) return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
 
   let body: any
+
   try {
     body = await request.json()
   } catch {
@@ -19,11 +23,25 @@ export async function POST(request: Request) {
 
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const type = body?.type === 'sole_trader' || body?.type === 'company' ? body.type : undefined
+  const subscriptionPlanIdRaw = typeof body?.subscriptionPlanId === 'string' ? body.subscriptionPlanId : ''
+
   if (!name || !type) return NextResponse.json({ success: false, error: 'invalid_input' }, { status: 400 })
 
   const db = await getDb()
   const now = new Date()
   const createdBy = new ObjectId(session.userId!)
+
+  let subscriptionPlanId: ObjectId | undefined
+
+  if (subscriptionPlanIdRaw && ObjectId.isValid(subscriptionPlanIdRaw)) {
+    const plan = await db
+      .collection('subscriptionPlans')
+      .findOne({ _id: new ObjectId(subscriptionPlanIdRaw), isActive: true }, { projection: { _id: 1 } })
+
+    if (plan?._id) {
+      subscriptionPlanId = plan._id as ObjectId
+    }
+  }
 
   const insertTenant = await db.collection('tenants').insertOne({
     name,
@@ -31,7 +49,8 @@ export async function POST(request: Request) {
     status: 'active',
     createdBy,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    ...(subscriptionPlanId ? { subscriptionPlanId } : {})
   })
 
   await db.collection('memberships').insertOne({

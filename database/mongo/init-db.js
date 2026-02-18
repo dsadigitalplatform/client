@@ -132,7 +132,8 @@ const tenantsValidator = {
       status: { enum: ['active', 'suspended'] },
       createdBy: { bsonType: 'objectId' },
       createdAt: { bsonType: 'date' },
-      updatedAt: { bsonType: 'date' }
+      updatedAt: { bsonType: 'date' },
+      subscriptionPlanId: { bsonType: 'objectId' }
     },
     additionalProperties: true
   }
@@ -143,6 +144,7 @@ ensureCollection('tenants', tenantsValidator)
 // Indexes
 ensureIndex('tenants', { createdBy: 1 }, { name: 'idx_createdBy' })
 ensureIndex('tenants', { status: 1 }, { name: 'idx_status' })
+ensureIndex('tenants', { subscriptionPlanId: 1 }, { name: 'idx_subscriptionPlanId' })
 
 
 /* =========================

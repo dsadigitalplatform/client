@@ -35,9 +35,7 @@ const CreateTenantPage = async () => {
                 <Typography color='text.secondary'>You can create another tenant as Owner.</Typography>
             )}
             <CreateTenantForm />
-            <Link href='/home'>
-                <Button variant='contained'>Skip for now</Button>
-            </Link>
+
         </Box>
     )
 }
