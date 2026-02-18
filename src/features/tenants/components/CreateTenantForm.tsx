@@ -48,8 +48,8 @@ export const CreateTenantForm = () => {
 
   return (
     <Box className='flex flex-col gap-4'>
-      <Typography variant='h4'>Create Tenant</Typography>
-      <TextField label='Tenant Name' value={name} onChange={e => setName(e.target.value)} />
+      <Typography variant='h4'>Create Organisation</Typography>
+      <TextField label='Organisation Name' value={name} onChange={e => setName(e.target.value)} />
       <FormControl>
         <InputLabel id='tenant-type-label'>Type</InputLabel>
         <Select

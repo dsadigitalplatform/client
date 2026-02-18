@@ -32,6 +32,8 @@ type TenantInfo = {
 type Props = {
   mode: Mode
   tenant?: TenantInfo
+  isSuperAdmin?: boolean
+  hasMembership?: boolean
 }
 
 const StyledBoxForShadow = styled('div')(({ theme }) => ({
@@ -54,7 +56,7 @@ const StyledBoxForShadow = styled('div')(({ theme }) => ({
 
 const Navigation = (props: Props) => {
   // Props
-  const { mode, tenant } = props
+  const { mode, tenant, isSuperAdmin, hasMembership } = props
 
   // Hooks
   const verticalNavOptions = useVerticalNav()
@@ -128,7 +130,7 @@ const Navigation = (props: Props) => {
         )}
       </NavHeader>
       <StyledBoxForShadow ref={shadowRef} />
-      <VerticalMenu scrollMenu={scrollMenu} tenant={tenant} />
+      <VerticalMenu scrollMenu={scrollMenu} tenant={tenant} isSuperAdmin={isSuperAdmin} hasMembership={hasMembership} />
     </VerticalNav>
   )
 }

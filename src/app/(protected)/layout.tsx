@@ -1,5 +1,9 @@
  import Button from '@mui/material/Button'
 
+import { getServerSession } from 'next-auth'
+
+import { ObjectId } from 'mongodb'
+
 import type { ChildrenType } from '@core/types'
 import LayoutWrapper from '@layouts/LayoutWrapper'
 import VerticalLayout from '@layouts/VerticalLayout'
@@ -12,10 +16,9 @@ import VerticalFooter from '@components/layout/vertical/Footer'
 import HorizontalFooter from '@components/layout/horizontal/Footer'
 import ScrollToTop from '@core/components/scroll-to-top'
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
-import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { ObjectId } from 'mongodb'
+
  
 const Layout = async (props: ChildrenType) => {
    const { children } = props
@@ -26,6 +29,8 @@ const Layout = async (props: ChildrenType) => {
   const session = await getServerSession(authOptions)
   let user
   let tenant
+  let hasMembership = false
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
 
   if (session?.userId) {
     user = {
@@ -34,11 +39,16 @@ const Layout = async (props: ChildrenType) => {
       image: session.user?.image ?? null
     }
     const db = await getDb()
+
     const active = await db
       .collection('memberships')
       .findOne({ userId: new ObjectId(session.userId), status: 'active' }, { sort: { createdAt: -1 } })
+
+    hasMembership = Boolean(active)
+
     if (active) {
       const t = await db.collection('tenants').findOne({ _id: active.tenantId }, { projection: { name: 1 } })
+
       tenant = { tenantName: t?.name as string | undefined, role: active.role as 'OWNER' | 'ADMIN' | 'USER' }
     }
   }
@@ -49,7 +59,7 @@ const Layout = async (props: ChildrenType) => {
          systemMode={systemMode}
          verticalLayout={
           <VerticalLayout
-            navigation={<Navigation mode={mode} tenant={tenant} />}
+            navigation={<Navigation mode={mode} tenant={tenant} isSuperAdmin={isSuperAdmin} hasMembership={hasMembership} />}
             navbar={<Navbar user={user} tenant={tenant} />}
             footer={<VerticalFooter />}
           >

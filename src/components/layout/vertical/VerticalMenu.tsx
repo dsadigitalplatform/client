@@ -32,6 +32,8 @@ type TenantInfo = {
 type Props = {
   scrollMenu: (container: any, isPerfectScrollbar: boolean) => void
   tenant?: TenantInfo
+  isSuperAdmin?: boolean
+  hasMembership?: boolean
 }
 
 const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) => (
@@ -40,7 +42,7 @@ const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) =
   </StyledVerticalNavExpandIcon>
 )
 
-const VerticalMenu = ({ scrollMenu, tenant }: Props) => {
+const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -73,25 +75,50 @@ const VerticalMenu = ({ scrollMenu, tenant }: Props) => {
         renderExpandedMenuItemIcon={{ icon: <i className='ri-circle-line' /> }}
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
-        <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-          Home
-        </MenuItem>
-        <MenuItem href='/about' icon={<i className='ri-information-line' />}>
-          About
-        </MenuItem>
-        {tenant?.role && tenant.role !== 'USER' && (
-          <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-            {tenant.role === 'OWNER' && (
-              <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-                Invite User
+        {/* Super Admin: show Dashboard + Super Admin menu, hide Create Tenant */}
+        {isSuperAdmin ? (
+          <>
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Dashboard
+            </MenuItem>
+            <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
+              <MenuItem href='/about' icon={<i className='ri-information-line' />}>
+                About
               </MenuItem>
+            </SubMenu>
+          </>
+        ) : hasMembership ? (
+          <>
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Home
+            </MenuItem>
+            <MenuItem href='/about' icon={<i className='ri-information-line' />}>
+              About
+            </MenuItem>
+            {tenant?.role && tenant.role !== 'USER' && (
+              <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+                {tenant.role === 'OWNER' && (
+                  <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                    Invite User
+                  </MenuItem>
+                )}
+                {tenant.role === 'OWNER' && (
+                  <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                    Create Tenant
+                  </MenuItem>
+                )}
+              </SubMenu>
             )}
-            {tenant.role === 'OWNER' && (
-              <MenuItem href='/admin/create-tenant' icon={<i className='ri-building-2-line' />}>
-                Create Tenant
-              </MenuItem>
-            )}
-          </SubMenu>
+          </>
+        ) : (
+          <>
+            <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+              Create Tenant
+            </MenuItem>
+            <MenuItem href='/about' icon={<i className='ri-information-line' />}>
+              About
+            </MenuItem>
+          </>
         )}
       </Menu>
       {/* <Menu
