@@ -86,6 +86,14 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
                 Subscription Plans
               </MenuItem>
             </SubMenu>
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+            </SubMenu>
           </>
         ) : hasMembership ? (
           <>
@@ -96,13 +104,16 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             {tenant?.role && tenant.role !== 'USER' && (
               <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
                 {tenant.role === 'OWNER' && (
-                  <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-                    Invite User
+                  <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                    Create Organisation
                   </MenuItem>
                 )}
+                <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                  Organisation Details
+                </MenuItem>
                 {tenant.role === 'OWNER' && (
-                  <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-                    Create Tenant
+                  <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                    Invite User
                   </MenuItem>
                 )}
               </SubMenu>
@@ -111,7 +122,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
         ) : (
           <>
             <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-              Create Tenant
+              Create Organisation
             </MenuItem>
           </>
         )}

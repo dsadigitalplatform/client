@@ -1,8 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { signOut } from 'next-auth/react'
 import { styled } from '@mui/material/styles'
 import Badge from '@mui/material/Badge'
@@ -16,7 +18,9 @@ import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
+
 import { useSettings } from '@core/hooks/useSettings'
+import { SwitchOrganisationDialog } from '@features/tenants/components/SwitchOrganisationDialog'
 
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
@@ -43,6 +47,7 @@ const roleLabel = (role?: TenantInfo['role']) => {
   if (role === 'OWNER') return 'Owner'
   if (role === 'ADMIN') return 'Admin'
   if (role === 'USER') return 'User'
+
   return 'Member'
 }
 
@@ -50,6 +55,8 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
   // States
   const [open, setOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [canSwitch, setCanSwitch] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -77,11 +84,32 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
 
   const handleUserLogout = async () => {
     setLoggingOut(true)
+
     try {
       await signOut({ callbackUrl: '/login' })
     } finally {
       setLoggingOut(false)
     }
+  }
+
+  useEffect(() => {
+    const checkCount = async () => {
+      try {
+        const res = await fetch('/api/memberships/by-user', { cache: 'no-store' })
+        const data = await res.json()
+
+        if (res.ok && Number(data?.count || 0) > 1) setCanSwitch(true)
+      } catch {
+        // ignore
+      }
+    }
+
+    checkCount()
+  }, [])
+
+  const openSwitchDialog = () => {
+    setOpen(false)
+    setSwitchOpen(true)
   }
 
   return (
@@ -132,7 +160,7 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
                   {tenant && (
                     <>
                       <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
-                        <Typography color='text.secondary'>Tenant</Typography>
+                        <Typography color='text.secondary'>Organisation</Typography>
                         <Typography color='text.primary'>{tenant.tenantName ?? '—'}</Typography>
                         <Typography variant='caption' color='text.secondary'>
                           Role: {roleLabel(tenant.role)}
@@ -141,21 +169,19 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
                       <Divider className='mlb-1' />
                     </>
                   )}
+                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/create-tenant')}>
+                    <i className='ri-building-2-line' />
+                    <Typography color='text.primary'>Create Organisation</Typography>
+                  </MenuItem>
+                  {canSwitch && (
+                    <MenuItem className='gap-3' onClick={() => openSwitchDialog()}>
+                      <i className='ri-exchange-line' />
+                      <Typography color='text.primary'>Switch Organisation</Typography>
+                    </MenuItem>
+                  )}
                   <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
                     <i className='ri-user-3-line' />
                     <Typography color='text.primary'>My Profile</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-settings-4-line' />
-                    <Typography color='text.primary'>Settings</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-money-dollar-circle-line' />
-                    <Typography color='text.primary'>Pricing</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-question-line' />
-                    <Typography color='text.primary'>FAQ</Typography>
                   </MenuItem>
                   <div className='flex items-center plb-2 pli-4'>
                     <Button
@@ -176,6 +202,7 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
           </Fade>
         )}
       </Popper>
+      <SwitchOrganisationDialog open={switchOpen} onClose={() => setSwitchOpen(false)} />
     </>
   )
 }

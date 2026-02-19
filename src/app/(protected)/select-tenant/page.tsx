@@ -35,7 +35,7 @@ const SelectTenantPage = async () => {
 
   return (
     <Box className='p-6 flex flex-col gap-4'>
-      <Typography variant='h4'>Select Tenant</Typography>
+      <Typography variant='h4'>Select Organisation</Typography>
       <Box className='flex flex-col gap-2'>
         {tenantIds.map((id: string) => (
           <form key={id} action={async () => setTenant(id)}>

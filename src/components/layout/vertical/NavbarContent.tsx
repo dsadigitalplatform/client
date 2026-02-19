@@ -1,10 +1,12 @@
 'use client'
 
 import classnames from 'classnames'
+
 import NavToggle from './NavToggle'
 import ModeDropdown from '@components/layout/shared/ModeDropdown'
 import UserDropdown from '@components/layout/shared/UserDropdown'
 import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
+import { TenantSelectionGate } from '@features/tenants'
 
 type UserInfo = {
   name?: string | null
@@ -27,6 +29,7 @@ const NavbarContent = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo 
       <div className='flex items-center'>
         <UserDropdown user={user} tenant={tenant} />
       </div>
+      <TenantSelectionGate />
     </div>
   )
 }

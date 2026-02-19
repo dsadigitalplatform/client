@@ -15,8 +15,7 @@ const PostLoginPage = async () => {
   const tenantIds = (session as any).tenantIds || []
 
   if (tenantIds.length === 0) redirect('/create-tenant')
-
-  redirect('/select-tenant')
+  redirect('/home')
 }
 
 export default PostLoginPage
