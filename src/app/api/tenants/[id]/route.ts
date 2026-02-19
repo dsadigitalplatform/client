@@ -76,3 +76,44 @@ return NextResponse.json({
     }
   })
 }
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const p = await ctx.params
+  const idParam = p?.id
+
+  if (!isNonEmptyString(idParam) || !ObjectId.isValid(idParam)) {
+    return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
+  }
+
+  const db = await getDb()
+  const userId = new ObjectId(session.userId!)
+  const tenantId = new ObjectId(idParam)
+
+  const membership = await db
+    .collection('memberships')
+    .findOne({ userId, tenantId, status: 'active' }, { projection: { role: 1 } })
+
+  if (!membership) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  const t = await db
+    .collection('tenants')
+    .findOne({ _id: tenantId }, { projection: { _id: 1, name: 1, type: 1, status: 1, subscriptionPlanId: 1, createdAt: 1, updatedAt: 1 } })
+
+  if (!t) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  return NextResponse.json({
+    tenant: {
+      _id: (t._id as ObjectId).toHexString(),
+      name: t.name as string,
+      type: t.type as 'sole_trader' | 'company',
+      status: t.status as 'active' | 'suspended',
+      subscriptionPlanId: (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null,
+      createdAt: (t.createdAt as Date)?.toISOString?.() || '',
+      updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''
+    }
+  })
+}

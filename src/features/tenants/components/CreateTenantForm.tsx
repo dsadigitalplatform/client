@@ -65,12 +65,16 @@ export const CreateTenantForm = () => {
         form.append('tenantId', tenantId)
 
         try {
-          await fetch('/api/session/tenant?redirect=/tenant', { method: 'POST', body: form })
+          await fetch('/api/session/tenant?return=json', { method: 'POST', body: form })
         } catch { }
+
+        router.replace(`/tenants/${tenantId}`)
+        
+return
       }
 
       setSuccessMsg('Organisation created successfully')
-      setTimeout(() => router.replace('/tenant?created=1'), 1200)
+      router.replace('/tenants')
     } catch (e: any) {
       setError(e.message || 'Unexpected error')
     } finally {
