@@ -10,7 +10,8 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
-import Alert from '@mui/material/Alert'
+import SnackbarContent from '@mui/material/SnackbarContent'
+import IconButton from '@mui/material/IconButton'
 import { useSession } from 'next-auth/react'
 
 const DashboardHome = () => {
@@ -22,6 +23,7 @@ const DashboardHome = () => {
     const [checking, setChecking] = useState(true)
     const [welcomeOpen, setWelcomeOpen] = useState(false)
     const [welcomeName, setWelcomeName] = useState<string | undefined>(undefined)
+    const [tenantName, setTenantName] = useState<string | undefined>(undefined)
 
     useEffect(() => {
         let active = true
@@ -36,7 +38,15 @@ const DashboardHome = () => {
                     const hasCurrentTenant = Boolean(bData?.currentTenant?.id)
                     const uCount = Array.isArray(bData?.tenants) ? bData.tenants.length : 0
 
-                    if (active) setHasMembership((mCount > 0) || (uCount > 0) || hasCurrentTenant)
+                    const tn: string | undefined =
+                        typeof bData?.currentTenant?.name === 'string' && bData.currentTenant.name.length > 0
+                            ? bData.currentTenant.name
+                            : undefined
+
+                    if (active) {
+                        setHasMembership(mCount > 0 || uCount > 0 || hasCurrentTenant)
+                        if (tn) setTenantName(tn)
+                    }
                 } catch {
                     const tenantIds = ((session as any)?.tenantIds as string[] | undefined) || []
 
@@ -46,11 +56,31 @@ const DashboardHome = () => {
                 }
             })()
 
+
+        return () => {
+            active = false
+        }
+    }, [session])
+    useEffect(() => {
+        let active = true
+
+            ; (async () => {
+                try {
+                    const s = await fetch('/api/session/tenant', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}))
+
+                    const tn: string | undefined =
+                        typeof s?.tenantName === 'string' && s.tenantName.length > 0 ? s.tenantName : undefined
+
+                    if (active && tn) setTenantName(tn)
+                } catch { }
+            })()
+
         
 return () => {
             active = false
         }
-    }, [session])
+    }, [])
+
 
     useEffect(() => {
         const w = searchParams.get('welcome')
@@ -58,18 +88,18 @@ return () => {
         if (w && !welcomeOpen) {
             ;
 
-(async () => {
+            (async () => {
                 try {
                     const s = await fetch('/api/session/tenant', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}))
 
                     if (typeof s?.tenantName === 'string' && s.tenantName.length > 0) setWelcomeName(s.tenantName)
-                } catch {}
+                } catch { }
 
                 setWelcomeOpen(true)
 
                 try {
                     router.replace('/home')
-                } catch {}
+                } catch { }
             })()
         }
     }, [searchParams, router, welcomeOpen])
@@ -79,21 +109,69 @@ return () => {
     return (
         <Box className='flex flex-col gap-4'>
             <Typography variant='h4'>Dashboard</Typography>
-            <Typography color='text.secondary'>Welcome to your dashboard.</Typography>
+            <Typography color='text.secondary'>
+                {tenantName ? `Welcome to ${tenantName}` : 'Welcome to your dashboard.'}
+            </Typography>
             {showWelcomeCta && (
                 <Box className='mt-4 flex flex-col gap-2'>
                     <Typography variant='h6'>Welcome!</Typography>
-                    <Typography color='text.secondary'>Start by creating your organization to unlock your workspace.</Typography>
-                    <Button variant='contained' size='large' component={Link} href='/create-tenant' startIcon={<i className='ri-building-2-line' />}>
+                    <Typography color='text.secondary'>
+                        Start by creating your organization to unlock your workspace.
+                    </Typography>
+                    <Button
+                        variant='contained'
+                        size='large'
+                        component={Link}
+                        href='/create-tenant'
+                        startIcon={<i className='ri-building-2-line' />}
+                    >
                         Create Organization
                     </Button>
                 </Box>
             )}
-            <Snackbar open={welcomeOpen} autoHideDuration={4000} onClose={() => setWelcomeOpen(false)}>
-                <Alert severity='success' onClose={() => setWelcomeOpen(false)} sx={{ width: '100%' }}>
+        <Snackbar open={welcomeOpen} autoHideDuration={4000} onClose={() => setWelcomeOpen(false)}>
+          <SnackbarContent
+            sx={{
+              backgroundColor: 'var(--mui-palette-grey-100)',
+              color: 'var(--mui-palette-grey-800)',
+              border: '1px solid var(--mui-palette-grey-300)',
+              borderRadius: 2,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
+              px: 2,
+              py: 1.5
+            }}
+            message={
+              <Box className='flex items-center gap-3'>
+                <Box
+                  className='flex items-center justify-center rounded-md'
+                  sx={{
+                    width: 28,
+                    height: 28,
+                    backgroundColor: 'var(--mui-palette-grey-200)',
+                    color: 'var(--mui-palette-grey-700)'
+                  }}
+                >
+                  <i className='ri-checkbox-circle-line text-[18px]' />
+                </Box>
+                <Box>
+                  <span style={{ fontWeight: 600 }}>
                     {welcomeName ? `Welcome to ${welcomeName}` : 'Welcome to your organisation'}
-                </Alert>
-            </Snackbar>
+                  </span>
+                </Box>
+              </Box>
+            }
+            action={
+              <IconButton
+                size='small'
+                aria-label='close'
+                onClick={() => setWelcomeOpen(false)}
+                sx={{ color: 'var(--mui-palette-grey-700)' }}
+              >
+                <i className='ri-close-line' />
+              </IconButton>
+            }
+          />
+        </Snackbar>
         </Box>
     )
 }

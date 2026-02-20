@@ -1,6 +1,9 @@
 'use client'
 
 import classnames from 'classnames'
+import Chip from '@mui/material/Chip'
+import Typography from '@mui/material/Typography'
+
 import NavToggle from './NavToggle'
 import Logo from '@components/layout/shared/Logo'
 import ModeDropdown from '@components/layout/shared/ModeDropdown'
@@ -28,8 +31,23 @@ const NavbarContent = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo 
         <NavToggle />
         {!isBreakpointReached && <Logo />}
       </div>
-      <div className='flex items-center'>
+      <div className='flex items-center gap-2'>
         <ModeDropdown />
+        <div className='hidden sm:flex'>
+          {tenant?.tenantName ? (
+            <Chip
+              variant='outlined'
+              color='primary'
+              size='small'
+              label={
+                <Typography variant='subtitle2' noWrap title={tenant.tenantName}>
+                  {tenant.tenantName}
+                </Typography>
+              }
+              icon={<i className='ri-building-4-line' />}
+            />
+          ) : null}
+        </div>
         <UserDropdown user={user} tenant={tenant} />
       </div>
     </div>

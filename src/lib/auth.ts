@@ -42,7 +42,14 @@ return url
       
 return `${baseUrl}/post-login`
     },
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile, trigger, session }) {
+      // Allow client-triggered session updates to set currentTenantId
+      if (trigger === 'update' && (session as any)?.currentTenantId) {
+        ;(token as any).currentTenantId = (session as any).currentTenantId
+        
+return token
+      }
+
       if (token.userId) {
         const db = await getDb()
 
