@@ -82,8 +82,11 @@ return items.filter(t => t.name.toLowerCase().includes(q))
         await update({ currentTenantId: id } as any)
       } catch { }
 
-      onClose()
       router.replace('/home?welcome=1')
+
+      try {
+        router.refresh()
+      } catch {}
     } catch (e: any) {
       setError(e?.message || 'Failed to switch organisation')
     }
