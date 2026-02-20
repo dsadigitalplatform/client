@@ -1,5 +1,7 @@
-import Button from '@mui/material/Button'
+export const dynamic = 'force-dynamic'
 import { cookies } from 'next/headers'
+
+import Button from '@mui/material/Button'
 
 import { getServerSession } from 'next-auth'
 
@@ -31,8 +33,8 @@ const Layout = async (props: ChildrenType) => {
   let user
   let tenant
   let hasMembership = false
-  let shouldPromptTenantSelection = false
   const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
+  const tokenTenantIds = ((session as any)?.tenantIds as string[] | undefined) || []
 
   if (session?.userId) {
     user = {
@@ -45,23 +47,63 @@ const Layout = async (props: ChildrenType) => {
     const userIdObj = new ObjectId(session.userId)
     const cookieStore = await cookies()
     const savedTenantId = cookieStore.get('CURRENT_TENANT_ID')?.value
+
     const memberships = await db
       .collection('memberships')
       .find({ userId: userIdObj, status: 'active' }, { sort: { createdAt: -1 }, projection: { tenantId: 1, role: 1 } })
       .toArray()
 
-    hasMembership = memberships.length > 0
-    shouldPromptTenantSelection = !isSuperAdmin && memberships.length > 1 && !savedTenantId
+    hasMembership = memberships.length > 0 || Boolean(savedTenantId) || tokenTenantIds.length > 0
+
+    // Selection prompt is handled in feature components when needed
 
     let active = memberships[0]
+
     if (savedTenantId && ObjectId.isValid(savedTenantId)) {
       const preferred = memberships.find(m => (m.tenantId as ObjectId).equals(new ObjectId(savedTenantId)))
+
       if (preferred) active = preferred
     }
-    if (active) {
-      const t = await db.collection('tenants').findOne({ _id: active.tenantId }, { projection: { name: 1 } })
 
-      tenant = { tenantName: t?.name as string | undefined, role: active.role as 'OWNER' | 'ADMIN' | 'USER' }
+    if (!active && savedTenantId && ObjectId.isValid(savedTenantId)) {
+      const fallbackTenantId = new ObjectId(savedTenantId)
+
+      const mem = await db
+        .collection('memberships')
+        .findOne({ userId: userIdObj, tenantId: fallbackTenantId, status: 'active' }, { projection: { role: 1 } })
+
+      if (mem) {
+        active = { tenantId: fallbackTenantId, role: (mem as any).role } as any
+      }
+
+      if (!active) {
+        active = { tenantId: fallbackTenantId, role: undefined } as any
+      }
+    }
+
+
+    // Fallback to first tenantId from JWT if we couldn't find any membership record yet
+    if (!active && tokenTenantIds.length > 0 && ObjectId.isValid(tokenTenantIds[0])) {
+      const fallbackTenantId = new ObjectId(tokenTenantIds[0])
+
+      const mem = await db
+        .collection('memberships')
+        .findOne({ userId: userIdObj, tenantId: fallbackTenantId, status: 'active' }, { projection: { role: 1 } })
+
+      if (mem) {
+        active = { tenantId: fallbackTenantId, role: (mem as any).role } as any
+      } else {
+        active = { tenantId: fallbackTenantId, role: undefined } as any
+      }
+    }
+
+    if (active) {
+      const t = await db.collection('tenants').findOne({ _id: active.tenantId as ObjectId }, { projection: { name: 1 } })
+
+      tenant = {
+        tenantName: (t?.name as string | undefined) || undefined,
+        role: (active as any).role as 'OWNER' | 'ADMIN' | 'USER' | undefined
+      }
     }
   }
 

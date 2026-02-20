@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
@@ -25,21 +26,20 @@ export async function POST(request: Request) {
 
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
-  const store = await cookies()
-
-  store.set('CURRENT_TENANT_ID', tenantId, { path: '/', httpOnly: true })
-
   const url = new URL(request.url)
   const redirectTo = url.searchParams.get('redirect') || '/home'
 
   const ret = url.searchParams.get('return')
 
   if (ret === 'json') {
-    return NextResponse.json({ success: true })
+    const res = NextResponse.json({ success: true })
+    res.cookies.set('CURRENT_TENANT_ID', tenantId, { path: '/', httpOnly: true })
+    return res
   }
 
-  
-return NextResponse.redirect(new URL(redirectTo, url.origin))
+  const res = NextResponse.redirect(new URL(redirectTo, url.origin))
+  res.cookies.set('CURRENT_TENANT_ID', tenantId, { path: '/', httpOnly: true })
+  return res
 }
 
 export async function GET() {
@@ -49,6 +49,22 @@ export async function GET() {
   const store = await cookies()
   const currentTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
 
-  
-return NextResponse.json({ currentTenantId })
+  if (currentTenantId && ObjectId.isValid(currentTenantId)) {
+    const db = await getDb()
+    const userId = new ObjectId(session.userId!)
+    const tenantId = new ObjectId(currentTenantId)
+
+    const membership = await db
+      .collection('memberships')
+      .findOne({ userId, tenantId, status: 'active' }, { projection: { role: 1 } })
+
+    const t = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })
+    const role = (membership?.role as 'OWNER' | 'ADMIN' | 'USER' | undefined) || undefined
+    const tenantName = (t?.name as string | undefined) || undefined
+
+    
+return NextResponse.json({ currentTenantId, role, tenantName })
+  }
+
+  return NextResponse.json({ currentTenantId })
 }

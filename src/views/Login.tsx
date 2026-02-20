@@ -1,9 +1,11 @@
 'use client'
 
 // Next Imports
-import { useRouter } from 'next/navigation'
-import { signIn, useSession } from 'next-auth/react'
 import { useEffect } from 'react'
+
+import { useRouter } from 'next/navigation'
+
+import { signIn, useSession } from 'next-auth/react'
 
 // MUI Imports
 import Typography from '@mui/material/Typography'
@@ -27,7 +29,7 @@ import themeConfig from '@configs/themeConfig'
 import { useImageVariant } from '@core/hooks/useImageVariant'
 import { useSettings } from '@core/hooks/useSettings'
 
-const LoginV2 = ({ mode }: { mode: Mode }) => {
+const LoginV2 = ({ mode, callbackUrl }: { mode: Mode; callbackUrl?: string }) => {
   // Vars
   const darkImg = '/images/pages/auth-v2-mask-dark.png'
   const lightImg = '/images/pages/auth-v2-mask-light.png'
@@ -51,7 +53,19 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
   )
 
   const handleGoogle = async () => {
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/post-login` : '/post-login'
+    let url = callbackUrl || '/post-login'
+
+    if (typeof window !== 'undefined') {
+      try {
+        // Normalize to absolute for providers; keep relative safe paths
+        const isRelative = url.startsWith('/') && !url.startsWith('//')
+
+        if (isRelative) url = new URL(url, window.location.origin).toString()
+      } catch {
+        url = '/post-login'
+      }
+    }
+
     await signIn('google', { callbackUrl: url })
   }
   
@@ -61,9 +75,9 @@ const LoginV2 = ({ mode }: { mode: Mode }) => {
   
   useEffect(() => {
     if (status === 'authenticated') {
-      router.replace('/post-login')
+      router.replace(callbackUrl || '/post-login')
     }
-  }, [status, router])
+  }, [status, router, callbackUrl])
 
   return (
     <div className='flex bs-full justify-center'>

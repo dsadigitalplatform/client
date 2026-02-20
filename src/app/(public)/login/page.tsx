@@ -1,5 +1,6 @@
 // Next Imports
 import { redirect } from 'next/navigation'
+
 import { getServerSession } from 'next-auth'
 import type { Metadata } from 'next'
 
@@ -15,11 +16,26 @@ export const metadata: Metadata = {
   description: 'Login to your account'
 }
 
-const LoginPage = async () => {
+export default async function LoginPage(props: {
+  searchParams?: Promise<{ callbackUrl?: string | string[] }>
+}) {
   const session = await getServerSession(authOptions)
-  if (session) redirect('/post-login')
-  const mode = await getServerMode()
-  return <Login mode={mode} />
-}
+  const sp = props.searchParams ? await props.searchParams : undefined
+  const callbackUrl = sp?.callbackUrl
 
-export default LoginPage
+  if (session) {
+    const isSafeRelative =
+      typeof callbackUrl === 'string' && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
+
+    if (isSafeRelative) {
+      redirect(callbackUrl!)
+    }
+
+    redirect('/post-login')
+  }
+
+  const mode = await getServerMode()
+
+
+  return <Login mode={mode} callbackUrl={typeof callbackUrl === 'string' ? callbackUrl : undefined} />
+}

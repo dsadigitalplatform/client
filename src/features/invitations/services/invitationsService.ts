@@ -1,5 +1,6 @@
-import { ObjectId } from 'mongodb'
 import crypto from 'crypto'
+
+import { ObjectId } from 'mongodb'
 
 import { getDb } from '@/lib/mongodb'
 
@@ -24,10 +25,11 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Cr
 
   const requesterId = new ObjectId(input.requesterUserId)
   const tenantId = new ObjectId(input.tenantId)
+  const normalizedEmail = input.email.trim().toLowerCase()
 
   const ownerMembership = await db
     .collection('memberships')
-    .findOne({ userId: requesterId, tenantId, role: 'OWNER', status: 'active' })
+    .findOne({ userId: requesterId, tenantId, role: { $in: ['OWNER', 'ADMIN'] }, status: 'active' })
 
   if (!ownerMembership) {
     throw Object.assign(new Error('forbidden'), { status: 403 })
@@ -41,7 +43,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Cr
 
   await db.collection('memberships').insertOne({
     userId: null,
-    email: input.email,
+    email: normalizedEmail,
     tenantId,
     role: input.role,
     status: 'invited',
@@ -69,10 +71,30 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<Ac
   const db = await getDb()
   const now = new Date()
 
+  const escapeRe = (s: string) => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+  const sessionEmailRe = new RegExp('^' + escapeRe(input.sessionEmail) + '$', 'i')
+
   const invited = await db
     .collection('memberships')
     .findOne({ inviteToken: input.token, status: 'invited', expiresAt: { $gt: now } })
+
   if (!invited) {
+    // Idempotent fallback: if this token was already accepted in a previous rapid click,
+    // we won't find it by token anymore. Treat as success if a recent active membership
+    // exists for this email.
+    const recentAccepted = await db.collection('memberships').findOne(
+      {
+        email: sessionEmailRe,
+        status: 'active',
+        activatedAt: { $gt: new Date(now.getTime() - 10 * 60 * 1000) }
+      },
+      { projection: { tenantId: 1 } }
+    )
+
+    if (recentAccepted?.tenantId) {
+      return { tenantId: (recentAccepted.tenantId as ObjectId).toHexString() }
+    }
+
     throw Object.assign(new Error('invalid_token'), { status: 400 })
   }
 
@@ -105,7 +127,8 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<Ac
     { returnDocument: 'after' }
   )
 
-  const updatedDoc = updated.value
+  const updatedDoc = updated?.value
+
   if (!updatedDoc) {
     throw Object.assign(new Error('invalid_token'), { status: 400 })
   }
@@ -113,7 +136,12 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<Ac
   await db.collection('memberships').updateMany(
     {
       tenantId: updatedDoc.tenantId,
-      email: updatedDoc.email,
+
+      // Revoke by email case-insensitively to avoid duplicates differing by case
+      email: new RegExp(
+        '^' + String(updatedDoc.email || '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$',
+        'i'
+      ),
       status: 'invited',
       _id: { $ne: updatedDoc._id }
     },

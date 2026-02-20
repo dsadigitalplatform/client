@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useSession } from 'next-auth/react'
 import useSWR from 'swr'
 
@@ -31,6 +32,7 @@ type MembershipRole = 'OWNER' | 'ADMIN' | 'USER'
 type MembershipStatus = 'invited' | 'active' | 'revoked'
 type Membership = {
   _id?: string
+  userId?: string
   email?: string
   role: MembershipRole
   status: MembershipStatus
@@ -47,43 +49,62 @@ const InviteUserForm = () => {
 
   const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value)
 
-  const tenantId = (session as any)?.currentTenantId as string | undefined
+  const sessionTenantId = (session as any)?.currentTenantId as string | undefined
+  const [tenantId, setTenantId] = useState<string | undefined>(sessionTenantId)
   const membershipsUrl = tenantId ? `/api/memberships?tenantId=${tenantId}` : null
   const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(r => r.json())
   const { data, isLoading, mutate } = useSWR(membershipsUrl, fetcher)
+
+  // Resolve current tenant from server cookie if session is missing
+  // This ensures switching via the profile menu or modal reflects here
+  useSWR('/api/session/tenant', (url: string) => fetch(url, { cache: 'no-store' }).then(r => r.json()), {
+    onSuccess: (res: any) => {
+      const id = typeof res?.currentTenantId === 'string' ? res.currentTenantId : ''
+
+      if (id && id !== tenantId) setTenantId(id)
+    },
+    revalidateOnFocus: false
+  })
 
   const handleSubmit = async () => {
     setSuccessMsg(null)
     setErrorMsg(null)
 
-    const tenantId = (session as any)?.currentTenantId as string | undefined
+    const currentId = tenantId
 
-    if (!tenantId) {
+    if (!currentId) {
       setErrorMsg('No tenant selected')
-      return
+      
+return
     }
+
     if (!email.trim() || !isValidEmail(email.trim())) {
       setErrorMsg('Please enter a valid email')
-      return
+      
+return
     }
 
-    const body: InvitationPayload = {
+      const body: InvitationPayload = {
       email: email.trim(),
       role,
-      tenantId
+        tenantId: currentId
     }
 
     setSubmitting(true)
+
     try {
       const res = await fetch('/api/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       })
+
       const data = await res.json()
+
       if (!res.ok) {
         throw new Error(data?.error || 'Failed to send invitation')
       }
+
       setSuccessMsg('Invitation sent')
       setEmail('')
       setRole('USER')
@@ -141,15 +162,27 @@ const InviteUserForm = () => {
               const raw = (data as any)?.memberships ?? data
               const list: Membership[] = Array.isArray(raw) ? raw : []
               const members = list.filter(m => m.status === 'invited' || m.status === 'active')
-              if (members.length === 0) {
+              const meUserId = (session as any)?.userId as string | undefined
+              const meEmail = (session as any)?.user?.email as string | undefined
+
+              const filtered = members.filter(m => {
+                if (m.userId && meUserId && m.userId === meUserId) return false
+                if (meEmail && m.email && m.email.toLowerCase() === meEmail.toLowerCase()) return false
+                
+return true
+              })
+
+              if (filtered.length === 0) {
                 return (
                   <TableRow>
                     <TableCell colSpan={3}>No members</TableCell>
                   </TableRow>
                 )
               }
+
               const label = (s: MembershipStatus) => s.charAt(0).toUpperCase() + s.slice(1)
-              return members.map((m, idx) => (
+
+              return filtered.map((m, idx) => (
                 <TableRow key={m._id ?? idx}>
                   <TableCell>{m.email ?? ''}</TableCell>
                   <TableCell>{m.role}</TableCell>

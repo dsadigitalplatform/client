@@ -15,10 +15,20 @@ export async function GET() {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId!)
+  const email = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    email && email.length > 0
+      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
 
   const memberships = await db
     .collection('memberships')
-    .find({ userId, status: 'active' }, { projection: { tenantId: 1, role: 1 } })
+    .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1, role: 1 } })
     .toArray()
 
   const tenantIds = memberships.map(m => m.tenantId as ObjectId)

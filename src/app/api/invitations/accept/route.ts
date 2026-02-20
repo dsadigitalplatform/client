@@ -1,4 +1,6 @@
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { acceptInvitation } from '@features/invitations'
@@ -30,7 +32,13 @@ export async function POST(req: Request) {
 
     const result = await acceptInvitation({ token, sessionUserId, sessionEmail })
 
-    return NextResponse.json({ success: true, tenantId: result.tenantId })
+    const res = NextResponse.json({ success: true, tenantId: result.tenantId })
+    // Set CURRENT_TENANT_ID on the response so the browser stores it immediately
+    res.cookies.set('CURRENT_TENANT_ID', result.tenantId, {
+      path: '/',
+      httpOnly: true
+    })
+    return res
   } catch (err: any) {
     const status = typeof err?.status === 'number' ? err.status : 500
     const error =

@@ -93,37 +93,48 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
               <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
                 Organisation Details
               </MenuItem>
+              {tenant?.role && tenant.role !== 'USER' && (
+                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                  Invite User
+                </MenuItem>
+              )}
             </SubMenu>
           </>
         ) : hasMembership ? (
           <>
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-              Home
+              Dashboard
             </MenuItem>
-            
-            {tenant?.role && tenant.role !== 'USER' && (
-              <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-                {tenant.role === 'OWNER' && (
-                  <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-                    Create Organisation
-                  </MenuItem>
-                )}
-                <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
-                  Organisation Details
+
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+              {(tenant?.role === 'OWNER' || tenant?.role === 'ADMIN') && (
+                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                  Invite User
                 </MenuItem>
-                {tenant.role === 'OWNER' && (
-                  <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-                    Invite User
-                  </MenuItem>
-                )}
-              </SubMenu>
-            )}
+              )}
+            </SubMenu>
           </>
         ) : (
           <>
-            <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-              Create Organisation
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Dashboard
             </MenuItem>
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+            </SubMenu>
           </>
         )}
       </Menu>

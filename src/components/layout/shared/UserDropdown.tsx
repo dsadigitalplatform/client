@@ -57,6 +57,7 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
   const [loggingOut, setLoggingOut] = useState(false)
   const [canSwitch, setCanSwitch] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
+  const [resolvedTenant, setResolvedTenant] = useState<TenantInfo | undefined>(tenant)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -67,7 +68,57 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
   const { settings } = useSettings()
 
   const handleDropdownOpen = () => {
-    !open ? setOpen(true) : setOpen(false)
+    const next = !open
+
+    setOpen(next)
+
+    if (next && !resolvedTenant) {
+      ;
+
+(async () => {
+        try {
+          const bRes = await fetch('/api/session/bootstrap', { cache: 'no-store' })
+          const b = await bRes.json().catch(() => ({}))
+          const ct = b?.currentTenant
+
+          if (ct?.id && (ct?.name || ct?.role)) {
+            setResolvedTenant({ tenantName: ct?.name, role: ct?.role })
+            
+return
+          }
+
+          const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
+          const s = await sRes.json().catch(() => ({}))
+          const currentId: string | undefined = s?.currentTenantId
+          const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
+          const name: string | undefined = s?.tenantName
+
+          if (currentId && (role || name)) {
+            setResolvedTenant({ tenantName: name, role })
+            
+return
+          }
+
+          const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
+          const t = await tRes.json().catch(() => ({}))
+          const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+          if (currentId) {
+            const m = items.find(i => i._id === currentId)
+
+            if (m) {
+              setResolvedTenant({ tenantName: m.name, role: m.role })
+              
+return
+            }
+          }
+
+          if (items.length === 1) {
+            setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+          }
+        } catch {}
+      })()
+    }
   }
 
   const handleDropdownClose = (event?: MouseEvent<HTMLLIElement> | (MouseEvent | TouchEvent), url?: string) => {
@@ -106,6 +157,53 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
 
     checkCount()
   }, [])
+
+  useEffect(() => {
+    if (tenant?.tenantName || tenant?.role) {
+      setResolvedTenant(tenant)
+
+      return
+    }
+
+    const resolve = async () => {
+      try {
+        const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
+        const s = await sRes.json().catch(() => ({}))
+        const currentId: string | undefined = s?.currentTenantId
+        const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
+        const name: string | undefined = s?.tenantName
+
+        if (currentId && (role || name)) {
+          setResolvedTenant({ tenantName: name, role })
+          
+return
+        }
+
+        const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
+        const t = await tRes.json().catch(() => ({}))
+        const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+        if (currentId) {
+          const m = items.find(i => i._id === currentId)
+
+          if (m) {
+            setResolvedTenant({ tenantName: m.name, role: m.role })
+            
+return
+          }
+        }
+
+        if (items.length === 1) {
+          setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    resolve()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.tenantName, tenant?.role])
 
   const openSwitchDialog = () => {
     setOpen(false)
@@ -157,13 +255,13 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
                     </div>
                   </div>
                   <Divider className='mlb-1' />
-                  {tenant && (
+                  {resolvedTenant && (
                     <>
                       <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
                         <Typography color='text.secondary'>Organisation</Typography>
-                        <Typography color='text.primary'>{tenant.tenantName ?? '—'}</Typography>
+                        <Typography color='text.primary'>{resolvedTenant.tenantName ?? '—'}</Typography>
                         <Typography variant='caption' color='text.secondary'>
-                          Role: {roleLabel(tenant.role)}
+                          Role: {roleLabel(resolvedTenant.role)}
                         </Typography>
                       </div>
                       <Divider className='mlb-1' />
