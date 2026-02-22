@@ -18,6 +18,7 @@ import StepLabel from '@mui/material/StepLabel'
 import Alert from '@mui/material/Alert'
 
 import { SubscriptionPlansPicker } from '@features/subscription-plans/components/SubscriptionPlansPicker'
+import primaryColorConfig from '@configs/primaryColorConfig'
 
 type TenantType = 'sole_trader' | 'company'
 
@@ -27,6 +28,7 @@ export const CreateTenantForm = () => {
   const router = useRouter()
   const [name, setName] = useState<string>('')
   const [type, setType] = useState<TenantType>('sole_trader')
+  const [primaryColor, setPrimaryColor] = useState<string>(primaryColorConfig[0].main)
   const [submitting, setSubmitting] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
@@ -48,7 +50,12 @@ export const CreateTenantForm = () => {
       const res = await fetch('/api/tenants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), type, subscriptionPlanId: selectedPlanId || undefined })
+        body: JSON.stringify({
+          name: name.trim(),
+          type,
+          subscriptionPlanId: selectedPlanId || undefined,
+          primaryColor
+        })
       })
 
       const data: any = await res.json()
@@ -60,6 +67,14 @@ export const CreateTenantForm = () => {
       const tenantId: string | undefined = data?.tenantId
 
       if (tenantId) {
+        try {
+          await fetch(`/api/tenants/${encodeURIComponent(tenantId)}/theme`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ primaryColor })
+          })
+        } catch { }
+
         const form = new FormData()
 
         form.append('tenantId', tenantId)
@@ -69,8 +84,8 @@ export const CreateTenantForm = () => {
         } catch { }
 
         router.replace(`/tenants/${tenantId}`)
-        
-return
+
+        return
       }
 
       setSuccessMsg('Organisation created successfully')
@@ -118,6 +133,36 @@ return
               <MenuItem value='company'>Company</MenuItem>
             </Select>
           </FormControl>
+          <Box>
+            <Typography variant='subtitle2' color='text.secondary'>
+              Primary Color
+            </Typography>
+            <Box className='flex items-center gap-2 mt-2'>
+              {primaryColorConfig.map(c => (
+                <Button
+                  key={c.main}
+                  variant={primaryColor === c.main ? 'outlined' : 'text'}
+                  onClick={() => setPrimaryColor(c.main)}
+                  sx={{
+                    minWidth: 0,
+                    p: 0.5,
+                    borderRadius: '10px',
+                    borderColor: primaryColor === c.main ? c.main : undefined
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      backgroundColor: c.main,
+                      boxShadow: primaryColor === c.main ? `0 0 0 2px ${c.main}` : 'none'
+                    }}
+                  />
+                </Button>
+              ))}
+            </Box>
+          </Box>
           {error ? <Typography color='error'>{error}</Typography> : null}
           <Box className='flex items-center gap-2'>
             <Button variant='text' onClick={() => setStep(0)}>Back</Button>

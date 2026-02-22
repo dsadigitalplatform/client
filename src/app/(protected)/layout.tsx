@@ -32,6 +32,7 @@ const Layout = async (props: ChildrenType) => {
   const session = await getServerSession(authOptions)
   let user
   let tenant
+  let tenantPrimaryColor: string | undefined
   let hasMembership = false
   const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
   const tokenTenantIds = ((session as any)?.tenantIds as string[] | undefined) || []
@@ -98,30 +99,34 @@ const Layout = async (props: ChildrenType) => {
     }
 
     if (active) {
-      const t = await db.collection('tenants').findOne({ _id: active.tenantId as ObjectId }, { projection: { name: 1 } })
+      const t = await db
+        .collection('tenants')
+        .findOne({ _id: active.tenantId as ObjectId }, { projection: { name: 1, 'theme.primaryColor': 1 } })
 
       tenant = {
         tenantName: (t?.name as string | undefined) || undefined,
         role: (active as any).role as 'OWNER' | 'ADMIN' | 'USER' | undefined
       }
+
+      tenantPrimaryColor = ((t as any)?.theme?.primaryColor as string | undefined) || undefined
     }
   }
 
   return (
-    <Providers direction={direction}>
+    <Providers direction={direction} tenantPrimaryColor={tenantPrimaryColor || null}>
       <LayoutWrapper
         systemMode={systemMode}
         verticalLayout={
           <VerticalLayout
             navigation={<Navigation mode={mode} tenant={tenant} isSuperAdmin={isSuperAdmin} hasMembership={hasMembership} />}
-            navbar={<Navbar user={user} tenant={tenant} />}
+            navbar={<Navbar user={user} tenant={tenant} isSuperAdmin={isSuperAdmin} />}
             footer={<VerticalFooter />}
           >
             {children}
           </VerticalLayout>
         }
         horizontalLayout={
-          <HorizontalLayout header={<Header user={user} tenant={tenant} />} footer={<HorizontalFooter />}>
+          <HorizontalLayout header={<Header user={user} tenant={tenant} isSuperAdmin={isSuperAdmin} />} footer={<HorizontalFooter />}>
             {children}
           </HorizontalLayout>
         }

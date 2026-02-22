@@ -117,8 +117,8 @@ export const TenantSelectionModal = ({ open = false }: Props) => {
               {filtered.map((t, idx) => {
                 const isCurrent = currentTenantId === t._id
 
-                
-return (
+
+                return (
                   <Box key={t._id}>
                     <ListItemButton onClick={() => choose(t._id)} disabled={isCurrent} className='rounded-lg'>
                       <ListItemAvatar>
@@ -127,6 +127,7 @@ return (
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
+                        disableTypography
                         primary={
                           <Tooltip title={t.name}>
                             <span>{t.name}</span>
@@ -134,7 +135,7 @@ return (
                         }
                         secondary={
                           <Box className='flex items-center gap-2'>
-                            <Chip size='small' label={t.role} />
+                            <Chip size='small' label={t.role || 'USER'} />
                             {isCurrent ? <Chip size='small' color='success' variant='outlined' label='Current' /> : null}
                           </Box>
                         }

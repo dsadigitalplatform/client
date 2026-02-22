@@ -25,6 +25,7 @@ import Divider from '@mui/material/Divider'
 import Tooltip from '@mui/material/Tooltip'
 
 import { listTenantsByUser, type TenantItem } from '../services/tenantsOverviewService'
+import { useSettings } from '@core/hooks/useSettings'
 
 type Props = {
   open: boolean
@@ -34,6 +35,7 @@ type Props = {
 export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
   const router = useRouter()
   const { update } = useSession()
+  const { updateSettings } = useSettings()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<TenantItem[]>([])
@@ -62,8 +64,8 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
     const q = query.trim().toLowerCase()
 
     if (!q) return items
-    
-return items.filter(t => t.name.toLowerCase().includes(q))
+
+    return items.filter(t => t.name.toLowerCase().includes(q))
   }, [items, query])
 
   const choose = async (id: string) => {
@@ -79,6 +81,16 @@ return items.filter(t => t.name.toLowerCase().includes(q))
       if (!res.ok || !data?.success) throw new Error('Failed to switch organisation')
 
       try {
+        const tRes = await fetch(`/api/tenants/${encodeURIComponent(id)}`, { cache: 'no-store' })
+        const tData = await tRes.json().catch(() => ({}))
+        const primary: string | undefined = tData?.tenant?.themePrimaryColor
+
+        if (primary) {
+          updateSettings({ primaryColor: primary }, { updateCookie: false })
+        }
+      } catch { }
+
+      try {
         await update({ currentTenantId: id } as any)
       } catch { }
 
@@ -86,7 +98,7 @@ return items.filter(t => t.name.toLowerCase().includes(q))
 
       try {
         router.refresh()
-      } catch {}
+      } catch { }
     } catch (e: any) {
       setError(e?.message || 'Failed to switch organisation')
     }
@@ -118,12 +130,11 @@ return items.filter(t => t.name.toLowerCase().includes(q))
               {filtered.map((t, idx) => {
                 const isCurrent = currentTenantId === t._id
 
-                
-return (
+
+                return (
                   <Box key={t._id}>
                     <ListItemButton
                       onClick={() => choose(t._id)}
-                      disabled={isCurrent}
                       className='rounded-lg'
                     >
                       <ListItemAvatar>
@@ -132,6 +143,7 @@ return (
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
+                        disableTypography
                         primary={
                           <Tooltip title={t.name}>
                             <span>{t.name}</span>
@@ -139,7 +151,7 @@ return (
                         }
                         secondary={
                           <Box className='flex items-center gap-2'>
-                            <Chip size='small' label={t.role} />
+                            <Chip size='small' label={t.role || 'USER'} />
                             {isCurrent ? <Chip size='small' color='success' variant='outlined' label='Current' /> : null}
                           </Box>
                         }

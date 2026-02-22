@@ -56,13 +56,19 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   if (name) update.name = name
   if (type) update.type = type
 
-  const res = await db
+  // Use updateOne for broader driver compatibility, then fetch the document
+  const upd = await db.collection('tenants').updateOne({ _id: tenantId }, { $set: update })
+
+  if (upd.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  const t = await db
     .collection('tenants')
-    .findOneAndUpdate({ _id: tenantId }, { $set: update }, { returnDocument: 'after' })
+    .findOne(
+      { _id: tenantId },
+      { projection: { _id: 1, name: 1, type: 1, status: 1, subscriptionPlanId: 1, updatedAt: 1 } }
+    )
 
-  if (!res?.value) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-
-  const t = res.value
+  if (!t) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   
 return NextResponse.json({
@@ -101,7 +107,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const t = await db
     .collection('tenants')
-    .findOne({ _id: tenantId }, { projection: { _id: 1, name: 1, type: 1, status: 1, subscriptionPlanId: 1, createdAt: 1, updatedAt: 1 } })
+    .findOne(
+      { _id: tenantId },
+      { projection: { _id: 1, name: 1, type: 1, status: 1, subscriptionPlanId: 1, createdAt: 1, updatedAt: 1, 'theme.primaryColor': 1 } }
+    )
 
   if (!t) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -112,6 +121,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       type: t.type as 'sole_trader' | 'company',
       status: t.status as 'active' | 'suspended',
       subscriptionPlanId: (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null,
+      themePrimaryColor: ((t as any)?.theme?.primaryColor as string | undefined) || undefined,
       createdAt: (t.createdAt as Date)?.toISOString?.() || '',
       updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''
     }

@@ -33,13 +33,19 @@ export async function POST(request: Request) {
 
   if (ret === 'json') {
     const res = NextResponse.json({ success: true })
+
     res.cookies.set('CURRENT_TENANT_ID', tenantId, { path: '/', httpOnly: true })
-    return res
+
+    
+return res
   }
 
   const res = NextResponse.redirect(new URL(redirectTo, url.origin))
+
   res.cookies.set('CURRENT_TENANT_ID', tenantId, { path: '/', httpOnly: true })
-  return res
+
+  
+return res
 }
 
 export async function GET() {
@@ -58,13 +64,17 @@ export async function GET() {
       .collection('memberships')
       .findOne({ userId, tenantId, status: 'active' }, { projection: { role: 1 } })
 
-    const t = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })
+    const t = await db
+      .collection('tenants')
+      .findOne({ _id: tenantId }, { projection: { name: 1, 'theme.primaryColor': 1 } })
+
     const role = (membership?.role as 'OWNER' | 'ADMIN' | 'USER' | undefined) || undefined
     const tenantName = (t?.name as string | undefined) || undefined
+    const primaryColor = ((t as any)?.theme?.primaryColor as string | undefined) || undefined
 
-    
-return NextResponse.json({ currentTenantId, role, tenantName })
+    return NextResponse.json({ currentTenantId, role, tenantName, primaryColor })
   }
 
-  return NextResponse.json({ currentTenantId })
+  
+return NextResponse.json({ currentTenantId })
 }

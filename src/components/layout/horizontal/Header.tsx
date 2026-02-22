@@ -17,14 +17,22 @@ type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
 }
 
-const Header = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
+const Header = ({
+  user,
+  tenant,
+  isSuperAdmin
+}: {
+  user?: UserInfo
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+}) => {
   const { isBreakpointReached } = useHorizontalNav()
 
   return (
     <>
       <LayoutHeader>
         <Navbar>
-          <NavbarContent user={user} tenant={tenant} />
+          <NavbarContent user={user} tenant={tenant} isSuperAdmin={isSuperAdmin} />
         </Navbar>
         {!isBreakpointReached && <Navigation />}
       </LayoutHeader>

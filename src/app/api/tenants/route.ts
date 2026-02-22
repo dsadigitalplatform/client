@@ -9,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
 export async function POST(request: Request) {
+  const HEX = /^#([A-Fa-f0-9]{6})$/
   const session = await getServerSession(authOptions)
 
   if (!session?.userId) return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const type = body?.type === 'sole_trader' || body?.type === 'company' ? body.type : undefined
   const subscriptionPlanIdRaw = typeof body?.subscriptionPlanId === 'string' ? body.subscriptionPlanId : ''
+  const primaryColorRaw = typeof body?.primaryColor === 'string' ? body.primaryColor.trim() : ''
+  const primaryColor = primaryColorRaw && HEX.test(primaryColorRaw) ? primaryColorRaw : undefined
 
   if (!name || !type) return NextResponse.json({ success: false, error: 'invalid_input' }, { status: 400 })
 
@@ -50,7 +53,8 @@ export async function POST(request: Request) {
     createdBy,
     createdAt: now,
     updatedAt: now,
-    ...(subscriptionPlanId ? { subscriptionPlanId } : {})
+    ...(subscriptionPlanId ? { subscriptionPlanId } : {}),
+    ...(primaryColor ? { theme: { primaryColor } } : {})
   })
 
   await db.collection('memberships').insertOne({

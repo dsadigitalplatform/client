@@ -12,10 +12,18 @@ type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
 }
 
-const Navbar = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
+const Navbar = ({
+  user,
+  tenant,
+  isSuperAdmin
+}: {
+  user?: UserInfo
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+}) => {
   return (
     <LayoutNavbar>
-      <NavbarContent user={user} tenant={tenant} />
+      <NavbarContent user={user} tenant={tenant} isSuperAdmin={isSuperAdmin} />
     </LayoutNavbar>
   )
 }

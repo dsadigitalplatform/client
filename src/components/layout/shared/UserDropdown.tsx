@@ -51,7 +51,15 @@ const roleLabel = (role?: TenantInfo['role']) => {
   return 'Member'
 }
 
-const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
+const UserDropdown = ({
+  user,
+  tenant,
+  isSuperAdmin
+}: {
+  user?: UserInfo
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+}) => {
   // States
   const [open, setOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -75,7 +83,7 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
     if (next && !resolvedTenant) {
       ;
 
-(async () => {
+      (async () => {
         try {
           const bRes = await fetch('/api/session/bootstrap', { cache: 'no-store' })
           const b = await bRes.json().catch(() => ({}))
@@ -83,8 +91,8 @@ const UserDropdown = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }
 
           if (ct?.id && (ct?.name || ct?.role)) {
             setResolvedTenant({ tenantName: ct?.name, role: ct?.role })
-            
-return
+
+            return
           }
 
           const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
@@ -95,8 +103,8 @@ return
 
           if (currentId && (role || name)) {
             setResolvedTenant({ tenantName: name, role })
-            
-return
+
+            return
           }
 
           const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
@@ -108,15 +116,15 @@ return
 
             if (m) {
               setResolvedTenant({ tenantName: m.name, role: m.role })
-              
-return
+
+              return
             }
           }
 
           if (items.length === 1) {
             setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
           }
-        } catch {}
+        } catch { }
       })()
     }
   }
@@ -175,8 +183,8 @@ return
 
         if (currentId && (role || name)) {
           setResolvedTenant({ tenantName: name, role })
-          
-return
+
+          return
         }
 
         const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
@@ -188,8 +196,8 @@ return
 
           if (m) {
             setResolvedTenant({ tenantName: m.name, role: m.role })
-            
-return
+
+            return
           }
         }
 
@@ -255,13 +263,12 @@ return
                     </div>
                   </div>
                   <Divider className='mlb-1' />
-                  {resolvedTenant && (
+                  {(isSuperAdmin || resolvedTenant) && (
                     <>
                       <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
-                        <Typography color='text.secondary'>Organisation</Typography>
-                        <Typography color='text.primary'>{resolvedTenant.tenantName ?? '—'}</Typography>
+                        <Typography color='text.primary'>{resolvedTenant?.tenantName ?? '—'}</Typography>
                         <Typography variant='caption' color='text.secondary'>
-                          Role: {roleLabel(resolvedTenant.role)}
+                          Role: {isSuperAdmin ? 'Super Admin' : roleLabel(resolvedTenant?.role)}
                         </Typography>
                       </div>
                       <Divider className='mlb-1' />

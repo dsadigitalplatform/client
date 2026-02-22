@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import useSWR from 'swr'
 import classnames from 'classnames'
 import Chip from '@mui/material/Chip'
@@ -23,8 +24,17 @@ type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
 }
 
-const NavbarContent = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo }) => {
+const NavbarContent = ({
+  user,
+  tenant,
+  isSuperAdmin
+}: {
+  user?: UserInfo
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+}) => {
   const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(r => r.json())
+
   const { data: sessionTenant } = useSWR('/api/session/tenant', fetcher, {
     revalidateOnFocus: true,
     shouldRetryOnError: false
@@ -56,7 +66,7 @@ const NavbarContent = ({ user, tenant }: { user?: UserInfo; tenant?: TenantInfo 
             />
           ) : null}
         </div>
-        <UserDropdown user={user} tenant={{ tenantName, role: tenant?.role }} />
+        <UserDropdown user={user} tenant={{ tenantName, role: tenant?.role }} isSuperAdmin={isSuperAdmin} />
       </div>
       <TenantSelectionGate />
     </div>
