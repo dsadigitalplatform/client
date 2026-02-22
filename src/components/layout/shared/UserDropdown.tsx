@@ -1,13 +1,11 @@
 'use client'
 
-// React Imports
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 
-// Next Imports
 import { useRouter } from 'next/navigation'
 
-// MUI Imports
+import { signOut } from 'next-auth/react'
 import { styled } from '@mui/material/styles'
 import Badge from '@mui/material/Badge'
 import Avatar from '@mui/material/Avatar'
@@ -21,8 +19,8 @@ import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
 
-// Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { SwitchOrganisationDialog } from '@features/tenants/components/SwitchOrganisationDialog'
 
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
@@ -34,9 +32,40 @@ const BadgeContentSpan = styled('span')({
   boxShadow: '0 0 0 2px var(--mui-palette-background-paper)'
 })
 
-const UserDropdown = () => {
+type UserInfo = {
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
+
+type TenantInfo = {
+  tenantName?: string
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+}
+
+const roleLabel = (role?: TenantInfo['role']) => {
+  if (role === 'OWNER') return 'Owner'
+  if (role === 'ADMIN') return 'Admin'
+  if (role === 'USER') return 'User'
+
+  return 'Member'
+}
+
+const UserDropdown = ({
+  user,
+  tenant,
+  isSuperAdmin
+}: {
+  user?: UserInfo
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+}) => {
   // States
   const [open, setOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [canSwitch, setCanSwitch] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [resolvedTenant, setResolvedTenant] = useState<TenantInfo | undefined>(tenant)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -47,7 +76,57 @@ const UserDropdown = () => {
   const { settings } = useSettings()
 
   const handleDropdownOpen = () => {
-    !open ? setOpen(true) : setOpen(false)
+    const next = !open
+
+    setOpen(next)
+
+    if (next && !resolvedTenant) {
+      ;
+
+      (async () => {
+        try {
+          const bRes = await fetch('/api/session/bootstrap', { cache: 'no-store' })
+          const b = await bRes.json().catch(() => ({}))
+          const ct = b?.currentTenant
+
+          if (ct?.id && (ct?.name || ct?.role)) {
+            setResolvedTenant({ tenantName: ct?.name, role: ct?.role })
+
+            return
+          }
+
+          const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
+          const s = await sRes.json().catch(() => ({}))
+          const currentId: string | undefined = s?.currentTenantId
+          const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
+          const name: string | undefined = s?.tenantName
+
+          if (currentId && (role || name)) {
+            setResolvedTenant({ tenantName: name, role })
+
+            return
+          }
+
+          const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
+          const t = await tRes.json().catch(() => ({}))
+          const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+          if (currentId) {
+            const m = items.find(i => i._id === currentId)
+
+            if (m) {
+              setResolvedTenant({ tenantName: m.name, role: m.role })
+
+              return
+            }
+          }
+
+          if (items.length === 1) {
+            setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+          }
+        } catch { }
+      })()
+    }
   }
 
   const handleDropdownClose = (event?: MouseEvent<HTMLLIElement> | (MouseEvent | TouchEvent), url?: string) => {
@@ -63,8 +142,80 @@ const UserDropdown = () => {
   }
 
   const handleUserLogout = async () => {
-    // Redirect to login page
-    router.push('/login')
+    setLoggingOut(true)
+
+    try {
+      await signOut({ callbackUrl: '/login' })
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  useEffect(() => {
+    const checkCount = async () => {
+      try {
+        const res = await fetch('/api/memberships/by-user', { cache: 'no-store' })
+        const data = await res.json()
+
+        if (res.ok && Number(data?.count || 0) > 1) setCanSwitch(true)
+      } catch {
+        // ignore
+      }
+    }
+
+    checkCount()
+  }, [])
+
+  useEffect(() => {
+    if (tenant?.tenantName || tenant?.role) {
+      setResolvedTenant(tenant)
+
+      return
+    }
+
+    const resolve = async () => {
+      try {
+        const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
+        const s = await sRes.json().catch(() => ({}))
+        const currentId: string | undefined = s?.currentTenantId
+        const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
+        const name: string | undefined = s?.tenantName
+
+        if (currentId && (role || name)) {
+          setResolvedTenant({ tenantName: name, role })
+
+          return
+        }
+
+        const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
+        const t = await tRes.json().catch(() => ({}))
+        const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+        if (currentId) {
+          const m = items.find(i => i._id === currentId)
+
+          if (m) {
+            setResolvedTenant({ tenantName: m.name, role: m.role })
+
+            return
+          }
+        }
+
+        if (items.length === 1) {
+          setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    resolve()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.tenantName, tenant?.role])
+
+  const openSwitchDialog = () => {
+    setOpen(false)
+    setSwitchOpen(true)
   }
 
   return (
@@ -78,8 +229,8 @@ const UserDropdown = () => {
       >
         <Avatar
           ref={anchorRef}
-          alt='John Doe'
-          src='/images/avatars/1.png'
+          alt={user?.name ?? 'User'}
+          src={user?.image ?? '/images/avatars/1.png'}
           onClick={handleDropdownOpen}
           className='cursor-pointer bs-[38px] is-[38px]'
         />
@@ -103,30 +254,39 @@ const UserDropdown = () => {
               <ClickAwayListener onClickAway={e => handleDropdownClose(e as MouseEvent | TouchEvent)}>
                 <MenuList>
                   <div className='flex items-center plb-2 pli-4 gap-2' tabIndex={-1}>
-                    <Avatar alt='John Doe' src='/images/avatars/1.png' />
+                    <Avatar alt={user?.name ?? 'User'} src={user?.image ?? '/images/avatars/1.png'} />
                     <div className='flex items-start flex-col'>
                       <Typography className='font-medium' color='text.primary'>
-                        John Doe
+                        {user?.name ?? '—'}
                       </Typography>
-                      <Typography variant='caption'>admin@materio.com</Typography>
+                      <Typography variant='caption'>{user?.email ?? '—'}</Typography>
                     </div>
                   </div>
                   <Divider className='mlb-1' />
+                  {(isSuperAdmin || resolvedTenant) && (
+                    <>
+                      <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
+                        <Typography color='text.primary'>{resolvedTenant?.tenantName ?? '—'}</Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          Role: {isSuperAdmin ? 'Super Admin' : roleLabel(resolvedTenant?.role)}
+                        </Typography>
+                      </div>
+                      <Divider className='mlb-1' />
+                    </>
+                  )}
+                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/create-tenant')}>
+                    <i className='ri-building-2-line' />
+                    <Typography color='text.primary'>Create Organisation</Typography>
+                  </MenuItem>
+                  {canSwitch && (
+                    <MenuItem className='gap-3' onClick={() => openSwitchDialog()}>
+                      <i className='ri-exchange-line' />
+                      <Typography color='text.primary'>Switch Organisation</Typography>
+                    </MenuItem>
+                  )}
                   <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
                     <i className='ri-user-3-line' />
                     <Typography color='text.primary'>My Profile</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-settings-4-line' />
-                    <Typography color='text.primary'>Settings</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-money-dollar-circle-line' />
-                    <Typography color='text.primary'>Pricing</Typography>
-                  </MenuItem>
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e)}>
-                    <i className='ri-question-line' />
-                    <Typography color='text.primary'>FAQ</Typography>
                   </MenuItem>
                   <div className='flex items-center plb-2 pli-4'>
                     <Button
@@ -138,7 +298,7 @@ const UserDropdown = () => {
                       onClick={handleUserLogout}
                       sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                     >
-                      Logout
+                      {loggingOut ? 'Logging out…' : 'Logout'}
                     </Button>
                   </div>
                 </MenuList>
@@ -147,6 +307,7 @@ const UserDropdown = () => {
           </Fade>
         )}
       </Popper>
+      <SwitchOrganisationDialog open={switchOpen} onClose={() => setSwitchOpen(false)} />
     </>
   )
 }

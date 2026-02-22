@@ -149,13 +149,34 @@ const Customizer = ({ breakpoint = 'lg', dir = 'ltr', disableDirection = false }
   }
 
   // Update Settings
-  const handleChange = (field: keyof Settings | 'direction', value: Settings[keyof Settings] | Direction) => {
+  const handleChange = async (field: keyof Settings | 'direction', value: Settings[keyof Settings] | Direction) => {
     // Update direction state
     if (field === 'direction') {
       setDirection(value as Direction)
     } else {
-      // Update settings in cookie
-      updateSettings({ [field]: value })
+      if (field === 'primaryColor') {
+        try {
+          const sRes = await fetch('/api/session/tenant', { cache: 'no-store' })
+          const s = await sRes.json().catch(() => ({}))
+          const currentTenantId: string | undefined = s?.currentTenantId
+
+          if (currentTenantId) {
+            try {
+              await fetch(`/api/tenants/${encodeURIComponent(currentTenantId)}/theme`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ primaryColor: value })
+              })
+            } catch {}
+          }
+        } catch {}
+
+        // Apply immediately without persisting to cookie
+        updateSettings({ primaryColor: value as string }, { updateCookie: false })
+      } else {
+        // Persist non-theme settings to cookie
+        updateSettings({ [field]: value })
+      }
     }
   }
 
