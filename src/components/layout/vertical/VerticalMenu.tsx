@@ -84,7 +84,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             {hasMembership && tenant?.role && (
               <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
                 <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
-                  Customer List
+                  List
                 </MenuItem>
               </SubMenu>
             )}
@@ -117,7 +117,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             {tenant?.role && (
               <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
                 <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
-                  Customer List
+                  List
                 </MenuItem>
               </SubMenu>
             )}

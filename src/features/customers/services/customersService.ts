@@ -42,3 +42,30 @@ export async function createCustomer(body: CreateCustomerInput) {
   }
   return data
 }
+
+export async function getCustomer(id: string) {
+  const res = await fetch(`/api/customers/${id}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error('Failed to fetch customer')
+  return res.json()
+}
+
+export async function updateCustomer(id: string, body: Partial<CreateCustomerInput>) {
+  const res = await fetch(`/api/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data?.message || data?.error || 'Failed to update customer') as any
+    if (data?.details) err.details = data.details
+    throw err
+  }
+  return data
+}
+
+export async function deleteCustomer(id: string) {
+  const res = await fetch(`/api/customers/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete customer')
+  return res.json()
+}
