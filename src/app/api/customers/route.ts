@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic' // ensure fresh data per request
 import { NextResponse } from 'next/server'
+
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
@@ -13,30 +14,41 @@ type SourceType = 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
 function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
+
 function isValidMobile(v: unknown) {
   return typeof v === 'string' && /^[0-9]{10}$/.test(v)
 }
+
 function isValidPAN(v: unknown) {
   if (v == null) return true
   const s = String(v)
+
   if (s.trim().length === 0) return true
-  return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(s)
+  
+return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(s)
 }
+
+
 // convert any 12+ digit input to masked Aadhaar
 function maskAadhaar(input: unknown) {
   if (input == null) return null
   const digits = String(input).replace(/\D/g, '')
+
   if (digits.length < 4) return null
   const last4 = digits.slice(-4)
-  return `XXXX-XXXX-${last4}`
+
+  
+return `XXXX-XXXX-${last4}`
 }
 
 export async function GET(request: Request) {
   // auth + tenant guard
   const session = await getServerSession(authOptions)
+
   if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const currentTenantId = String((session as any).currentTenantId || '')
+
   if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
 
   const db = await getDb()
@@ -55,8 +67,10 @@ export async function GET(request: Request) {
 
   // tenant-scoped filter + optional search
   const baseFilter: any = { tenantId: tenantIdObj }
+
   if (q && q.trim().length > 0) {
     const safe = q.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+
     baseFilter.$or = [
       { fullName: { $regex: safe, $options: 'i' } },
       { email: { $regex: safe, $options: 'i' } },
@@ -106,9 +120,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   // auth + tenant guard
   const session = await getServerSession(authOptions)
+
   if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const currentTenantId = String((session as any).currentTenantId || '')
+
   if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
 
   const db = await getDb()
@@ -119,6 +135,7 @@ export async function POST(request: Request) {
   const membership = await db
     .collection('memberships')
     .findOne({ userId, tenantId: tenantIdObj, status: 'active' }, { projection: { role: 1 } })
+
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
   // parse + normalize payload
@@ -138,6 +155,7 @@ export async function POST(request: Request) {
 
   // server-side validation
   const errors: Record<string, string> = {}
+
   if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
   if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
@@ -154,6 +172,7 @@ export async function POST(request: Request) {
 
   // insert with tenant + creator attribution
   const now = new Date()
+
   const doc: any = {
     tenantId: tenantIdObj,
     fullName,
@@ -175,12 +194,16 @@ export async function POST(request: Request) {
   try {
     // duplicate mobile per-tenant handled by unique index
     const res = await db.collection('customers').insertOne(doc)
-    return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+
+    
+return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
       return NextResponse.json({ error: 'duplicate_mobile', message: 'Mobile already exists for this tenant' }, { status: 409 })
     }
-    return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
+
+    
+return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
   }
 }
 

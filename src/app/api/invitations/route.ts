@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     const requesterUserId = (session as any)?.userId as string | undefined
+
     if (!requesterUserId) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
@@ -34,9 +36,11 @@ export async function POST(req: Request) {
     if (!isEmail(email)) {
       return NextResponse.json({ error: 'invalid_email' }, { status: 400 })
     }
+
     if (!isRole(role)) {
       return NextResponse.json({ error: 'invalid_role' }, { status: 400 })
     }
+
     if (typeof tenantId !== 'string' || !ObjectId.isValid(tenantId)) {
       return NextResponse.json({ error: 'invalid_tenantId' }, { status: 400 })
     }
@@ -57,6 +61,8 @@ export async function POST(req: Request) {
   } catch (err: any) {
     const status = typeof err?.status === 'number' ? err.status : 500
     const message = status === 403 ? 'forbidden' : 'internal_error'
-    return NextResponse.json({ error: message }, { status })
+
+    
+return NextResponse.json({ error: message }, { status })
   }
 }

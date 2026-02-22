@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
@@ -17,6 +19,7 @@ import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
+
 import CustomersCreateForm from './CustomersCreateForm'
 import { getCustomer, updateCustomer, deleteCustomer } from '@features/customers/services/customersService'
 
@@ -27,11 +30,13 @@ const CustomerDetails = ({ id }: Props) => {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
+
   const [toast, setToast] = useState<{ open: boolean; msg: string; severity: 'success' | 'error' }>({
     open: false,
     msg: '',
     severity: 'success'
   })
+
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
@@ -39,6 +44,7 @@ const CustomerDetails = ({ id }: Props) => {
   const fetchData = async () => {
     setLoading(true)
     const d = await getCustomer(id)
+
     setData(d)
     setLoading(false)
   }

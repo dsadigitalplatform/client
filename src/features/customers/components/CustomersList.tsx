@@ -1,13 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+
+import Link from 'next/link'
+
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
-import Link from 'next/link'
 import MuiLink from '@mui/material/Link'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -47,7 +49,8 @@ const CustomersList = () => {
   const cibilMeta = (v: number) => {
     if (v >= 750) return { label: 'High', color: 'success' as const, icon: 'ri-arrow-up-s-line' }
     if (v >= 650) return { label: 'Average', color: 'warning' as const, icon: 'ri-equalizer-line' }
-    return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
+    
+return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
   }
 
   const handleExport = () => {
@@ -63,10 +66,12 @@ const CustomersList = () => {
         c.source
       ])
     ]
+
     const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
+
     a.href = url
     a.download = 'customers.csv'
     a.click()
@@ -239,7 +244,9 @@ const CustomersList = () => {
                   {c.cibilScore != null ? (
                     (() => {
                       const m = cibilMeta(c.cibilScore)
-                      return (
+
+                      
+return (
                         <Chip
                           size='small'
                           color={m.color}
@@ -256,7 +263,9 @@ const CustomersList = () => {
                 <TableCell>
                   {(() => {
                     const s = sourceMeta(c.source)
-                    return (
+
+                    
+return (
                       <Box className='flex items-center gap-1.5'>
                         <i className={`${s.icon} text-lg`} />
                         <span>{s.label}</span>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useRouter } from 'next/navigation'
 
 import Stack from '@mui/material/Stack'
@@ -104,11 +105,15 @@ const CustomersCreateForm = ({ onSuccess, onCancel, showTitle = true, initialVal
 
   const handleAadhaar = (v: string) => {
     const digits = v.replace(/\D/g, '').slice(-12)
+
     if (digits.length < 4) {
       setAadhaarMasked('')
-      return
+      
+return
     }
+
     const last4 = digits.slice(-4)
+
     setAadhaarMasked(`XXXX-XXXX-${last4}`)
   }
 
@@ -116,6 +121,7 @@ const CustomersCreateForm = ({ onSuccess, onCancel, showTitle = true, initialVal
     setError(null)
     setFieldErrors({})
     setSubmitting(true)
+
     try {
       const payload = {
         fullName: fullName.trim(),
@@ -130,11 +136,13 @@ const CustomersCreateForm = ({ onSuccess, onCancel, showTitle = true, initialVal
         cibilScore: cibilScore ? Number(cibilScore) : null,
         source
       }
+
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
         await createCustomer(payload)
       }
+
       setFullName('')
       setMobile('')
       setEmail('')
