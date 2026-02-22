@@ -240,6 +240,35 @@ ensureCollection('subscriptionPlans', subscriptionPlansValidator)
 ensureIndex('subscriptionPlans', { name: 1 }, { unique: true, name: 'uniq_subscriptionplan_name' })
 ensureIndex('subscriptionPlans', { slug: 1 }, { unique: true, name: 'uniq_subscriptionplan_slug' })
 
+const customersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'fullName', 'mobile', 'employmentType', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      fullName: { bsonType: 'string', minLength: 2 },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{10}$' },
+      email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
+      dob: { bsonType: ['date', 'null'] },
+      pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
+      aadhaarMasked: { bsonType: ['string', 'null'] },
+      address: { bsonType: ['string', 'null'] },
+      employmentType: { enum: ['SALARIED', 'SELF_EMPLOYED'] },
+      monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
+      cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },
+      source: { enum: ['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'] },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('customers', customersValidator)
+ensureIndex('customers', { tenantId: 1 }, { name: 'idx_tenantId' })
+ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_mobile' })
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {
