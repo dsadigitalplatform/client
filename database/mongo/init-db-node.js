@@ -189,6 +189,38 @@ async function main() {
   await ensureIndex(db.collection('auditLogs'), { targetTenantId: 1 }, { name: 'idx_targetTenantId' })
   await ensureIndex(db.collection('auditLogs'), { action: 1 }, { name: 'idx_action' })
 
+  const customersValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'fullName', 'mobile', 'employmentType', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        fullName: { bsonType: 'string', minLength: 2 },
+        mobile: { bsonType: 'string', pattern: '^[0-9]{10}$' },
+        email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
+        dob: { bsonType: ['date', 'null'] },
+        pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
+        aadhaarMasked: { bsonType: ['string', 'null'] },
+        address: { bsonType: ['string', 'null'] },
+        employmentType: { enum: ['SALARIED', 'SELF_EMPLOYED'] },
+        monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
+        cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },
+        source: { enum: ['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'] },
+        createdBy: { bsonType: ['objectId', 'null'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+  await ensureCollection(db, 'customers', customersValidator)
+  await ensureIndex(db.collection('customers'), { tenantId: 1 }, { name: 'idx_tenantId' })
+  await ensureIndex(
+    db.collection('customers'),
+    { tenantId: 1, mobile: 1 },
+    { unique: true, name: 'uniq_tenant_mobile' }
+  )
+
   await client.close()
 }
 

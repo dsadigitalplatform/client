@@ -81,6 +81,13 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
               Dashboard
             </MenuItem>
+            {hasMembership && tenant?.role && (
+              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
+                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
+                  Customer List
+                </MenuItem>
+              </SubMenu>
+            )}
             <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
               <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
                 Subscription Plans
@@ -107,6 +114,14 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
               Dashboard
             </MenuItem>
 
+            {tenant?.role && (
+              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
+                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
+                  Customer List
+                </MenuItem>
+              </SubMenu>
+            )}
+
             <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
               {(tenant?.role === 'OWNER' || tenant?.role === 'ADMIN') && (
                 <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
@@ -128,6 +143,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
               Dashboard
             </MenuItem>
+            {/* No customers menu without tenant membership */}
             <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
               <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
                 Create Organisation

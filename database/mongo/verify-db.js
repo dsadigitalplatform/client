@@ -39,7 +39,19 @@ async function main() {
     const infos = await db.listCollections().toArray()
     const names = infos.map(i => i.name)
 
-    console.log(JSON.stringify({ database: dbName, collections: names }))
+    const custInfo = await db.listCollections({ name: 'customers' }).toArray()
+    let customers = { exists: false }
+    if (custInfo.length > 0) {
+      customers.exists = true
+      const v = (custInfo[0].options && custInfo[0].options.validator) || {}
+      const required =
+        (v.$jsonSchema && Array.isArray(v.$jsonSchema.required) && v.$jsonSchema.required) || []
+      const idxs = await db.collection('customers').listIndexes().toArray()
+      const indexes = idxs.map(i => ({ name: i.name, keys: i.key, unique: !!i.unique }))
+      customers = { exists: true, required, indexes }
+    }
+
+    console.log(JSON.stringify({ database: dbName, collections: names, customers }))
   } catch (err) {
     console.error(err.message || String(err))
     process.exitCode = 1
