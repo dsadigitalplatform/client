@@ -273,6 +273,7 @@ print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {
   const mongoose = require('mongoose')
+
   const SubscriptionPlanSchema = new mongoose.Schema(
     {
       name: { type: String, required: true, unique: true, trim: true },
@@ -288,6 +289,7 @@ if (typeof module !== 'undefined' && module.exports) {
     },
     { timestamps: true }
   )
+
   SubscriptionPlanSchema.index({ name: 1 }, { unique: true })
   SubscriptionPlanSchema.index({ slug: 1 }, { unique: true })
   SubscriptionPlanSchema.pre('save', function (next) {
@@ -295,7 +297,9 @@ if (typeof module !== 'undefined' && module.exports) {
     if (typeof this.slug === 'string') this.slug = this.slug.toLowerCase().trim()
     next()
   })
+
   const SubscriptionPlan =
     mongoose.models.SubscriptionPlan || mongoose.model('SubscriptionPlan', SubscriptionPlanSchema)
+
   module.exports.SubscriptionPlan = SubscriptionPlan
 }

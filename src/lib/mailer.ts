@@ -50,6 +50,7 @@ export function buildInviteLink(token: string) {
     process.env.NEXTAUTH_URL ||
     process.env.VERCEL_URL ||
     'http://localhost:3000'
+
   const origin = base.startsWith('http') ? base : `https://${base}`
 
   return `${origin}/accept-invite?token=${encodeURIComponent(token)}`
@@ -58,6 +59,7 @@ export function buildInviteLink(token: string) {
 export async function sendInvitationEmail(to: string, tenantName: string, token: string) {
   const link = buildInviteLink(token)
   const subject = `You are invited to join ${tenantName}`
+
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
       <h2>Invitation to ${tenantName}</h2>

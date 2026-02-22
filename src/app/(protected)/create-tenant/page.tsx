@@ -24,6 +24,7 @@ const CreateTenantPage = async () => {
     const activeMembership = await db
         .collection('memberships')
         .findOne({ userId, status: 'active' }, { sort: { createdAt: -1 }, projection: { role: 1 } })
+
     const hasActiveMembership = Boolean(activeMembership)
 
     return (

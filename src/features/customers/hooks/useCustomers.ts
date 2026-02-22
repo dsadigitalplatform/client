@@ -13,6 +13,7 @@ export const useCustomers = () => {
   const refresh = useCallback(async () => {
     setLoading(true)
     const data = await getCustomers({ q: search })
+
     setCustomers(data as unknown as Customer[])
     setLoading(false)
   }, [search])

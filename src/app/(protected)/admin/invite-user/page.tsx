@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box'
+
 import InviteUserForm from '@features/tenants/components/InviteUserForm'
 import { OrganisationHeader } from '@features/tenants/components/OrganisationHeader'
 
