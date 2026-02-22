@@ -8,7 +8,7 @@ import PerfectScrollbar from 'react-perfect-scrollbar'
 import type { VerticalMenuContextProps } from '@menu/components/vertical-menu/Menu'
 
 // Component Imports
-import { Menu, MenuItem } from '@menu/vertical-menu'
+import { Menu, MenuItem, SubMenu } from '@menu/vertical-menu'
 
 // Hook Imports
 import useVerticalNav from '@menu/hooks/useVerticalNav'
@@ -25,8 +25,15 @@ type RenderExpandIconProps = {
   transitionDuration?: VerticalMenuContextProps['transitionDuration']
 }
 
+type TenantInfo = {
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+}
+
 type Props = {
   scrollMenu: (container: any, isPerfectScrollbar: boolean) => void
+  tenant?: TenantInfo
+  isSuperAdmin?: boolean
+  hasMembership?: boolean
 }
 
 const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) => (
@@ -35,7 +42,7 @@ const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) =
   </StyledVerticalNavExpandIcon>
 )
 
-const VerticalMenu = ({ scrollMenu }: Props) => {
+const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -51,13 +58,13 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
     <ScrollWrapper
       {...(isBreakpointReached
         ? {
-            className: 'bs-full overflow-y-auto overflow-x-hidden',
-            onScroll: container => scrollMenu(container, false)
-          }
+          className: 'bs-full overflow-y-auto overflow-x-hidden',
+          onScroll: container => scrollMenu(container, false)
+        }
         : {
-            options: { wheelPropagation: false, suppressScrollX: true },
-            onScrollY: container => scrollMenu(container, true)
-          })}
+          options: { wheelPropagation: false, suppressScrollX: true },
+          onScrollY: container => scrollMenu(container, true)
+        })}
     >
       {/* Incase you also want to scroll NavHeader to scroll with Vertical Menu, remove NavHeader from above and paste it below this comment */}
       {/* Vertical Menu */}
@@ -68,12 +75,69 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
         renderExpandedMenuItemIcon={{ icon: <i className='ri-circle-line' /> }}
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
-        <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-          Home
-        </MenuItem>
-        <MenuItem href='/about' icon={<i className='ri-information-line' />}>
-          About
-        </MenuItem>
+        {/* Super Admin: show Dashboard + Super Admin menu, hide Create Tenant */}
+        {isSuperAdmin ? (
+          <>
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Dashboard
+            </MenuItem>
+            <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
+              <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
+                Subscription Plans
+              </MenuItem>
+            </SubMenu>
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+              {tenant?.role && tenant.role !== 'USER' && (
+                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                  Invite User
+                </MenuItem>
+              )}
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+
+            </SubMenu>
+          </>
+        ) : hasMembership ? (
+          <>
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Dashboard
+            </MenuItem>
+
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+              {(tenant?.role === 'OWNER' || tenant?.role === 'ADMIN') && (
+                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                  Invite User
+                </MenuItem>
+              )}
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+
+            </SubMenu>
+          </>
+        ) : (
+          <>
+            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+              Dashboard
+            </MenuItem>
+            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+                Organisation Details
+              </MenuItem>
+            </SubMenu>
+          </>
+        )}
       </Menu>
       {/* <Menu
         popoutMenuOffset={{ mainAxis: 10 }}
