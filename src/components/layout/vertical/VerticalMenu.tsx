@@ -81,7 +81,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
               Dashboard
             </MenuItem>
-            {hasMembership && (
+            {(hasMembership || Boolean(tenant)) && (
               <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
                 <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
                   List
@@ -114,7 +114,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
               Dashboard
             </MenuItem>
 
-            {hasMembership && (
+            {(hasMembership || Boolean(tenant)) && (
               <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
                 <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
                   List
@@ -143,7 +143,13 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
             <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
               Dashboard
             </MenuItem>
-            {/* No customers menu without tenant membership */}
+            {(Boolean(tenant)) && (
+              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
+                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
+                  List
+                </MenuItem>
+              </SubMenu>
+            )}
             <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
               <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
                 Create Organisation
