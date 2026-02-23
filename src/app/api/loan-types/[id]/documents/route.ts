@@ -48,7 +48,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const loanType = await db
     .collection('loanTypes')
-    .findOne({ _id: loanTypeId, tenantId: tenantIdObj }, { projection: { code: 1, name: 1, description: 1, isActive: 1 } })
+    .findOne({ _id: loanTypeId, tenantId: tenantIdObj }, { projection: { name: 1, description: 1, isActive: 1 } })
 
   if (!loanType) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -78,7 +78,6 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   return NextResponse.json({
     loanType: {
       id: String((loanType as any)._id),
-      code: String((loanType as any).code || ''),
       name: String((loanType as any).name || ''),
       description: (loanType as any).description ?? null,
       isActive: Boolean((loanType as any).isActive)

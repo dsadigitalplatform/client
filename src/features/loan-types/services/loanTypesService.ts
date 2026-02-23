@@ -3,7 +3,6 @@ import type { LoanTypeDocumentMapping } from '@features/loan-types/loan-types.ty
 export type GetLoanTypesParams = { q?: string }
 
 export type CreateLoanTypeInput = {
-  code: string
   name: string
   description?: string | null
   isActive?: boolean
@@ -45,18 +44,6 @@ export async function createLoanType(body: CreateLoanTypeInput) {
   }
 
   return data
-}
-
-export async function suggestLoanTypeCode(name: string, signal?: AbortSignal) {
-  const url = new URL('/api/loan-types', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
-
-  url.searchParams.set('suggestCode', '1')
-  url.searchParams.set('name', name)
-
-  const res = await fetch(url.toString(), { cache: 'no-store', signal })
-  const data = await res.json().catch(() => ({}))
-
-  return (data?.code as string | undefined) || ''
 }
 
 export async function getLoanType(id: string) {

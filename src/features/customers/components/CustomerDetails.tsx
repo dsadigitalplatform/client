@@ -68,7 +68,18 @@ const CustomerDetails = ({ id }: Props) => {
                 <Typography component='span' fontWeight={600}>
                   {data.fullName}
                 </Typography>
-                <Chip size='small' label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'} />
+                <Chip
+                  size='small'
+                  label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
+                  variant='outlined'
+                  sx={{
+                    boxShadow: 'none',
+                    backgroundColor:
+                      data.employmentType === 'SALARIED'
+                        ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
+                        : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
+                  }}
+                />
               </Box>
             }
           />

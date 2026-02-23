@@ -89,6 +89,9 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                     title='Document Details'
                     action={
                         <Box className='flex gap-2'>
+                            <Button size='small' variant='text' onClick={() => router.push('/document-checklists')}>
+                                Back to List
+                            </Button>
                             <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
                                 {editMode ? 'Close Edit' : 'Edit'}
                             </Button>
@@ -118,7 +121,17 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                         <Box className='flex flex-col gap-3'>
                             <Box className='flex items-center gap-3'>
                                 <Typography variant='h6'>{data.name}</Typography>
-                                <Chip label={data.isActive ? 'Active' : 'Inactive'} color={data.isActive ? 'success' : 'default'} size='small' />
+                                <Chip
+                                    label={data.isActive ? 'Active' : 'Inactive'}
+                                    color={data.isActive ? 'success' : 'default'}
+                                    size='small'
+                                    variant='outlined'
+                                    sx={{
+                                        boxShadow: 'none',
+                                        backgroundColor: 'transparent',
+                                        borderRadius: 1.5
+                                    }}
+                                />
                             </Box>
                             <Typography variant='body2'>{data.description || 'No description'}</Typography>
                         </Box>
