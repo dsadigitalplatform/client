@@ -34,6 +34,12 @@ type Props = {
   tenant?: TenantInfo
   isSuperAdmin?: boolean
   hasMembership?: boolean
+  menuVisibility?: {
+    showCustomers: boolean
+    showAdmin: boolean
+    showSuperAdmin: boolean
+    canInviteUser: boolean
+  }
 }
 
 const StyledBoxForShadow = styled('div')(({ theme }) => ({
@@ -56,7 +62,7 @@ const StyledBoxForShadow = styled('div')(({ theme }) => ({
 
 const Navigation = (props: Props) => {
   // Props
-  const { mode, tenant, isSuperAdmin, hasMembership } = props
+  const { mode, tenant, isSuperAdmin, hasMembership, menuVisibility } = props
 
   // Hooks
   const verticalNavOptions = useVerticalNav()
@@ -130,7 +136,13 @@ const Navigation = (props: Props) => {
         )}
       </NavHeader>
       <StyledBoxForShadow ref={shadowRef} />
-      <VerticalMenu scrollMenu={scrollMenu} tenant={tenant} isSuperAdmin={isSuperAdmin} hasMembership={hasMembership} />
+      <VerticalMenu
+        scrollMenu={scrollMenu}
+        tenant={tenant}
+        isSuperAdmin={isSuperAdmin}
+        hasMembership={hasMembership}
+        menuVisibility={menuVisibility}
+      />
     </VerticalNav>
   )
 }
