@@ -11,51 +11,6 @@ function isNonEmptyString(v: unknown, min = 2) {
   return typeof v === 'string' && v.trim().length >= min
 }
 
-const generateCodeFromName = (value: string) => {
-  const cleaned = value.trim().replace(/[^a-zA-Z0-9]+/g, ' ')
-  const parts = cleaned.split(' ').filter(Boolean)
-
-  if (parts.length === 0) return ''
-  if (parts.length === 1) return parts[0].slice(0, 6).toUpperCase()
-
-  return parts
-    .map(p => p[0])
-    .join('')
-    .slice(0, 6)
-    .toUpperCase()
-}
-
-const getUniqueCode = async (db: any, tenantId: ObjectId, base: string) => {
-  const code = base.toUpperCase()
-
-  if (!code) return ''
-
-  const pattern = new RegExp(`^${code}(\\d+)?$`, 'i')
-
-  const rows = await db
-    .collection('loanTypes')
-    .find({ tenantId, code: { $regex: pattern } }, { projection: { code: 1 } })
-    .toArray()
-
-  const used = new Set<string>(rows.map((r: any) => String((r as any).code || '').toUpperCase()))
-
-  if (!used.has(code)) return code
-
-  let max = 0
-
-  used.forEach(c => {
-    const match = c.match(new RegExp(`^${code}(\\d+)$`, 'i'))
-
-    if (match?.[1]) {
-      const n = Number(match[1])
-
-      if (!Number.isNaN(n) && n > max) max = n
-    }
-  })
-
-  return `${code}${max + 1}`
-}
-
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
 
@@ -86,16 +41,6 @@ export async function GET(request: Request) {
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
   const url = new URL(request.url)
-  const wantsSuggest = url.searchParams.get('suggestCode') === '1'
-  const nameParam = url.searchParams.get('name') || ''
-
-  if (wantsSuggest) {
-    const base = generateCodeFromName(nameParam)
-    const code = await getUniqueCode(db, tenantIdObj, base)
-
-    return NextResponse.json({ code })
-  }
-
   const q = url.searchParams.get('q') || ''
 
   const baseFilter: any = { tenantId: tenantIdObj }
@@ -103,7 +48,7 @@ export async function GET(request: Request) {
   if (q && q.trim().length > 0) {
     const safe = q.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 
-    baseFilter.$or = [{ name: { $regex: safe, $options: 'i' } }, { code: { $regex: safe, $options: 'i' } }]
+    baseFilter.$or = [{ name: { $regex: safe, $options: 'i' } }]
   }
 
   const rows = await db
@@ -136,7 +81,6 @@ export async function GET(request: Request) {
       },
       {
         $project: {
-          code: 1,
           name: 1,
           description: 1,
           isActive: 1,
@@ -151,7 +95,6 @@ export async function GET(request: Request) {
 
   const loanTypes = rows.map(r => ({
     id: String((r as any)._id),
-    code: String((r as any).code || ''),
     name: String((r as any).name || ''),
     description: (r as any).description ?? null,
     isActive: Boolean((r as any).isActive),
@@ -192,9 +135,6 @@ export async function POST(request: Request) {
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
-
-  const code = typeof body?.code === 'string' ? body.code.trim() : ''
-
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
 
   const description =
@@ -204,15 +144,23 @@ export async function POST(request: Request) {
 
   const errors: Record<string, string> = {}
 
-  if (!isNonEmptyString(code)) errors.code = 'Code is required'
   if (!isNonEmptyString(name)) errors.name = 'Name is required'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
+
+  const safeName = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+
+  const existing = await db
+    .collection('loanTypes')
+    .findOne({ tenantId: tenantIdObj, name: { $regex: `^${safeName}$`, $options: 'i' } }, { projection: { _id: 1 } })
+
+  if (existing) {
+    return NextResponse.json({ error: 'duplicate_name', message: 'Name already exists for this tenant' }, { status: 409 })
+  }
 
   const now = new Date()
 
   const doc: any = {
     tenantId: tenantIdObj,
-    code,
     name,
     description,
     isActive,
@@ -227,7 +175,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
-      return NextResponse.json({ error: 'duplicate_code', message: 'Code already exists for this tenant' }, { status: 409 })
+      return NextResponse.json({ error: 'duplicate_name', message: 'Name already exists for this tenant' }, { status: 409 })
     }
 
     return NextResponse.json({ error: 'unknown_error' }, { status: 500 })

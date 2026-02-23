@@ -233,6 +233,14 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
                     label={c.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
                     size='small'
                     color={c.employmentType === 'SALARIED' ? 'primary' : 'secondary'}
+                    variant='outlined'
+                    sx={{
+                      boxShadow: 'none',
+                      backgroundColor:
+                        c.employmentType === 'SALARIED'
+                          ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
+                          : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -252,9 +260,18 @@ return (
                         <Chip
                           size='small'
                           color={m.color}
-                          variant='filled'
+                          variant='outlined'
                           icon={<i className={`${m.icon}`} />}
                           label={`${c.cibilScore} (${m.label})`}
+                          sx={{
+                            boxShadow: 'none',
+                            backgroundColor:
+                              m.color === 'success'
+                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                : m.color === 'warning'
+                                ? 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                                : 'rgb(var(--mui-palette-error-mainChannel) / 0.08)'
+                          }}
                         />
                       )
                     })()

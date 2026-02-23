@@ -43,6 +43,48 @@ const STATUS_OPTIONS: Array<{ value: LoanTypeDocumentStatus; label: string }> = 
     { value: 'INACTIVE', label: 'Inactive' }
 ]
 
+const getLoanTypeIcon = (name: string) => {
+    const value = name.toLowerCase()
+
+    if (value.includes('home') || value.includes('house') || value.includes('mortgage')) {
+        return { icon: 'ri-home-4-line', color: 'primary.main' }
+    }
+
+    if (value.includes('auto') || value.includes('vehicle') || value.includes('car')) {
+        return { icon: 'ri-car-line', color: 'warning.main' }
+    }
+
+    if (value.includes('education') || value.includes('student') || value.includes('study')) {
+        return { icon: 'ri-graduation-cap-line', color: 'info.main' }
+    }
+
+    if (value.includes('business') || value.includes('enterprise') || value.includes('trade')) {
+        return { icon: 'ri-briefcase-3-line', color: 'secondary.main' }
+    }
+
+    if (value.includes('gold') || value.includes('jewel') || value.includes('ornament')) {
+        return { icon: 'ri-vip-diamond-line', color: 'warning.main' }
+    }
+
+    if (value.includes('agri') || value.includes('farm') || value.includes('kisan')) {
+        return { icon: 'ri-plant-line', color: 'success.main' }
+    }
+
+    if (value.includes('medical') || value.includes('health')) {
+        return { icon: 'ri-heart-pulse-line', color: 'error.main' }
+    }
+
+    if (value.includes('credit') || value.includes('card')) {
+        return { icon: 'ri-bank-card-line', color: 'primary.main' }
+    }
+
+    if (value.includes('personal') || value.includes('consumer')) {
+        return { icon: 'ri-user-line', color: 'info.main' }
+    }
+
+    return { icon: 'ri-file-list-3-line', color: 'text.secondary' }
+}
+
 const LoanTypesList = () => {
     const router = useRouter()
     const { loanTypes, loading, search, setSearch, refresh } = useLoanTypes()
@@ -150,7 +192,7 @@ const LoanTypesList = () => {
                 <Box className='flex flex-col gap-2 sm:flex-row sm:items-center'>
                     <TextField
                         size='small'
-                        placeholder='Search by code or name'
+                        placeholder='Search by name'
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
@@ -231,7 +273,6 @@ const LoanTypesList = () => {
             <Table>
                 <TableHead>
                     <TableRow>
-                        <TableCell>Code</TableCell>
                         <TableCell>Name</TableCell>
                         <TableCell align='center'>Checklist</TableCell>
                         <TableCell>Status</TableCell>
@@ -241,85 +282,89 @@ const LoanTypesList = () => {
                 <TableBody>
                     {loading ? (
                         <TableRow>
-                            <TableCell colSpan={5}>Loading...</TableCell>
+                            <TableCell colSpan={4}>Loading...</TableCell>
                         </TableRow>
                     ) : loanTypes.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5}>No loan types found</TableCell>
+                            <TableCell colSpan={4}>No loan types found</TableCell>
                         </TableRow>
                     ) : (
-                        loanTypes.map(lt => (
-                            <TableRow key={lt.id}>
-                                <TableCell>
-                                    <MuiLink
-                                        component={Link}
-                                        href={`/loan-types/${lt.id}`}
-                                        underline='hover'
-                                        color='text.primary'
-                                        sx={{
-                                            fontSize: '0.95rem',
-                                            fontWeight: 500,
-                                            transition: 'color .2s ease',
-                                            '&:hover': {
-                                                color: 'primary.main'
-                                            }
-                                        }}
-                                    >
-                                        {lt.code}
-                                    </MuiLink>
-                                </TableCell>
-                                <TableCell>
-                                    <MuiLink
-                                        component={Link}
-                                        href={`/loan-types/${lt.id}`}
-                                        underline='hover'
-                                        color='text.primary'
-                                        sx={{
-                                            fontSize: '0.95rem',
-                                            fontWeight: 500,
-                                            transition: 'color .2s ease',
-                                            '&:hover': {
-                                                color: 'primary.main'
-                                            }
-                                        }}
-                                    >
-                                        {lt.name}
-                                    </MuiLink>
-                                </TableCell>
-                                <TableCell align='center'>
-                                    {lt.checklistCount && lt.checklistCount > 0 ? (
-                                        <Chip size='small' label={lt.checklistCount} variant='outlined' />
-                                    ) : (
+                        loanTypes.map(lt => {
+                            const iconMeta = getLoanTypeIcon(lt.name)
+
+                            return (
+                                <TableRow key={lt.id}>
+                                    <TableCell>
+                                        <MuiLink
+                                            component={Link}
+                                            href={`/loan-types/${lt.id}`}
+                                            underline='hover'
+                                            color='text.primary'
+                                            sx={{
+                                                fontSize: '0.95rem',
+                                                fontWeight: 500,
+                                                transition: 'color .2s ease',
+                                                '&:hover': {
+                                                    color: 'primary.main'
+                                                }
+                                            }}
+                                        >
+                                            <Box className='inline-flex items-center gap-2'>
+                                                <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
+                                                    <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
+                                                </Box>
+                                                <span>{lt.name}</span>
+                                            </Box>
+                                        </MuiLink>
+                                    </TableCell>
+                                    <TableCell align='center'>
+                                        {lt.checklistCount && lt.checklistCount > 0 ? (
+                                            <Chip
+                                                size='small'
+                                                label={lt.checklistCount}
+                                                variant='outlined'
+                                                sx={{
+                                                    boxShadow: 'none',
+                                                    backgroundColor: 'rgb(var(--mui-palette-text-primaryChannel) / 0.04)'
+                                                }}
+                                            />
+                                        ) : (
+                                            <Button
+                                                size='small'
+                                                variant='outlined'
+                                                startIcon={<i className='ri-add-line' />}
+                                                onClick={() => openMapping(lt.id, lt.name)}
+                                            >
+                                                Add Checklist
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={lt.isActive ? 'Active' : 'Inactive'}
+                                            color={lt.isActive ? 'success' : 'default'}
+                                            variant='outlined'
+                                            size='small'
+                                            sx={{
+                                                boxShadow: 'none',
+                                                backgroundColor: 'transparent',
+                                                borderRadius: 1.1
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell align='right'>
                                         <Button
+                                            color='error'
                                             size='small'
                                             variant='outlined'
-                                            startIcon={<i className='ri-add-line' />}
-                                            onClick={() => openMapping(lt.id, lt.name)}
+                                            onClick={() => setConfirmId(lt.id)}
                                         >
-                                            Add Checklist
+                                            Delete
                                         </Button>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <Chip
-                                        label={lt.isActive ? 'Active' : 'Inactive'}
-                                        color={lt.isActive ? 'success' : 'default'}
-                                        variant={lt.isActive ? 'filled' : 'outlined'}
-                                        size='small'
-                                    />
-                                </TableCell>
-                                <TableCell align='right'>
-                                    <Button
-                                        color='error'
-                                        size='small'
-                                        onClick={() => setConfirmId(lt.id)}
-                                        startIcon={<i className='ri-delete-bin-6-line' />}
-                                    >
-                                        Delete
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })
                     )}
                 </TableBody>
             </Table>

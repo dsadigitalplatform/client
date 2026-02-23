@@ -19,7 +19,7 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import InputAdornment from '@mui/material/InputAdornment'
 
-import { createLoanType, suggestLoanTypeCode } from '@features/loan-types/services/loanTypesService'
+import { createLoanType } from '@features/loan-types/services/loanTypesService'
 
 type Props = {
   onSuccess?: (id?: string) => void
@@ -27,7 +27,6 @@ type Props = {
   showTitle?: boolean
   submitDisabled?: boolean
   initialValues?: Partial<{
-    code: string
     name: string
     description: string | null
     isActive: boolean
@@ -36,24 +35,9 @@ type Props = {
   submitLabel?: string
 }
 
-const generateCodeFromName = (value: string) => {
-  const cleaned = value.trim().replace(/[^a-zA-Z0-9]+/g, ' ')
-  const parts = cleaned.split(' ').filter(Boolean)
-
-  if (parts.length === 0) return ''
-  if (parts.length === 1) return parts[0].slice(0, 6).toUpperCase()
-
-  return parts
-    .map(p => p[0])
-    .join('')
-    .slice(0, 6)
-    .toUpperCase()
-}
-
 const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisabled, initialValues, onSubmitOverride, submitLabel }: Props) => {
   const router = useRouter()
 
-  const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isActive, setIsActive] = useState(true)
@@ -64,41 +48,14 @@ const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisa
 
   useEffect(() => {
     if (!initialValues) return
-    if (initialValues.code != null) setCode(initialValues.code)
     if (initialValues.name != null) setName(initialValues.name)
     if (initialValues.description !== undefined) setDescription(initialValues.description || '')
     if (initialValues.isActive != null) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
 
-  useEffect(() => {
-    if (initialValues?.code) return
-    const snapshot = name
-    const localCode = generateCodeFromName(snapshot)
-
-    setCode(localCode)
-
-    if (!localCode) return
-
-    const controller = new AbortController()
-
-    const timer = setTimeout(async () => {
-      try {
-        const suggested = await suggestLoanTypeCode(snapshot, controller.signal)
-
-        if (suggested && snapshot === name) setCode(suggested)
-      } catch { }
-    }, 250)
-
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
-  }, [initialValues?.code, name])
-
   const validate = () => {
     const next: Record<string, string> = {}
 
-    if (code.trim().length < 2) next.code = 'Code is required'
     if (name.trim().length < 2) next.name = 'Name is required'
     setFieldErrors(next)
 
@@ -114,7 +71,6 @@ const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisa
       let createdId: string | undefined
 
       const payload = {
-        code: code.trim(),
         name: name.trim(),
         description: description.trim().length === 0 ? null : description.trim(),
         isActive
@@ -147,24 +103,6 @@ const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisa
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
           </Typography>
-          <Box>
-            <Typography variant='caption' color='text.secondary'>
-              Code
-            </Typography>
-            <Box className='mt-1 flex items-center gap-2 rounded border border-solid border-[var(--mui-palette-divider)] px-3 py-2'>
-              <i className='ri-barcode-line' />
-              <Typography variant='body2'>{code || '—'}</Typography>
-            </Box>
-            {fieldErrors.code ? (
-              <Typography variant='caption' color='error'>
-                {fieldErrors.code}
-              </Typography>
-            ) : (
-              <Typography variant='caption' color='text.secondary'>
-                Auto-generated from name
-              </Typography>
-            )}
-          </Box>
           <TextField
             label='Name'
             value={name}

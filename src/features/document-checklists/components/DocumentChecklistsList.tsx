@@ -19,14 +19,84 @@ import TableRow from '@mui/material/TableRow'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
 
 import { useDocumentChecklists } from '@features/document-checklists/hooks/useDocumentChecklists'
 import DocumentChecklistsCreateForm from '@features/document-checklists/components/DocumentChecklistsCreateForm'
+import { deleteDocumentChecklist } from '@features/document-checklists/services/documentChecklistsService'
+
+const getChecklistIcon = (name: string) => {
+    const value = name.toLowerCase()
+
+    if (value.includes('aadhaar') || value.includes('passport') || value.includes('identity') || value.includes('id')) {
+        return { icon: 'ri-id-card-line', color: 'primary.main' }
+    }
+
+    if (value.includes('address') || value.includes('residence') || value.includes('utility')) {
+        return { icon: 'ri-map-pin-line', color: 'info.main' }
+    }
+
+    if (value.includes('income') || value.includes('salary') || value.includes('bank') || value.includes('statement')) {
+        return { icon: 'ri-money-dollar-circle-line', color: 'success.main' }
+    }
+
+    if (value.includes('photo') || value.includes('selfie') || value.includes('image')) {
+        return { icon: 'ri-image-line', color: 'secondary.main' }
+    }
+
+    if (value.includes('signature')) {
+        return { icon: 'ri-pen-nib-line', color: 'warning.main' }
+    }
+
+    if (value.includes('property') || value.includes('title') || value.includes('deed')) {
+        return { icon: 'ri-home-4-line', color: 'primary.main' }
+    }
+
+    if (value.includes('vehicle') || value.includes('rc')) {
+        return { icon: 'ri-car-line', color: 'warning.main' }
+    }
+
+    if (value.includes('business') || value.includes('gst') || value.includes('trade')) {
+        return { icon: 'ri-briefcase-3-line', color: 'secondary.main' }
+    }
+
+    if (value.includes('education') || value.includes('student') || value.includes('study')) {
+        return { icon: 'ri-graduation-cap-line', color: 'info.main' }
+    }
+
+    if (value.includes('medical') || value.includes('health')) {
+        return { icon: 'ri-heart-pulse-line', color: 'error.main' }
+    }
+
+    if (value.includes('insurance')) {
+        return { icon: 'ri-shield-check-line', color: 'primary.main' }
+    }
+
+    return { icon: 'ri-file-text-line', color: 'text.secondary' }
+}
 
 const DocumentChecklistsList = () => {
     const { documents, loading, search, setSearch, refresh } = useDocumentChecklists()
     const [openAdd, setOpenAdd] = useState(false)
     const [successOpen, setSuccessOpen] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        setDeleting(true)
+
+        try {
+            await deleteDocumentChecklist(deleteTarget.id)
+            setDeleteTarget(null)
+            refresh()
+        } finally {
+            setDeleting(false)
+        }
+    }
 
     return (
         <Box className='p-6 flex flex-col gap-4'>
@@ -105,19 +175,23 @@ const DocumentChecklistsList = () => {
                         <TableCell>Name</TableCell>
                         <TableCell>Description</TableCell>
                         <TableCell>Status</TableCell>
+                        <TableCell align='right'>Actions</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
                     {loading ? (
                         <TableRow>
-                            <TableCell colSpan={3}>Loading...</TableCell>
+                            <TableCell colSpan={4}>Loading...</TableCell>
                         </TableRow>
                     ) : documents.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={3}>No documents found</TableCell>
+                            <TableCell colSpan={4}>No documents found</TableCell>
                         </TableRow>
                     ) : (
-                        documents.map(d => (
+                        documents.map(d => {
+                            const iconMeta = getChecklistIcon(d.name)
+
+                            return (
                             <TableRow key={d.id}>
                                 <TableCell>
                                     <MuiLink
@@ -128,13 +202,18 @@ const DocumentChecklistsList = () => {
                                         sx={{
                                             fontSize: '0.95rem',
                                             fontWeight: 500,
-                                        transition: 'color .2s ease',
+                                            transition: 'color .2s ease',
                                             '&:hover': {
-                                            color: 'primary.main'
+                                                color: 'primary.main'
                                             }
                                         }}
                                     >
-                                        {d.name}
+                                        <Box className='inline-flex items-center gap-2'>
+                                            <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
+                                                <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
+                                            </Box>
+                                            <span>{d.name}</span>
+                                        </Box>
                                     </MuiLink>
                                 </TableCell>
                                 <TableCell>{d.description || '-'}</TableCell>
@@ -142,15 +221,54 @@ const DocumentChecklistsList = () => {
                                     <Chip
                                         label={d.isActive ? 'Active' : 'Inactive'}
                                         color={d.isActive ? 'success' : 'default'}
-                                        variant={d.isActive ? 'filled' : 'outlined'}
+                                        variant='outlined'
                                         size='small'
+                                        sx={{
+                                            boxShadow: 'none',
+                                            backgroundColor: 'transparent',
+                                            borderRadius: 1.5
+                                        }}
                                     />
                                 </TableCell>
+                                <TableCell align='right'>
+                                    <Button
+                                        size='small'
+                                        color='error'
+                                        variant='outlined'
+                                        onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
+                                    >
+                                        Delete
+                                    </Button>
+                                </TableCell>
                             </TableRow>
-                        ))
+                            )
+                        })
                     )}
                 </TableBody>
             </Table>
+
+            <Dialog
+                open={Boolean(deleteTarget)}
+                onClose={() => {
+                    if (deleting) return
+                    setDeleteTarget(null)
+                }}
+            >
+                <DialogTitle>Delete Document</DialogTitle>
+                <DialogContent>
+                    <Typography variant='body2'>
+                        Are you sure you want to delete {deleteTarget?.name}?
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                        Cancel
+                    </Button>
+                    <Button color='error' variant='contained' onClick={handleDelete} disabled={deleting}>
+                        {deleting ? 'Deleting...' : 'Delete'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     )
 }

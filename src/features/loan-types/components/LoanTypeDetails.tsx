@@ -212,7 +212,6 @@ const LoanTypeDetails = ({ id }: Props) => {
             <LoanTypesCreateForm
               showTitle={false}
               initialValues={{
-                code: data.code,
                 name: data.name,
                 description: data.description,
                 isActive: data.isActive
@@ -228,11 +227,18 @@ const LoanTypeDetails = ({ id }: Props) => {
             <Box className='flex flex-col gap-3'>
               <Box className='flex items-center gap-3'>
                 <Typography variant='h6'>{data.name}</Typography>
-                <Chip label={data.isActive ? 'Active' : 'Inactive'} color={data.isActive ? 'success' : 'default'} size='small' />
+                <Chip
+                  label={data.isActive ? 'Active' : 'Inactive'}
+                  color={data.isActive ? 'success' : 'default'}
+                  size='small'
+                  variant='outlined'
+                  sx={{
+                    boxShadow: 'none',
+                    backgroundColor: 'transparent',
+                    borderRadius: 1.1
+                  }}
+                />
               </Box>
-              <Typography variant='body2' color='text.secondary'>
-                Code: {data.code}
-              </Typography>
               <Typography variant='body2'>{data.description || 'No description'}</Typography>
             </Box>
           )}

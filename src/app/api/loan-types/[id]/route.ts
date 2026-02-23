@@ -29,7 +29,6 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const data = {
     id: String((row as any)._id),
-    code: String((row as any).code || ''),
     name: String((row as any).name || ''),
     description: (row as any).description ?? null,
     isActive: Boolean((row as any).isActive),
@@ -55,7 +54,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const patch: any = {}
 
-  if (body.code != null) patch.code = String(body.code).trim()
   if (body.name != null) patch.name = String(body.name).trim()
   if (body.description !== undefined)
     patch.description = body.description == null || String(body.description).trim().length === 0 ? null : String(body.description).trim()
@@ -64,11 +62,23 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const errors: Record<string, string> = {}
 
-  if (patch.code != null && !isNonEmptyString(patch.code)) errors.code = 'Code is required'
   if (patch.name != null && !isNonEmptyString(patch.name)) errors.name = 'Name is required'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
   try {
+    if (patch.name != null) {
+      const safeName = String(patch.name).replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+
+      const existing = await db.collection('loanTypes').findOne(
+        { tenantId: tenantIdObj, name: { $regex: `^${safeName}$`, $options: 'i' }, _id: { $ne: new ObjectId(id) } },
+        { projection: { _id: 1 } }
+      )
+
+      if (existing) {
+        return NextResponse.json({ error: 'duplicate_name', message: 'Name already exists for this tenant' }, { status: 409 })
+      }
+    }
+
     const res = await db
       .collection('loanTypes')
       .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { $set: patch })
@@ -78,7 +88,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     if (err && err.code === 11000) {
-      return NextResponse.json({ error: 'duplicate_code', message: 'Code already exists for this tenant' }, { status: 409 })
+      return NextResponse.json({ error: 'duplicate_name', message: 'Name already exists for this tenant' }, { status: 409 })
     }
 
     return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
