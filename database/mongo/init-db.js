@@ -269,6 +269,73 @@ ensureCollection('customers', customersValidator)
 ensureIndex('customers', { tenantId: 1 }, { name: 'idx_tenantId' })
 ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_mobile' })
 
+const loanTypesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'code', 'name', 'isActive', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      code: { bsonType: 'string', minLength: 2 },
+      name: { bsonType: 'string', minLength: 2 },
+      description: { bsonType: ['string', 'null'] },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanTypes', loanTypesValidator)
+ensureIndex('loanTypes', { tenantId: 1 }, { name: 'idx_loanTypes_tenantId' })
+ensureIndex('loanTypes', { tenantId: 1, code: 1 }, { unique: true, name: 'uniq_tenant_loanType_code' })
+
+const documentChecklistsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'name', 'isActive', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      name: { bsonType: 'string', minLength: 2 },
+      description: { bsonType: ['string', 'null'] },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('documentChecklists', documentChecklistsValidator)
+ensureIndex('documentChecklists', { tenantId: 1 }, { name: 'idx_documentChecklists_tenantId' })
+ensureIndex('documentChecklists', { tenantId: 1, name: 1 }, { unique: true, name: 'uniq_tenant_documentChecklist_name' })
+
+const loanTypeDocumentsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'loanTypeId', 'documentId', 'status', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      loanTypeId: { bsonType: 'objectId' },
+      documentId: { bsonType: 'objectId' },
+      status: { enum: ['REQUIRED', 'OPTIONAL', 'INACTIVE'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanTypeDocuments', loanTypeDocumentsValidator)
+ensureIndex('loanTypeDocuments', { tenantId: 1 }, { name: 'idx_loanTypeDocuments_tenantId' })
+ensureIndex(
+  'loanTypeDocuments',
+  { tenantId: 1, loanTypeId: 1, documentId: 1 },
+  { unique: true, name: 'uniq_tenant_loanType_document' }
+)
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {

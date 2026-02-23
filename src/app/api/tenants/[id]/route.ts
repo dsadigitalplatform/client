@@ -39,11 +39,21 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const db = await getDb()
   const userId = new ObjectId(session.userId!)
+  const email = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    email && email.length > 0
+      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
   const tenantId = new ObjectId(idParam)
 
   const membership = await db
     .collection('memberships')
-    .findOne({ userId, tenantId, status: 'active' }, { projection: { role: 1 } })
+    .findOne({ tenantId, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
   const role = (membership?.role as 'OWNER' | 'ADMIN' | 'USER' | undefined) || undefined
 
@@ -97,11 +107,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const db = await getDb()
   const userId = new ObjectId(session.userId!)
+  const email = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    email && email.length > 0
+      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
   const tenantId = new ObjectId(idParam)
 
   const membership = await db
     .collection('memberships')
-    .findOne({ userId, tenantId, status: 'active' }, { projection: { role: 1 } })
+    .findOne({ tenantId, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
   if (!membership) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 

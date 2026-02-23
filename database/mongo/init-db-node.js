@@ -247,6 +247,81 @@ async function main() {
     { unique: true, name: 'uniq_tenant_mobile' }
   )
 
+  const loanTypesValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'code', 'name', 'isActive', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        code: { bsonType: 'string', minLength: 2 },
+        name: { bsonType: 'string', minLength: 2 },
+        description: { bsonType: ['string', 'null'] },
+        isActive: { bsonType: 'bool' },
+        createdBy: { bsonType: ['objectId', 'null'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+
+  await ensureCollection(db, 'loanTypes', loanTypesValidator)
+  await ensureIndex(db.collection('loanTypes'), { tenantId: 1 }, { name: 'idx_loanTypes_tenantId' })
+  await ensureIndex(
+    db.collection('loanTypes'),
+    { tenantId: 1, code: 1 },
+    { unique: true, name: 'uniq_tenant_loanType_code' }
+  )
+
+  const documentChecklistsValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'name', 'isActive', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        name: { bsonType: 'string', minLength: 2 },
+        description: { bsonType: ['string', 'null'] },
+        isActive: { bsonType: 'bool' },
+        createdBy: { bsonType: ['objectId', 'null'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+
+  await ensureCollection(db, 'documentChecklists', documentChecklistsValidator)
+  await ensureIndex(db.collection('documentChecklists'), { tenantId: 1 }, { name: 'idx_documentChecklists_tenantId' })
+  await ensureIndex(
+    db.collection('documentChecklists'),
+    { tenantId: 1, name: 1 },
+    { unique: true, name: 'uniq_tenant_documentChecklist_name' }
+  )
+
+  const loanTypeDocumentsValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'loanTypeId', 'documentId', 'status', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        loanTypeId: { bsonType: 'objectId' },
+        documentId: { bsonType: 'objectId' },
+        status: { enum: ['REQUIRED', 'OPTIONAL', 'INACTIVE'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+
+  await ensureCollection(db, 'loanTypeDocuments', loanTypeDocumentsValidator)
+  await ensureIndex(db.collection('loanTypeDocuments'), { tenantId: 1 }, { name: 'idx_loanTypeDocuments_tenantId' })
+  await ensureIndex(
+    db.collection('loanTypeDocuments'),
+    { tenantId: 1, loanTypeId: 1, documentId: 1 },
+    { unique: true, name: 'uniq_tenant_loanType_document' }
+  )
+
   await client.close()
 }
 

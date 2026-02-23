@@ -139,12 +139,15 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
           icon={<i className='ri-checkbox-circle-line' />}
           sx={{
             width: '100%',
-            bgcolor: 'var(--mui-palette-success-main)',
-            color: 'var(--mui-palette-common-white)',
-            borderRadius: 2,
-            boxShadow: 6,
+            color: 'text.primary',
+            backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.4)',
+            boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
             '& .MuiAlert-icon': {
-              color: 'var(--mui-palette-common-white)'
+              color: 'var(--mui-palette-success-main)'
             }
           }}
         >
@@ -203,10 +206,9 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
                       sx={{
                         fontSize: '0.95rem',
                         fontWeight: 500,
-                        transition: 'color .2s ease, font-size .2s ease',
+                      transition: 'color .2s ease',
                         '&:hover': {
-                          color: 'primary.main',
-                          fontSize: '1.02rem'
+                        color: 'primary.main'
                         }
                       }}
                     >

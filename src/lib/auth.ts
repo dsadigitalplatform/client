@@ -55,13 +55,24 @@ return token
 
         const userDoc = await db
           .collection('users')
-          .findOne({ _id: new ObjectId(token.userId) }, { projection: { isSuperAdmin: 1 } })
+          .findOne({ _id: new ObjectId(token.userId) }, { projection: { isSuperAdmin: 1, email: 1 } })
 
         ;(token as any).isSuperAdmin = Boolean((userDoc as any)?.isSuperAdmin)
 
+        const email = String((userDoc as any)?.email || '')
+
+        const emailFilter =
+          email && email.length > 0
+            ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+            : undefined
+
+        const orFilters = [{ userId: new ObjectId(token.userId) }] as any[]
+
+        if (emailFilter) orFilters.push(emailFilter)
+
         const memberships = await db
           .collection('memberships')
-          .find({ userId: new ObjectId(token.userId), status: 'active' }, { projection: { tenantId: 1 } })
+          .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1 } })
           .toArray()
 
         const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
@@ -171,6 +182,34 @@ return token
 
       if (session.user) {
         ;(session.user as any).isSuperAdmin = (token as any).isSuperAdmin
+      }
+
+      if ((session as any).userId && !(session as any).currentTenantId) {
+        const db = await getDb()
+        const userIdObj = new ObjectId((session as any).userId)
+
+        const email = String((session as any)?.user?.email || '')
+
+        const emailFilter =
+          email && email.length > 0
+            ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+            : undefined
+
+        const orFilters = [{ userId: userIdObj }] as any[]
+
+        if (emailFilter) orFilters.push(emailFilter)
+
+        const memberships = await db
+          .collection('memberships')
+          .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1 } })
+          .toArray()
+
+        const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
+
+        if (tenantIds.length > 0) {
+          ;(session as any).tenantIds = tenantIds
+          ;(session as any).currentTenantId = tenantIds[0]
+        }
       }
 
       return session

@@ -1,11 +1,8 @@
 import { redirect } from 'next/navigation'
 
-import Link from 'next/link'
-
 import { getServerSession } from 'next-auth'
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 
 import { ObjectId } from 'mongodb'
 

@@ -132,11 +132,12 @@ return () => {
         <Snackbar open={welcomeOpen} autoHideDuration={4000} onClose={() => setWelcomeOpen(false)}>
           <SnackbarContent
             sx={{
-              backgroundColor: 'var(--mui-palette-grey-100)',
-              color: 'var(--mui-palette-grey-800)',
-              border: '1px solid var(--mui-palette-grey-300)',
-              borderRadius: 2,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
+              backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+              color: 'text.primary',
+              border: '1px solid rgb(var(--mui-palette-success-mainChannel) / 0.3)',
+              borderRadius: 2.5,
+              boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
+              backdropFilter: 'blur(12px)',
               px: 2,
               py: 1.5
             }}
@@ -147,8 +148,8 @@ return () => {
                   sx={{
                     width: 28,
                     height: 28,
-                    backgroundColor: 'var(--mui-palette-grey-200)',
-                    color: 'var(--mui-palette-grey-700)'
+                    backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.85)',
+                    color: 'var(--mui-palette-success-main)'
                   }}
                 >
                   <i className='ri-checkbox-circle-line text-[18px]' />
