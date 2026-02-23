@@ -31,12 +31,23 @@ export async function GET(request: Request) {
   }
 
   const db = await getDb()
+  const userId = new ObjectId(session.userId)
+  const email = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    email && email.length > 0
+      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
 
   const ownerMembership = await db
     .collection('memberships')
     .findOne({
-      userId: new ObjectId(session.userId),
       tenantId: new ObjectId(tenantId),
+      $or: orFilters,
       role: { $in: ['OWNER', 'ADMIN'] },
       status: 'active'
     })

@@ -165,7 +165,22 @@ const CustomerDetails = ({ id }: Props) => {
           severity={toast.severity}
           variant='filled'
           icon={<i className='ri-information-line' />}
-          sx={{ width: '100%' }}
+          sx={{
+            width: '100%',
+            color: 'text.primary',
+            backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor:
+              toast.severity === 'success'
+                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.4)'
+                : 'rgb(var(--mui-palette-error-mainChannel) / 0.4)',
+            boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
+            '& .MuiAlert-icon': {
+              color: toast.severity === 'success' ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-error-main)'
+            }
+          }}
         >
           {toast.msg}
         </Alert>

@@ -9,9 +9,9 @@ const Page = async () => {
   const session = await getServerSession(authOptions)
 
   if (!session?.userId) redirect('/login')
-  const tenantIds = ((session as any)?.tenantIds as string[] | undefined) || []
+  const currentTenantId = (session as any)?.currentTenantId as string | undefined
 
-  if (tenantIds.length === 0) redirect('/home')
+  if (!currentTenantId) redirect('/home')
   
 return <CustomersList />
  }

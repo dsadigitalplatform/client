@@ -48,7 +48,7 @@ const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) =
   </StyledVerticalNavExpandIcon>
 )
 
-const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership, menuVisibility }: Props) => {
+const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -94,6 +94,12 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership, menuVis
             <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
               List
             </MenuItem>
+            <MenuItem href='/loan-types' icon={<i className='ri-file-list-3-line' />}>
+              Loan Types
+            </MenuItem>
+            <MenuItem href='/document-checklists' icon={<i className='ri-file-text-line' />}>
+              Document Checklist
+            </MenuItem>
           </SubMenu>
         )}
 
@@ -107,18 +113,18 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership, menuVis
 
         {showAdmin && (
           <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-          {canInviteUser && (
-            <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-              Invite User
+            {canInviteUser && (
+              <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+                Invite User
+              </MenuItem>
+            )}
+            <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+              Create Organisation
             </MenuItem>
-          )}
-          <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-            Create Organisation
-          </MenuItem>
-          <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
-            Organisation Details
-          </MenuItem>
-        </SubMenu>
+            <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+              Organisation Details
+            </MenuItem>
+          </SubMenu>
         )}
       </Menu>
     </ScrollWrapper>

@@ -53,12 +53,22 @@ export async function GET(request: Request) {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId)
+  const userEmail = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    userEmail && userEmail.length > 0
+      ? { email: { $regex: `^${userEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
   const tenantIdObj = new ObjectId(currentTenantId)
 
   // resolve membership to gate data
   const membership = await db
     .collection('memberships')
-    .findOne({ userId, tenantId: tenantIdObj, status: 'active' }, { projection: { role: 1 } })
+    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
@@ -129,12 +139,22 @@ export async function POST(request: Request) {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId)
+  const userEmail = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    userEmail && userEmail.length > 0
+      ? { email: { $regex: `^${userEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
   const tenantIdObj = new ObjectId(currentTenantId)
 
   // ensure user belongs to tenant
   const membership = await db
     .collection('memberships')
-    .findOne({ userId, tenantId: tenantIdObj, status: 'active' }, { projection: { role: 1 } })
+    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 

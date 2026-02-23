@@ -110,6 +110,12 @@ module.exports = {
         '@typescript-eslint/explicit-module-boundary-types': 'off',
         '@typescript-eslint/no-var-requires': 'off'
       }
+    },
+    {
+      files: ['database/mongo/*.js'],
+      rules: {
+        '@typescript-eslint/no-require-imports': 'off'
+      }
     }
   ]
 }

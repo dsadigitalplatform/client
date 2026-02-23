@@ -48,11 +48,14 @@ const Layout = async (props: ChildrenType) => {
 
     const userIdObj = new ObjectId(session.userId)
     const email = String(session.user?.email || '')
+
     const emailFilter =
       email && email.length > 0
         ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
         : undefined
+
     const orFilters = [{ userId: userIdObj }] as any[]
+
     if (emailFilter) orFilters.push(emailFilter)
     const cookieStore = await cookies()
     const savedTenantId = cookieStore.get('CURRENT_TENANT_ID')?.value
@@ -119,6 +122,7 @@ const Layout = async (props: ChildrenType) => {
       tenantPrimaryColor = ((t as any)?.theme?.primaryColor as string | undefined) || undefined
     }
   }
+
   const menuVisibility = getMenuVisibility({
     isSuperAdmin,
     tenantRole: tenant?.role,

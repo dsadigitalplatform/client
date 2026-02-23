@@ -5,7 +5,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 
 import { authOptions } from '@/lib/auth'
-import CustomerDetails from '@features/customers/components/CustomerDetails'
+import LoanTypeDetails from '@features/loan-types/components/LoanTypeDetails'
 
 const Page = async (props: { params: Promise<{ id: string }> }) => {
   const session = await getServerSession(authOptions)
@@ -16,11 +16,10 @@ const Page = async (props: { params: Promise<{ id: string }> }) => {
   if (!currentTenantId) redirect('/home')
   const { id } = await props.params
 
-  
-return (
+  return (
     <Box className='p-6 flex flex-col gap-4'>
-      <Typography variant='h4'>Customer Details</Typography>
-      <CustomerDetails id={id} />
+      <Typography variant='h4'>Loan Type Details</Typography>
+      <LoanTypeDetails id={id} />
     </Box>
   )
 }
