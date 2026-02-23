@@ -1,11 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+
 import { getToken } from 'next-auth/jwt'
 
 export async function middleware(req: NextRequest) {
   const { nextUrl } = req
   const pathname = nextUrl.pathname
   const isLogin = pathname.startsWith('/login')
+
   const isAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||

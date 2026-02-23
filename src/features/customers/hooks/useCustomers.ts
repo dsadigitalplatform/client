@@ -14,7 +14,7 @@ export const useCustomers = () => {
     setLoading(true)
     const data = await getCustomers({ q: search })
 
-    setCustomers(data)
+    setCustomers(data as unknown as Customer[])
     setLoading(false)
   }, [search])
 

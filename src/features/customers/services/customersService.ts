@@ -1,25 +1,91 @@
- export type GetCustomersParams = {
-   q?: string
- }
- 
- export async function getCustomers(params: GetCustomersParams = {}) {
-   const url = new URL('/api/customers', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
+export type GetCustomersParams = { q?: string }
 
-   if (params.q) url.searchParams.set('q', params.q)
-   const res = await fetch(url.toString(), { cache: 'no-store' })
-   const data = await res.json()
+export type CreateCustomerInput = {
+  fullName: string
+  mobile: string
+  email?: string | null
+  dob?: string | null
+  pan?: string | null
+  aadhaarMasked?: string | null
+  address?: string | null
+  employmentType: 'SALARIED' | 'SELF_EMPLOYED'
+  monthlyIncome?: number | null
+  cibilScore?: number | null
+  source: 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
+}
 
-   return data as { id: string; name: string; email: string; createdAt: string }[]
- }
- 
- export async function createCustomer(body: { name: string; email: string }) {
-   const res = await fetch('/api/customers', {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify(body)
-   })
+export async function getCustomers(params: GetCustomersParams = {}) {
+  const url = new URL('/api/customers', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
 
-   const data = await res.json()
+  if (params.q) url.searchParams.set('q', params.q)
+  const res = await fetch(url.toString(), { cache: 'no-store' })
 
-   return data
- }
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+
+    throw new Error(errText || `Failed to fetch customers (${res.status})`)
+  }
+
+  const data = await res.json()
+
+  
+return (data?.customers ?? []) as any
+}
+
+export async function createCustomer(body: CreateCustomerInput) {
+  const res = await fetch('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to create customer'
+    const details = data?.details
+    const err = new Error(message) as any
+
+    if (details) err.details = details
+    throw err
+  }
+
+  
+return data
+}
+
+export async function getCustomer(id: string) {
+  const res = await fetch(`/api/customers/${id}`, { cache: 'no-store' })
+
+  if (!res.ok) throw new Error('Failed to fetch customer')
+  
+return res.json()
+}
+
+export async function updateCustomer(id: string, body: Partial<CreateCustomerInput>) {
+  const res = await fetch(`/api/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const err = new Error(data?.message || data?.error || 'Failed to update customer') as any
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  
+return data
+}
+
+export async function deleteCustomer(id: string) {
+  const res = await fetch(`/api/customers/${id}`, { method: 'DELETE' })
+
+  if (!res.ok) throw new Error('Failed to delete customer')
+  
+return res.json()
+}
