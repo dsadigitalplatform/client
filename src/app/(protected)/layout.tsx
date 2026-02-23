@@ -21,6 +21,7 @@ import ScrollToTop from '@core/components/scroll-to-top'
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { getMenuVisibility } from '@configs/menu'
 
 
 const Layout = async (props: ChildrenType) => {
@@ -46,12 +47,19 @@ const Layout = async (props: ChildrenType) => {
     const db = await getDb()
 
     const userIdObj = new ObjectId(session.userId)
+    const email = String(session.user?.email || '')
+    const emailFilter =
+      email && email.length > 0
+        ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+        : undefined
+    const orFilters = [{ userId: userIdObj }] as any[]
+    if (emailFilter) orFilters.push(emailFilter)
     const cookieStore = await cookies()
     const savedTenantId = cookieStore.get('CURRENT_TENANT_ID')?.value
 
     const memberships = await db
       .collection('memberships')
-      .find({ userId: userIdObj, status: 'active' }, { sort: { createdAt: -1 }, projection: { tenantId: 1, role: 1 } })
+      .find({ status: 'active', $or: orFilters }, { sort: { createdAt: -1 }, projection: { tenantId: 1, role: 1 } })
       .toArray()
 
     hasMembership = memberships.length > 0 || Boolean(savedTenantId) || tokenTenantIds.length > 0
@@ -111,6 +119,12 @@ const Layout = async (props: ChildrenType) => {
       tenantPrimaryColor = ((t as any)?.theme?.primaryColor as string | undefined) || undefined
     }
   }
+  const menuVisibility = getMenuVisibility({
+    isSuperAdmin,
+    tenantRole: tenant?.role,
+    hasTenantSelected: Boolean(tenant?.tenantName) || Boolean(tenant)
+  })
+
 
   return (
     <Providers direction={direction} tenantPrimaryColor={tenantPrimaryColor || null}>
@@ -118,7 +132,15 @@ const Layout = async (props: ChildrenType) => {
         systemMode={systemMode}
         verticalLayout={
           <VerticalLayout
-            navigation={<Navigation mode={mode} tenant={tenant} isSuperAdmin={isSuperAdmin} hasMembership={hasMembership} />}
+            navigation={
+              <Navigation
+                mode={mode}
+                tenant={tenant}
+                isSuperAdmin={isSuperAdmin}
+                hasMembership={hasMembership}
+                menuVisibility={menuVisibility}
+              />
+            }
             navbar={<Navbar user={user} tenant={tenant} isSuperAdmin={isSuperAdmin} />}
             footer={<VerticalFooter />}
           >

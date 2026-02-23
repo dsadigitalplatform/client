@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
+import { mutate } from 'swr'
 
 import { useSession } from 'next-auth/react'
 
@@ -79,6 +80,10 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
       const data = await res.json()
 
       if (!res.ok || !data?.success) throw new Error('Failed to switch organisation')
+
+      try {
+        await mutate('/api/session/tenant')
+      } catch { }
 
       try {
         const tRes = await fetch(`/api/tenants/${encodeURIComponent(id)}`, { cache: 'no-store' })

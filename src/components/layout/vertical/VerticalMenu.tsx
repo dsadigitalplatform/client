@@ -34,6 +34,12 @@ type Props = {
   tenant?: TenantInfo
   isSuperAdmin?: boolean
   hasMembership?: boolean
+  menuVisibility?: {
+    showCustomers: boolean
+    showAdmin: boolean
+    showSuperAdmin: boolean
+    canInviteUser: boolean
+  }
 }
 
 const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) => (
@@ -42,7 +48,7 @@ const RenderExpandIcon = ({ open, transitionDuration }: RenderExpandIconProps) =
   </StyledVerticalNavExpandIcon>
 )
 
-const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props) => {
+const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership, menuVisibility }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -51,6 +57,11 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
   const { isBreakpointReached, transitionDuration } = verticalNavOptions
 
   const ScrollWrapper = isBreakpointReached ? 'div' : PerfectScrollbar
+
+  const hasTenant = Boolean(menuVisibility?.showCustomers)
+  const showSuperAdmin = Boolean(menuVisibility?.showSuperAdmin)
+  const showAdmin = Boolean(menuVisibility?.showAdmin)
+  const canInviteUser = Boolean(menuVisibility?.canInviteUser)
 
   return (
     // eslint-disable-next-line lines-around-comment
@@ -66,8 +77,7 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
           onScrollY: container => scrollMenu(container, true)
         })}
     >
-      {/* Incase you also want to scroll NavHeader to scroll with Vertical Menu, remove NavHeader from above and paste it below this comment */}
-      {/* Vertical Menu */}
+
       <Menu
         popoutMenuOffset={{ mainAxis: 10 }}
         menuItemStyles={menuItemStyles(verticalNavOptions, theme)}
@@ -75,101 +85,42 @@ const VerticalMenu = ({ scrollMenu, tenant, isSuperAdmin, hasMembership }: Props
         renderExpandedMenuItemIcon={{ icon: <i className='ri-circle-line' /> }}
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
-        {/* Super Admin: show Dashboard + Super Admin menu, hide Create Tenant */}
-        {isSuperAdmin ? (
-          <>
-            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-              Dashboard
+        <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
+          Dashboard
+        </MenuItem>
+
+        {hasTenant && (
+          <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
+            <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
+              List
             </MenuItem>
-            {(hasMembership || Boolean(tenant)) && (
-              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
-                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
-                  List
-                </MenuItem>
-              </SubMenu>
-            )}
-            <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
-              <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
-                Subscription Plans
-              </MenuItem>
-            </SubMenu>
-            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-              {tenant?.role && tenant.role !== 'USER' && (
-                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-                  Invite User
-                </MenuItem>
-              )}
-              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-                Create Organisation
-              </MenuItem>
-              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
-                Organisation Details
-              </MenuItem>
+          </SubMenu>
+        )}
 
-            </SubMenu>
-          </>
-        ) : hasMembership ? (
-          <>
-            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-              Dashboard
+        {showSuperAdmin && (
+          <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
+            <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
+              Subscription Plans
             </MenuItem>
+          </SubMenu>
+        )}
 
-            {(hasMembership || Boolean(tenant)) && (
-              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
-                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
-                  List
-                </MenuItem>
-              </SubMenu>
-            )}
-
-            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-              {(tenant?.role === 'OWNER' || tenant?.role === 'ADMIN') && (
-                <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
-                  Invite User
-                </MenuItem>
-              )}
-              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-                Create Organisation
-              </MenuItem>
-
-              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
-                Organisation Details
-              </MenuItem>
-
-            </SubMenu>
-          </>
-        ) : (
-          <>
-            <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-              Dashboard
+        {showAdmin && (
+          <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
+          {canInviteUser && (
+            <MenuItem href='/admin/invite-user' icon={<i className='ri-user-add-line' />}>
+              Invite User
             </MenuItem>
-            {(Boolean(tenant)) && (
-              <SubMenu label='Customers' icon={<i className='ri-user-3-line' />}>
-                <MenuItem href='/customers' icon={<i className='ri-list-unordered' />}>
-                  List
-                </MenuItem>
-              </SubMenu>
-            )}
-            <SubMenu label='Admin' icon={<i className='ri-shield-user-line' />}>
-              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-                Create Organisation
-              </MenuItem>
-              <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
-                Organisation Details
-              </MenuItem>
-            </SubMenu>
-          </>
+          )}
+          <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+            Create Organisation
+          </MenuItem>
+          <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
+            Organisation Details
+          </MenuItem>
+        </SubMenu>
         )}
       </Menu>
-      {/* <Menu
-        popoutMenuOffset={{ mainAxis: 10 }}
-        menuItemStyles={menuItemStyles(verticalNavOptions, theme)}
-        renderExpandIcon={({ open }) => <RenderExpandIcon open={open} transitionDuration={transitionDuration} />}
-        renderExpandedMenuItemIcon={{ icon: <i className='ri-circle-line' /> }}
-        menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
-      >
-        <GenerateVerticalMenu menuData={menuData(dictionary)} />
-      </Menu> */}
     </ScrollWrapper>
   )
 }

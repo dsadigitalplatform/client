@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
+import { mutate } from 'swr'
 
 import { useSession } from 'next-auth/react'
 
@@ -75,6 +76,10 @@ export const TenantSelectionModal = ({ open = false }: Props) => {
       const data = await res.json()
 
       if (!res.ok || !data?.success) throw new Error('Failed to select organisation')
+
+      try {
+        await mutate('/api/session/tenant')
+      } catch { }
 
       try {
         await update({ currentTenantId: id } as any)

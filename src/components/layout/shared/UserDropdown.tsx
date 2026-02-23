@@ -263,17 +263,16 @@ const UserDropdown = ({
                     </div>
                   </div>
                   <Divider className='mlb-1' />
-                  {(isSuperAdmin || resolvedTenant) && (
-                    <>
-                      <div className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
+                  {(isSuperAdmin || resolvedTenant) &&
+                    [
+                      <div key='org-info' className='flex flex-col gap-1 pli-4 plb-2' tabIndex={-1}>
                         <Typography color='text.primary'>{resolvedTenant?.tenantName ?? '—'}</Typography>
                         <Typography variant='caption' color='text.secondary'>
                           Role: {isSuperAdmin ? 'Super Admin' : roleLabel(resolvedTenant?.role)}
                         </Typography>
-                      </div>
-                      <Divider className='mlb-1' />
-                    </>
-                  )}
+                      </div>,
+                      <Divider key='org-divider' className='mlb-1' />
+                    ]}
                   <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/create-tenant')}>
                     <i className='ri-building-2-line' />
                     <Typography color='text.primary'>Create Organisation</Typography>
