@@ -234,8 +234,9 @@ const LoanTypeDetails = ({ id }: Props) => {
                   variant='outlined'
                   sx={{
                     boxShadow: 'none',
-                    backgroundColor: 'transparent',
-                    borderRadius: 1.1
+                    backgroundColor: data.isActive
+                      ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                      : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
                   }}
                 />
               </Box>

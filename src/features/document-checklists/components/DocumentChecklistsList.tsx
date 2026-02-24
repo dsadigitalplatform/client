@@ -225,8 +225,9 @@ const DocumentChecklistsList = () => {
                                         size='small'
                                         sx={{
                                             boxShadow: 'none',
-                                            backgroundColor: 'transparent',
-                                            borderRadius: 1.5
+                                            backgroundColor: d.isActive
+                                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
                                         }}
                                     />
                                 </TableCell>
