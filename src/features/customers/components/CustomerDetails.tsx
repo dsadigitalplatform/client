@@ -19,6 +19,10 @@ import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
+import IconButton from '@mui/material/IconButton'
+import Avatar from '@mui/material/Avatar'
+import { useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 
 import CustomersCreateForm from './CustomersCreateForm'
 import { getCustomer, updateCustomer, deleteCustomer } from '@features/customers/services/customersService'
@@ -30,6 +34,8 @@ const CustomerDetails = ({ id }: Props) => {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const [toast, setToast] = useState<{ open: boolean; msg: string; severity: 'success' | 'error' }>({
     open: false,
@@ -58,14 +64,70 @@ const CustomerDetails = ({ id }: Props) => {
   if (!data) return <Typography>Not found</Typography>
 
   return (
-    <Card sx={{ borderRadius: 3, boxShadow: 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))' }}>
+    <Card
+      sx={{
+        borderRadius: { xs: 4, sm: 3 },
+        boxShadow: isMobile ? 'none' : 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))',
+        border: isMobile ? '1px solid' : 'none',
+        borderColor: isMobile ? 'divider' : 'transparent'
+      }}
+    >
       {!editMode ? (
         <>
-          <CardHeader
-            title='Customer Details'
-            subheader={
-              <Box className='flex items-center gap-2'>
-                <Typography component='span' fontWeight={600}>
+          {!isMobile ? (
+            <CardHeader
+              title='Customer Details'
+              subheader={
+                <Box className='flex items-center gap-2'>
+                  <Typography component='span' fontWeight={600}>
+                    {data.fullName}
+                  </Typography>
+                  <Chip
+                    size='small'
+                    label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
+                    variant='outlined'
+                    sx={{
+                      boxShadow: 'none',
+                      backgroundColor:
+                        data.employmentType === 'SALARIED'
+                          ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
+                          : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
+                    }}
+                  />
+                </Box>
+              }
+            />
+          ) : null}
+          <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+            {isMobile ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Button
+                  variant='text'
+                  onClick={() => router.push('/customers')}
+                  startIcon={<i className='ri-arrow-left-line' />}
+                  sx={{ minWidth: 'auto', px: 1 }}
+                >
+                  Back
+                </Button>
+                <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+                  Customer
+                </Typography>
+                <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit customer'>
+                  <i className='ri-pencil-line' />
+                </IconButton>
+              </Box>
+            ) : null}
+            {isMobile ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{ width: 80, height: 80, bgcolor: 'action.hover', color: 'text.secondary', mb: 1 }}>
+                  {String(data.fullName || '')
+                    .split(' ')
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((s: string) => s[0]?.toUpperCase())
+                    .join('')}
+                </Avatar>
+                <Typography variant='h6' sx={{ fontWeight: 600 }}>
                   {data.fullName}
                 </Typography>
                 <Chip
@@ -73,6 +135,7 @@ const CustomerDetails = ({ id }: Props) => {
                   label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
                   variant='outlined'
                   sx={{
+                    mt: 0.75,
                     boxShadow: 'none',
                     backgroundColor:
                       data.employmentType === 'SALARIED'
@@ -81,41 +144,94 @@ const CustomerDetails = ({ id }: Props) => {
                   }}
                 />
               </Box>
-            }
-          />
-          <CardContent>
-            <Box className='flex flex-col gap-1'>
-              <Typography color='text.secondary'>Mobile: {data.mobile}</Typography>
-              <Typography color='text.secondary'>Email: {data.email || '-'}</Typography>
-              <Typography color='text.secondary'>PAN: {data.pan || '-'}</Typography>
-              <Typography color='text.secondary'>Aadhaar: {data.aadhaarMasked || '-'}</Typography>
-              <Typography color='text.secondary'>Address: {data.address || '-'}</Typography>
-              <Typography color='text.secondary'>
-                Income: {data.monthlyIncome != null ? formatINR(data.monthlyIncome) : '-'}
-              </Typography>
-              <Typography color='text.secondary'>CIBIL: {data.cibilScore != null ? data.cibilScore : '-'}</Typography>
-              <Typography color='text.secondary'>Source: {String(data.source).replace('_', ' ')}</Typography>
-            </Box>
-            <Divider sx={{ my: 3 }} />
-            <Box className='flex gap-2'>
-              <Button variant='contained' onClick={() => setEditMode(true)}>
-                Update
-              </Button>
-              <Button variant='outlined' color='error' onClick={() => setConfirmOpen(true)}>
-                Delete
-              </Button>
-              <Link href='/customers'>
-                <Button>Back to List</Button>
-              </Link>
-            </Box>
+            ) : null}
+            {isMobile ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                <Box className='flex items-center gap-1.5'>
+                  <i className='ri-smartphone-line text-base' />
+                  <Typography color='text.secondary'>{data.mobile}</Typography>
+                </Box>
+                <Box className='flex items-center gap-1.5'>
+                  <i className='ri-mail-line text-base' />
+                  <Typography color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                    {data.email || '-'}
+                  </Typography>
+                </Box>
+                <Box className='flex items-center gap-1.5'>
+                  <i className='ri-bank-card-line text-base' />
+                  <Typography color='text.secondary'>{data.pan || '-'}</Typography>
+                </Box>
+                <Box className='flex items-center gap-1.5'>
+                  <i className='ri-shield-keyhole-line text-base' />
+                  <Typography color='text.secondary'>{data.aadhaarMasked || '-'}</Typography>
+                </Box>
+                <Box className='flex items-center gap-1.5'>
+                  <i className='ri-map-pin-line text-base' />
+                  <Typography color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                    {data.address || '-'}
+                  </Typography>
+                </Box>
+                <Box className='flex items-center justify-between'>
+                  <Typography color='text.secondary'>Income</Typography>
+                  <Typography color='text.primary'>
+                    {data.monthlyIncome != null ? formatINR(data.monthlyIncome) : '-'}
+                  </Typography>
+                </Box>
+                <Box className='flex items-center justify-between'>
+                  <Typography color='text.secondary'>CIBIL</Typography>
+                  <Typography color='text.primary'>{data.cibilScore != null ? data.cibilScore : '-'}</Typography>
+                </Box>
+                <Box className='flex items-center justify-between'>
+                  <Typography color='text.secondary'>Source</Typography>
+                  <Typography color='text.primary'>{String(data.source).replace('_', ' ')}</Typography>
+                </Box>
+              </Box>
+            ) : (
+              <Box className='flex flex-col gap-1'>
+                <Typography color='text.secondary'>Mobile: {data.mobile}</Typography>
+                <Typography color='text.secondary'>Email: {data.email || '-'}</Typography>
+                <Typography color='text.secondary'>PAN: {data.pan || '-'}</Typography>
+                <Typography color='text.secondary'>Aadhaar: {data.aadhaarMasked || '-'}</Typography>
+                <Typography color='text.secondary'>Address: {data.address || '-'}</Typography>
+                <Typography color='text.secondary'>
+                  Income: {data.monthlyIncome != null ? formatINR(data.monthlyIncome) : '-'}
+                </Typography>
+                <Typography color='text.secondary'>CIBIL: {data.cibilScore != null ? data.cibilScore : '-'}</Typography>
+                <Typography color='text.secondary'>Source: {String(data.source).replace('_', ' ')}</Typography>
+              </Box>
+            )}
+            <Divider sx={{ my: { xs: 2.5, sm: 3 } }} />
+            {isMobile ? (
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Button variant='contained' fullWidth onClick={() => setEditMode(true)}>
+                  Update
+                </Button>
+                <Button variant='outlined' color='error' fullWidth onClick={() => setConfirmOpen(true)}>
+                  Delete
+                </Button>
+              </Box>
+            ) : (
+              <Box className='flex gap-2'>
+                <Button variant='contained' onClick={() => setEditMode(true)}>
+                  Update
+                </Button>
+                <Button variant='outlined' color='error' onClick={() => setConfirmOpen(true)}>
+                  Delete
+                </Button>
+                <Link href='/customers'>
+                  <Button>Back to List</Button>
+                </Link>
+              </Box>
+            )}
           </CardContent>
         </>
       ) : (
         <>
-          <CardHeader title='Update Customer' />
-          <CardContent>
+          {!isMobile ? <CardHeader title='Update Customer' /> : null}
+          <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
             <CustomersCreateForm
               showTitle={false}
+              variant='plain'
               submitLabel='Update Customer'
               initialValues={{
                 fullName: data.fullName,

@@ -416,7 +416,7 @@ const CustomersList = () => {
           </TableBody>
         </Table>
       )}
-      {isMobile ? (
+      {isMobile && !openAdd ? (
         <Fab
           color='primary'
           aria-label='Add customer'
