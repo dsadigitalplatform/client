@@ -20,6 +20,11 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import Avatar from '@mui/material/Avatar'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Fab from '@mui/material/Fab'
+import { useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { useCustomers } from '@features/customers/hooks/useCustomers'
 import CustomersCreateForm from '@features/customers/components/CustomersCreateForm'
@@ -28,6 +33,8 @@ const CustomersList = () => {
   const { customers, loading, search, setSearch, refresh } = useCustomers()
   const [openAdd, setOpenAdd] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 
@@ -49,8 +56,8 @@ const CustomersList = () => {
   const cibilMeta = (v: number) => {
     if (v >= 750) return { label: 'High', color: 'success' as const, icon: 'ri-arrow-up-s-line' }
     if (v >= 650) return { label: 'Average', color: 'warning' as const, icon: 'ri-equalizer-line' }
-    
-return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
+
+    return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
   }
 
   const handleExport = () => {
@@ -78,11 +85,18 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
     URL.revokeObjectURL(url)
   }
 
-  // simple table view; pagination/search can be added later
   return (
     <Box className='flex flex-col gap-4'>
-      <Box className='flex items-center gap-2 justify-between'>
-        <Box className='flex items-center gap-2'>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 2,
+          justifyContent: 'space-between'
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, flex: 1 }}>
           <TextField
             size='small'
             value={search}
@@ -91,22 +105,27 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
             onKeyDown={e => {
               if (e.key === 'Enter') refresh()
             }}
+            fullWidth={isMobile}
           />
-          <Button variant='contained' onClick={refresh}>
-            Search
-          </Button>
+          {isMobile ? null : (
+            <Button variant='contained' onClick={refresh} sx={{ minWidth: 110 }}>
+              Search
+            </Button>
+          )}
         </Box>
-        <Box className='flex items-center gap-2'>
-          <Button variant='outlined' onClick={handleExport} startIcon={<i className='ri-download-line' />}>
-            Export
-          </Button>
-          <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
-            Add Customer
-          </Button>
-        </Box>
+        {isMobile ? null : (
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+            <Button variant='outlined' onClick={handleExport} startIcon={<i className='ri-download-line' />}>
+              Export
+            </Button>
+            <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
+              Add Customer
+            </Button>
+          </Box>
+        )}
       </Box>
       <Drawer anchor='right' open={openAdd} onClose={() => setOpenAdd(false)} keepMounted>
-        <Box sx={{ width: { xs: 380, sm: 480, md: 520 }, p: 3, '& .MuiTextField-root': { mb: 1.5 } }}>
+        <Box sx={{ width: { xs: '100vw', sm: 480, md: 520 }, p: 3, '& .MuiTextField-root': { mb: 1.5 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant='h6' color='text.primary'>
               Add a Customer
@@ -154,149 +173,265 @@ return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
           Customer added successfully
         </Alert>
       </Snackbar>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>Mobile</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell>Employment</TableCell>
-            <TableCell>Income</TableCell>
-            <TableCell>CIBIL</TableCell>
-            <TableCell>Source</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
+      {isMobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {loading ? (
-            <TableRow>
-              <TableCell colSpan={7}>Loading...</TableCell>
-            </TableRow>
+            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant='body2' color='text.secondary'>
+                  Loading...
+                </Typography>
+              </CardContent>
+            </Card>
           ) : customers.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7}>No customers found</TableCell>
-            </TableRow>
+            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant='body2' color='text.secondary'>
+                  No customers found
+                </Typography>
+              </CardContent>
+            </Card>
           ) : (
-            customers.map(c => (
-              <TableRow key={c.id}>
-                <TableCell>
-                  <Box className='flex items-center gap-2'>
-                    <Avatar
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        bgcolor: 'primary.light',
-                        color: 'primary.contrastText',
-                        fontSize: '0.9rem',
-                        fontWeight: 600
-                      }}
-                      aria-label={`${c.fullName} avatar`}
-                    >
-                      {c.fullName
-                        .split(' ')
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map(s => s[0]?.toUpperCase())
-                        .join('')}
-                    </Avatar>
-                    <MuiLink
-                      component={Link}
-                      href={`/customers/${c.id}`}
-                      underline='hover'
-                      color='text.primary'
-                      sx={{
-                        fontSize: '0.95rem',
-                        fontWeight: 500,
-                      transition: 'color .2s ease',
-                        '&:hover': {
-                        color: 'primary.main'
-                        }
-                      }}
-                    >
-                      {c.fullName}
-                    </MuiLink>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box className='flex items-center gap-1.5'>
-                    <i className='ri-smartphone-line text-lg' />
-                    <span>{c.mobile}</span>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box className='flex items-center gap-1.5'>
-                    <i className='ri-mail-line text-lg' />
-                    <span>{c.email || '-'}</span>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={c.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
-                    size='small'
-                    color={c.employmentType === 'SALARIED' ? 'primary' : 'secondary'}
-                    variant='outlined'
-                    sx={{
-                      boxShadow: 'none',
-                      backgroundColor:
-                        c.employmentType === 'SALARIED'
-                          ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
-                          : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
-                    }}
-                  />
-                </TableCell>
-                <TableCell>
-                  {c.monthlyIncome != null ? (
-                    <span>{formatINR(c.monthlyIncome)}</span>
-                  ) : (
-                    '-'
-                  )}
-                </TableCell>
-                <TableCell>
-                  {c.cibilScore != null ? (
-                    (() => {
-                      const m = cibilMeta(c.cibilScore)
-
-                      
-return (
+            customers.map(c => {
+              return (
+                <Card
+                  key={c.id}
+                  sx={{
+                    borderRadius: 3,
+                    boxShadow: 'none',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    backgroundColor: 'background.paper'
+                  }}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                      <Avatar
+                        sx={{
+                          width: 36,
+                          height: 36,
+                          bgcolor: 'primary.light',
+                          color: 'primary.contrastText',
+                          fontSize: '0.9rem',
+                          fontWeight: 600
+                        }}
+                        aria-label={`${c.fullName} avatar`}
+                      >
+                        {c.fullName
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map(s => s[0]?.toUpperCase())
+                          .join('')}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <MuiLink
+                          component={Link}
+                          href={`/customers/${c.id}`}
+                          underline='hover'
+                          color='text.primary'
+                          sx={{
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            display: 'block',
+                            textOverflow: 'ellipsis',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            transition: 'color .2s ease',
+                            '&:hover': {
+                              color: 'primary.main'
+                            }
+                          }}
+                        >
+                          {c.fullName}
+                        </MuiLink>
+                        <Box className='flex items-center gap-1.5'>
+                          <i className='ri-smartphone-line text-base' />
+                          <Typography variant='body2'>{c.mobile}</Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.25 }}>
+                      <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                        {c.email || '-'}
+                      </Typography>
+                      <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
                         <Chip
+                          label={c.monthlyIncome != null ? formatINR(c.monthlyIncome) : '-'}
                           size='small'
-                          color={m.color}
                           variant='outlined'
-                          icon={<i className={`${m.icon}`} />}
-                          label={`${c.cibilScore} (${m.label})`}
                           sx={{
                             boxShadow: 'none',
-                            backgroundColor:
-                              m.color === 'success'
-                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
-                                : m.color === 'warning'
-                                ? 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
-                                : 'rgb(var(--mui-palette-error-mainChannel) / 0.08)'
+                            backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
                           }}
                         />
-                      )
-                    })()
-                  ) : (
-                    '-'
-                  )}
-                </TableCell>
-                <TableCell>
-                  {(() => {
-                    const s = sourceMeta(c.source)
-
-                    
-return (
-                      <Box className='flex items-center gap-1.5'>
-                        <i className={`${s.icon} text-lg`} />
-                        <span>{s.label}</span>
                       </Box>
-                    )
-                  })()}
-                </TableCell>
-              </TableRow>
-            ))
+                    </Box>
+                  </CardContent>
+                </Card>
+              )
+            })
           )}
-        </TableBody>
-      </Table>
+        </Box>
+      ) : (
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Mobile</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Employment</TableCell>
+              <TableCell>Income</TableCell>
+              <TableCell>CIBIL</TableCell>
+              <TableCell>Source</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7}>Loading...</TableCell>
+              </TableRow>
+            ) : customers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7}>No customers found</TableCell>
+              </TableRow>
+            ) : (
+              customers.map(c => (
+                <TableRow key={c.id}>
+                  <TableCell>
+                    <Box className='flex items-center gap-2'>
+                      <Avatar
+                        sx={{
+                          width: 32,
+                          height: 32,
+                          bgcolor: 'primary.light',
+                          color: 'primary.contrastText',
+                          fontSize: '0.9rem',
+                          fontWeight: 600
+                        }}
+                        aria-label={`${c.fullName} avatar`}
+                      >
+                        {c.fullName
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map(s => s[0]?.toUpperCase())
+                          .join('')}
+                      </Avatar>
+                      <MuiLink
+                        component={Link}
+                        href={`/customers/${c.id}`}
+                        underline='hover'
+                        color='text.primary'
+                        sx={{
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          transition: 'color .2s ease',
+                          '&:hover': {
+                            color: 'primary.main'
+                          }
+                        }}
+                      >
+                        {c.fullName}
+                      </MuiLink>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box className='flex items-center gap-1.5'>
+                      <i className='ri-smartphone-line text-lg' />
+                      <span>{c.mobile}</span>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box className='flex items-center gap-1.5'>
+                      <i className='ri-mail-line text-lg' />
+                      <span>{c.email || '-'}</span>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={c.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
+                      size='small'
+                      color={c.employmentType === 'SALARIED' ? 'primary' : 'secondary'}
+                      variant='outlined'
+                      sx={{
+                        boxShadow: 'none',
+                        backgroundColor:
+                          c.employmentType === 'SALARIED'
+                            ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
+                            : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {c.monthlyIncome != null ? (
+                      <span>{formatINR(c.monthlyIncome)}</span>
+                    ) : (
+                      '-'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {c.cibilScore != null ? (
+                      (() => {
+                        const m = cibilMeta(c.cibilScore)
+
+                        return (
+                          <Chip
+                            size='small'
+                            color={m.color}
+                            variant='outlined'
+                            icon={<i className={`${m.icon}`} />}
+                            label={`${c.cibilScore} (${m.label})`}
+                            sx={{
+                              boxShadow: 'none',
+                              backgroundColor:
+                                m.color === 'success'
+                                  ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                  : m.color === 'warning'
+                                    ? 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                                    : 'rgb(var(--mui-palette-error-mainChannel) / 0.08)'
+                            }}
+                          />
+                        )
+                      })()
+                    ) : (
+                      '-'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const s = sourceMeta(c.source)
+
+                      return (
+                        <Box className='flex items-center gap-1.5'>
+                          <i className={`${s.icon} text-lg`} />
+                          <span>{s.label}</span>
+                        </Box>
+                      )
+                    })()}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      )}
+      {isMobile && !openAdd ? (
+        <Fab
+          color='primary'
+          aria-label='Add customer'
+          onClick={() => setOpenAdd(true)}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 20,
+            zIndex: theme.zIndex.drawer + 1,
+            boxShadow: '0 14px 30px rgb(0 0 0 / 0.2)'
+          }}
+        >
+          <i className='ri-add-line text-2xl' />
+        </Fab>
+      ) : null}
     </Box >
   )
 }
