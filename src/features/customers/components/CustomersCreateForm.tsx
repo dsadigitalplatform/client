@@ -184,9 +184,6 @@ const CustomersCreateForm = ({
 
   const mobileTitle = submitLabel || (initialValues ? 'Update Customer' : 'Add Customer')
 
-  const ContentWrapper = useCard ? CardContent : Box
-  const ActionsWrapper = useCard ? CardActions : Box
-
   return useCard ? (
     <Card
       sx={{
@@ -199,7 +196,7 @@ const CustomersCreateForm = ({
       {showTitle && !isMobile ? (
         <CardHeader title='Add Customer' subheader='Enter customer details to create a new record' />
       ) : null}
-      <ContentWrapper sx={{ p: { xs: 2.5, sm: 3 } }}>
+      <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
         {isMobile ? (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Button
@@ -459,9 +456,9 @@ const CustomersCreateForm = ({
             </Box>
           </Box>
         </Stack>
-      </ContentWrapper>
+      </CardContent>
       {!isMobile ? (
-        <ActionsWrapper sx={{ p: 3, pt: 0 }}>
+        <CardActions sx={{ p: 3, pt: 0 }}>
           <Box className='flex gap-2'>
             <Button
               variant='contained'
@@ -478,12 +475,12 @@ const CustomersCreateForm = ({
               Cancel
             </Button>
           </Box>
-        </ActionsWrapper>
+        </CardActions>
       ) : null}
     </Card>
   ) : (
     <Box>
-      <ContentWrapper sx={{ p: 0 }}>
+      <Box sx={{ p: 0 }}>
         {isMobile ? (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Button
@@ -743,9 +740,9 @@ const CustomersCreateForm = ({
             </Box>
           </Box>
         </Stack>
-      </ContentWrapper>
+      </Box>
       {!isMobile ? (
-        <ActionsWrapper sx={{ mt: 2 }}>
+        <Box sx={{ mt: 2 }}>
           <Box className='flex gap-2'>
             <Button
               variant='contained'
@@ -762,7 +759,7 @@ const CustomersCreateForm = ({
               Cancel
             </Button>
           </Box>
-        </ActionsWrapper>
+        </Box>
       ) : null}
     </Box>
   )
