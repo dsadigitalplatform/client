@@ -191,32 +191,36 @@ const LoanTypeDetails = ({ id }: Props) => {
   return (
     <Box className='flex flex-col gap-4'>
       <Card>
-        <CardHeader
-          title='Loan Type Details'
-          action={
-            <Box className='flex gap-2'>
-              <Button size='small' variant='text' onClick={() => router.push('/loan-types')} startIcon={<i className='ri-arrow-left-line' />}>
-                Back to Loan Types
-              </Button>
-              <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
-                {editMode ? 'Close Edit' : 'Edit'}
-              </Button>
-              <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
-                Delete
-              </Button>
-            </Box>
-          }
-        />
+        {!fullScreen || !editMode ? (
+          <CardHeader
+            title='Loan Type Details'
+            action={
+              <Box className='flex gap-2'>
+                <Button size='small' variant='text' onClick={() => router.push('/loan-types')} startIcon={<i className='ri-arrow-left-line' />}>
+                  Back to Loan Types
+                </Button>
+                <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
+                  {editMode ? 'Close Edit' : 'Edit'}
+                </Button>
+                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                  Delete
+                </Button>
+              </Box>
+            }
+          />
+        ) : null}
         <CardContent>
           {editMode ? (
             <LoanTypesCreateForm
               showTitle={false}
+              variant='plain'
+              submitLabel='Update Loan Type'
+              onCancel={() => setEditMode(false)}
               initialValues={{
                 name: data.name,
                 description: data.description,
                 isActive: data.isActive
               }}
-              submitLabel='Update Loan Type'
               onSubmitOverride={async payload => {
                 await updateLoanType(id, payload)
                 setEditMode(false)
@@ -246,9 +250,10 @@ const LoanTypeDetails = ({ id }: Props) => {
         </CardContent>
       </Card>
 
-      <Card id='documents'>
-        <CardHeader title='Document Checklist Mapping' subheader='Map documents to this loan type and set status' />
-        <CardContent>
+      {(!fullScreen || !editMode) ? (
+        <Card id='documents'>
+          <CardHeader title='Document Checklist Mapping' subheader='Map documents to this loan type and set status' />
+          <CardContent>
           {mappingError ? <Alert severity='error' sx={{ mb: 2 }}>{mappingError}</Alert> : null}
           <Box className='flex flex-col gap-3 md:flex-row md:items-center'>
             <FormControl size='small' sx={{ minWidth: 240 }}>
@@ -331,8 +336,9 @@ const LoanTypeDetails = ({ id }: Props) => {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Snackbar
         open={toast.open}

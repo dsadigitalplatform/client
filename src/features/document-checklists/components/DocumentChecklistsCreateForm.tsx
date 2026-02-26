@@ -18,6 +18,8 @@ import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import InputAdornment from '@mui/material/InputAdornment'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import { createDocumentChecklist } from '@features/document-checklists/services/documentChecklistsService'
 
@@ -36,6 +38,8 @@ type Props = {
 
 const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, initialValues, onSubmitOverride, submitLabel }: Props) => {
   const router = useRouter()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -92,9 +96,9 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
   return (
     <Card sx={{ borderRadius: 3, boxShadow: 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))' }}>
       {showTitle ? <CardHeader title='Add Document Checklist' subheader='Define a document and its description' /> : null}
-      <CardContent>
+      <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
-        <Stack spacing={3}>
+        <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
           </Typography>
@@ -136,15 +140,16 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
           />
         </Stack>
       </CardContent>
-      <CardActions sx={{ px: 3, pb: 3 }}>
-        <Box className='flex gap-3'>
-          <Button variant='contained' disabled={submitting} onClick={handleSubmit}>
+      <CardActions sx={{ px: { xs: 2.5, sm: 3 }, pb: { xs: 2.5, sm: 3 } }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: '100%' }}>
+          <Button variant='contained' disabled={submitting} onClick={handleSubmit} fullWidth={isMobile}>
             {submitting ? 'Saving...' : submitLabel || 'Save Document'}
           </Button>
           <Button
             variant='outlined'
             disabled={submitting}
             onClick={() => (onCancel ? onCancel() : router.push('/document-checklists'))}
+            fullWidth={isMobile}
           >
             Cancel
           </Button>

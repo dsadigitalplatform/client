@@ -17,6 +17,9 @@ import DialogActions from '@mui/material/DialogActions'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
+import IconButton from '@mui/material/IconButton'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import DocumentChecklistsCreateForm from '@features/document-checklists/components/DocumentChecklistsCreateForm'
 import { deleteDocumentChecklist, getDocumentChecklist, updateDocumentChecklist } from '@features/document-checklists/services/documentChecklistsService'
@@ -29,6 +32,8 @@ const DocumentChecklistDetails = ({ id }: Props) => {
     const [loading, setLoading] = useState(true)
     const [editMode, setEditMode] = useState(false)
     const [confirmOpen, setConfirmOpen] = useState(false)
+    const theme = useTheme()
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
     const [toast, setToast] = useState<{ open: boolean; msg: string; severity: 'success' | 'error' }>({
         open: false,
@@ -65,43 +70,66 @@ const DocumentChecklistDetails = ({ id }: Props) => {
     }
 
     if (loading) {
-
         return (
-            <Box className='p-6'>
+            <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
                 <Typography>Loading...</Typography>
             </Box>
         )
     }
 
     if (!data) {
-
         return (
-            <Box className='p-6'>
+            <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
                 <Typography>Document not found</Typography>
             </Box>
         )
     }
 
     return (
-        <Box className='flex flex-col gap-4'>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Card>
-                <CardHeader
-                    title='Document Details'
-                    action={
-                        <Box className='flex gap-2'>
-                            <Button size='small' variant='text' onClick={() => router.push('/document-checklists')}>
-                                Back to List
+                {!isMobile ? (
+                    <CardHeader
+                        title='Document Details'
+                        action={
+                            <Box className='flex gap-2'>
+                                <Button size='small' variant='text' onClick={() => router.push('/document-checklists')}>
+                                    Back to List
+                                </Button>
+                                <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
+                                    {editMode ? 'Close Edit' : 'Edit'}
+                                </Button>
+                                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                                    Delete
+                                </Button>
+                            </Box>
+                        }
+                    />
+                ) : null}
+                <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+                    {isMobile ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                            <Button
+                                variant='text'
+                                onClick={() => router.push('/document-checklists')}
+                                startIcon={<i className='ri-arrow-left-line' />}
+                                sx={{ minWidth: 'auto', px: 1 }}
+                            >
+                                Back
                             </Button>
-                            <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
-                                {editMode ? 'Close Edit' : 'Edit'}
-                            </Button>
-                            <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
-                                Delete
-                            </Button>
+                            <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+                                Document
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit document'>
+                                    <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
+                                </IconButton>
+                                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete document'>
+                                    <i className='ri-delete-bin-6-line' />
+                                </IconButton>
+                            </Box>
                         </Box>
-                    }
-                />
-                <CardContent>
+                    ) : null}
                     {editMode ? (
                         <DocumentChecklistsCreateForm
                             showTitle={false}
@@ -118,9 +146,11 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                             }}
                         />
                     ) : (
-                        <Box className='flex flex-col gap-3'>
-                            <Box className='flex items-center gap-3'>
-                                <Typography variant='h6'>{data.name}</Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 1.5, flexWrap: 'wrap' }}>
+                                <Typography variant='h6' sx={{ wordBreak: 'break-word' }}>
+                                    {data.name}
+                                </Typography>
                                 <Chip
                                     label={data.isActive ? 'Active' : 'Inactive'}
                                     color={data.isActive ? 'success' : 'default'}
@@ -134,7 +164,9 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                                     }}
                                 />
                             </Box>
-                            <Typography variant='body2'>{data.description || 'No description'}</Typography>
+                            <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                                {data.description || 'No description'}
+                            </Typography>
                         </Box>
                     )}
                 </CardContent>

@@ -11,6 +11,8 @@ import IconButton from '@mui/material/IconButton'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import MuiLink from '@mui/material/Link'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -19,10 +21,14 @@ import TableRow from '@mui/material/TableRow'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
+import Avatar from '@mui/material/Avatar'
+import Fab from '@mui/material/Fab'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import { useDocumentChecklists } from '@features/document-checklists/hooks/useDocumentChecklists'
 import DocumentChecklistsCreateForm from '@features/document-checklists/components/DocumentChecklistsCreateForm'
@@ -84,6 +90,8 @@ const DocumentChecklistsList = () => {
     const [successOpen, setSuccessOpen] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
     const [deleting, setDeleting] = useState(false)
+    const theme = useTheme()
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
     const handleDelete = async () => {
         if (!deleteTarget) return
@@ -99,29 +107,40 @@ const DocumentChecklistsList = () => {
     }
 
     return (
-        <Box className='p-6 flex flex-col gap-4'>
-            <Box className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
-                <Box>
-                    <Typography variant='h4'>Document Checklist</Typography>
+        <Box sx={{ p: { xs: 2.5, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'stretch', sm: 'center' },
+                    gap: 2,
+                    justifyContent: 'space-between'
+                }}
+            >
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
+                    <Typography variant='h5'>Document Checklist</Typography>
                     <Typography variant='body2' color='text.secondary'>
                         Manage required documents and descriptions
                     </Typography>
                 </Box>
-                <Box className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
                     <TextField
                         size='small'
                         placeholder='Search by name'
                         value={search}
                         onChange={e => setSearch(e.target.value)}
+                        fullWidth={isMobile}
                     />
-                    <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
-                        Add Document
-                    </Button>
+                    {isMobile ? null : (
+                        <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
+                            Add Document
+                        </Button>
+                    )}
                 </Box>
             </Box>
 
-            <Drawer anchor='right' open={openAdd} onClose={() => setOpenAdd(false)}>
-                <Box className='w-[420px] max-w-full p-6'>
+            <Drawer anchor='right' open={openAdd} onClose={() => setOpenAdd(false)} keepMounted>
+                <Box sx={{ width: { xs: '100vw', sm: 420 }, p: 3 }}>
                     <Box className='flex items-center justify-between mb-4'>
                         <Typography variant='h6'>New Document</Typography>
                         <IconButton onClick={() => setOpenAdd(false)} aria-label='Close add document'>
@@ -169,84 +188,184 @@ const DocumentChecklistsList = () => {
                 </Alert>
             </Snackbar>
 
-            <Table>
-                <TableHead>
-                    <TableRow>
-                        <TableCell>Name</TableCell>
-                        <TableCell>Description</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell align='right'>Actions</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
+            {isMobile ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     {loading ? (
-                        <TableRow>
-                            <TableCell colSpan={4}>Loading...</TableCell>
-                        </TableRow>
+                        <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+                            <CardContent sx={{ p: 2 }}>
+                                <Typography variant='body2' color='text.secondary'>
+                                    Loading...
+                                </Typography>
+                            </CardContent>
+                        </Card>
                     ) : documents.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={4}>No documents found</TableCell>
-                        </TableRow>
+                        <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+                            <CardContent sx={{ p: 2 }}>
+                                <Typography variant='body2' color='text.secondary'>
+                                    No documents found
+                                </Typography>
+                            </CardContent>
+                        </Card>
                     ) : (
                         documents.map(d => {
                             const iconMeta = getChecklistIcon(d.name)
 
                             return (
-                            <TableRow key={d.id}>
-                                <TableCell>
-                                    <MuiLink
-                                        component={Link}
-                                        href={`/document-checklists/${d.id}`}
-                                        underline='hover'
-                                        color='text.primary'
-                                        sx={{
-                                            fontSize: '0.95rem',
-                                            fontWeight: 500,
-                                            transition: 'color .2s ease',
-                                            '&:hover': {
-                                                color: 'primary.main'
-                                            }
-                                        }}
-                                    >
-                                        <Box className='inline-flex items-center gap-2'>
-                                            <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
-                                                <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
+                                <Card
+                                    key={d.id}
+                                    sx={{
+                                        borderRadius: 3,
+                                        boxShadow: 'none',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        backgroundColor: 'background.paper'
+                                    }}
+                                >
+                                    <CardContent sx={{ p: 2 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.25 }}>
+                                            <Avatar
+                                                sx={{
+                                                    width: 36,
+                                                    height: 36,
+                                                    bgcolor: 'action.hover',
+                                                    color: iconMeta.color
+                                                }}
+                                            >
+                                                <i className={`${iconMeta.icon} text-lg`} aria-hidden='true' />
+                                            </Avatar>
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                <MuiLink
+                                                    component={Link}
+                                                    href={`/document-checklists/${d.id}`}
+                                                    underline='hover'
+                                                    color='text.primary'
+                                                    sx={{
+                                                        fontSize: '1rem',
+                                                        fontWeight: 600,
+                                                        display: 'block',
+                                                        textOverflow: 'ellipsis',
+                                                        overflow: 'hidden',
+                                                        whiteSpace: 'nowrap',
+                                                        transition: 'color .2s ease',
+                                                        '&:hover': {
+                                                            color: 'primary.main'
+                                                        }
+                                                    }}
+                                                >
+                                                    {d.name}
+                                                </MuiLink>
+                                                <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                                                    {d.description || '-'}
+                                                </Typography>
                                             </Box>
-                                            <span>{d.name}</span>
+                                            <Chip
+                                                label={d.isActive ? 'Active' : 'Inactive'}
+                                                color={d.isActive ? 'success' : 'default'}
+                                                size='small'
+                                                variant='outlined'
+                                                sx={{
+                                                    boxShadow: 'none',
+                                                    backgroundColor: d.isActive
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                        : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
+                                                }}
+                                            />
                                         </Box>
-                                    </MuiLink>
-                                </TableCell>
-                                <TableCell>{d.description || '-'}</TableCell>
-                                <TableCell>
-                                    <Chip
-                                        label={d.isActive ? 'Active' : 'Inactive'}
-                                        color={d.isActive ? 'success' : 'default'}
-                                        variant='outlined'
-                                        size='small'
-                                        sx={{
-                                            boxShadow: 'none',
-                                            backgroundColor: d.isActive
-                                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
-                                                : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
-                                        }}
-                                    />
-                                </TableCell>
-                                <TableCell align='right'>
-                                    <Button
-                                        size='small'
-                                        color='error'
-                                        variant='outlined'
-                                        onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
-                                    >
-                                        Delete
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                            <IconButton
+                                                color='error'
+                                                onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
+                                                aria-label={`Delete ${d.name}`}
+                                            >
+                                                <i className='ri-delete-bin-6-line' />
+                                            </IconButton>
+                                        </Box>
+                                    </CardContent>
+                                </Card>
                             )
                         })
                     )}
-                </TableBody>
-            </Table>
+                </Box>
+            ) : (
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Name</TableCell>
+                            <TableCell>Description</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align='right'>Actions</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={4}>Loading...</TableCell>
+                            </TableRow>
+                        ) : documents.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={4}>No documents found</TableCell>
+                            </TableRow>
+                        ) : (
+                            documents.map(d => {
+                                const iconMeta = getChecklistIcon(d.name)
+
+                                return (
+                                    <TableRow key={d.id}>
+                                        <TableCell>
+                                            <MuiLink
+                                                component={Link}
+                                                href={`/document-checklists/${d.id}`}
+                                                underline='hover'
+                                                color='text.primary'
+                                                sx={{
+                                                    fontSize: '0.95rem',
+                                                    fontWeight: 500,
+                                                    transition: 'color .2s ease',
+                                                    '&:hover': {
+                                                        color: 'primary.main'
+                                                    }
+                                                }}
+                                            >
+                                                <Box className='inline-flex items-center gap-2'>
+                                                    <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
+                                                        <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
+                                                    </Box>
+                                                    <span>{d.name}</span>
+                                                </Box>
+                                            </MuiLink>
+                                        </TableCell>
+                                        <TableCell>{d.description || '-'}</TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={d.isActive ? 'Active' : 'Inactive'}
+                                                color={d.isActive ? 'success' : 'default'}
+                                                variant='outlined'
+                                                size='small'
+                                                sx={{
+                                                    boxShadow: 'none',
+                                                    backgroundColor: d.isActive
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                        : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
+                                                }}
+                                            />
+                                        </TableCell>
+                                        <TableCell align='right'>
+                                            <Button
+                                                size='small'
+                                                color='error'
+                                                variant='outlined'
+                                                onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
+                        )}
+                    </TableBody>
+                </Table>
+            )}
 
             <Dialog
                 open={Boolean(deleteTarget)}
@@ -270,6 +389,22 @@ const DocumentChecklistsList = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+            {isMobile && !openAdd ? (
+                <Fab
+                    color='primary'
+                    aria-label='Add document'
+                    onClick={() => setOpenAdd(true)}
+                    sx={{
+                        position: 'fixed',
+                        bottom: 24,
+                        right: 20,
+                        zIndex: theme.zIndex.drawer + 1,
+                        boxShadow: '0 14px 30px rgb(0 0 0 / 0.2)'
+                    }}
+                >
+                    <i className='ri-add-line text-2xl' />
+                </Fab>
+            ) : null}
         </Box>
     )
 }

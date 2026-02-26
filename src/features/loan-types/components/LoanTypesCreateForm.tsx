@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -18,6 +18,10 @@ import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import InputAdornment from '@mui/material/InputAdornment'
+import IconButton from '@mui/material/IconButton'
+import Avatar from '@mui/material/Avatar'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import { createLoanType } from '@features/loan-types/services/loanTypesService'
 
@@ -25,6 +29,7 @@ type Props = {
   onSuccess?: (id?: string) => void
   onCancel?: () => void
   showTitle?: boolean
+  variant?: 'card' | 'plain'
   submitDisabled?: boolean
   initialValues?: Partial<{
     name: string
@@ -35,8 +40,20 @@ type Props = {
   submitLabel?: string
 }
 
-const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisabled, initialValues, onSubmitOverride, submitLabel }: Props) => {
+const LoanTypesCreateForm = ({
+  onSuccess,
+  onCancel,
+  showTitle = true,
+  variant = 'card',
+  submitDisabled,
+  initialValues,
+  onSubmitOverride,
+  submitLabel
+}: Props) => {
   const router = useRouter()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const useCard = variant === 'card'
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -94,12 +111,55 @@ const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisa
     }
   }
 
-  return (
-    <Card sx={{ borderRadius: 3, boxShadow: 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))' }}>
-      {showTitle ? <CardHeader title='Add Loan Type' subheader='Define a loan type and its properties' /> : null}
-      <CardContent>
+  const canSubmit = useMemo(() => {
+    return name.trim().length >= 2
+  }, [name])
+
+  const mobileTitle = submitLabel || (initialValues ? 'Update Loan Type' : 'Add Loan Type')
+
+  return useCard ? (
+    <Card
+      sx={{
+        borderRadius: { xs: 4, sm: 3 },
+        boxShadow: isMobile ? 'none' : 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))',
+        border: isMobile ? '1px solid' : 'none',
+        borderColor: isMobile ? 'divider' : 'transparent'
+      }}
+    >
+      {showTitle && !isMobile ? <CardHeader title='Add Loan Type' subheader='Define a loan type and its properties' /> : null}
+      <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+        {isMobile ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Button
+              variant='text'
+              onClick={() => (onCancel ? onCancel() : router.push('/loan-types'))}
+              startIcon={<i className='ri-arrow-left-line' />}
+              sx={{ minWidth: 'auto', px: 1 }}
+            >
+              Back
+            </Button>
+            <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+              {mobileTitle}
+            </Typography>
+            <IconButton
+              color='primary'
+              onClick={handleSubmit}
+              disabled={submitting || !!submitDisabled || !canSubmit}
+              aria-label='Save loan type'
+            >
+              <i className='ri-check-line' />
+            </IconButton>
+          </Box>
+        ) : null}
+        {isMobile ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <Avatar sx={{ width: 72, height: 72, bgcolor: 'action.hover', color: 'text.secondary' }}>
+              <i className='ri-file-list-3-line text-2xl' />
+            </Avatar>
+          </Box>
+        ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
-        <Stack spacing={3}>
+        <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
           </Typography>
@@ -141,21 +201,100 @@ const LoanTypesCreateForm = ({ onSuccess, onCancel, showTitle = true, submitDisa
           />
         </Stack>
       </CardContent>
-      <CardActions sx={{ px: 3, pb: 3 }}>
-        <Box className='flex gap-3'>
-          <Button variant='contained' disabled={submitting || submitDisabled} onClick={handleSubmit}>
-            {submitting ? 'Saving...' : submitLabel || 'Save Loan Type'}
-          </Button>
-          <Button
-            variant='outlined'
-            disabled={submitting}
-            onClick={() => (onCancel ? onCancel() : router.push('/loan-types'))}
-          >
-            Cancel
-          </Button>
-        </Box>
-      </CardActions>
+      {!isMobile ? (
+        <CardActions sx={{ px: 3, pb: 3 }}>
+          <Box className='flex gap-3'>
+            <Button variant='contained' disabled={submitting || submitDisabled || !canSubmit} onClick={handleSubmit}>
+              {submitting ? 'Saving...' : submitLabel || 'Save Loan Type'}
+            </Button>
+            <Button
+              variant='outlined'
+              disabled={submitting}
+              onClick={() => (onCancel ? onCancel() : router.push('/loan-types'))}
+            >
+              Cancel
+            </Button>
+          </Box>
+        </CardActions>
+      ) : null}
     </Card>
+  ) : (
+    <Box>
+      <Box sx={{ p: 0 }}>
+        {isMobile ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Button
+              variant='text'
+              onClick={() => (onCancel ? onCancel() : router.push('/loan-types'))}
+              startIcon={<i className='ri-arrow-left-line' />}
+              sx={{ minWidth: 'auto', px: 1 }}
+            >
+              Back
+            </Button>
+            <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+              {mobileTitle}
+            </Typography>
+            <IconButton
+              color='primary'
+              onClick={handleSubmit}
+              disabled={submitting || !!submitDisabled || !canSubmit}
+              aria-label='Save loan type'
+            >
+              <i className='ri-check-line' />
+            </IconButton>
+          </Box>
+        ) : null}
+        {isMobile ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <Avatar sx={{ width: 72, height: 72, bgcolor: 'action.hover', color: 'text.secondary' }}>
+              <i className='ri-file-list-3-line text-2xl' />
+            </Avatar>
+          </Box>
+        ) : null}
+        {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        <Stack spacing={isMobile ? 2 : 3}>
+          <Typography variant='subtitle2' color='text.secondary'>
+            Basic Information
+          </Typography>
+          <TextField
+            label='Name'
+            value={name}
+            onChange={e => setName(e.target.value)}
+            error={!!fieldErrors.name}
+            helperText={fieldErrors.name}
+            fullWidth
+            required
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-file-list-3-line' />
+                </InputAdornment>
+              )
+            }}
+          />
+          <TextField
+            label='Description'
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            fullWidth
+            multiline
+            minRows={2}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-file-text-line' />
+                </InputAdornment>
+              )
+            }}
+          />
+          <Divider />
+          <FormControlLabel
+            control={<Switch checked={isActive} onChange={e => setIsActive(e.target.checked)} />}
+            label={isActive ? 'Active' : 'Inactive'}
+          />
+        </Stack>
+      </Box>
+    </Box>
   )
 }
 

@@ -27,6 +27,12 @@ import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
+import Fab from '@mui/material/Fab'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Avatar from '@mui/material/Avatar'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import { useLoanTypes } from '@features/loan-types/hooks/useLoanTypes'
 import LoanTypesCreateForm from '@features/loan-types/components/LoanTypesCreateForm'
@@ -89,6 +95,8 @@ const LoanTypesList = () => {
     const router = useRouter()
     const { loanTypes, loading, search, setSearch, refresh } = useLoanTypes()
     const [openAdd, setOpenAdd] = useState(false)
+    const theme = useTheme()
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
     const [lastCreatedId, setLastCreatedId] = useState<string | null>(null)
     const [successOpen, setSuccessOpen] = useState(false)
     const [saved, setSaved] = useState(false)
@@ -182,28 +190,42 @@ const LoanTypesList = () => {
 
     return (
         <Box className='p-6 flex flex-col gap-4'>
-            <Box className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
-                <Box>
-                    <Typography variant='h4'>Loan Types</Typography>
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'stretch', sm: 'center' },
+                    gap: 2,
+                    justifyContent: 'space-between'
+                }}
+            >
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
+                    <Typography variant='h5'>Loan Types</Typography>
                     <Typography variant='body2' color='text.secondary'>
                         Manage loan type master records
                     </Typography>
                 </Box>
-                <Box className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
                     <TextField
                         size='small'
                         placeholder='Search by name'
                         value={search}
                         onChange={e => setSearch(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') refresh()
+                        }}
+                        fullWidth={isMobile}
                     />
-                    <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
-                        Add Loan Type
-                    </Button>
+                    {isMobile ? null : (
+                        <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
+                            Add Loan Type
+                        </Button>
+                    )}
                 </Box>
             </Box>
 
             <Drawer anchor='right' open={openAdd} onClose={resetDrawer}>
-                <Box className='w-[420px] max-w-full p-6'>
+                <Box sx={{ width: { xs: '100vw', sm: 420 }, p: 3 }}>
                     <Box className='flex items-center justify-between mb-4'>
                         <Typography variant='h6'>New Loan Type</Typography>
                         <IconButton onClick={resetDrawer} aria-label='Close add loan type'>
@@ -270,105 +292,221 @@ const LoanTypesList = () => {
                 </Box>
             </Drawer>
 
-            <Table>
-                <TableHead>
-                    <TableRow>
-                        <TableCell>Name</TableCell>
-                        <TableCell align='center'>Checklist</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell align='right'>Actions</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
+            {isMobile ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     {loading ? (
-                        <TableRow>
-                            <TableCell colSpan={4}>Loading...</TableCell>
-                        </TableRow>
+                        <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+                            <CardContent sx={{ p: 2 }}>
+                                <Typography variant='body2' color='text.secondary'>
+                                    Loading...
+                                </Typography>
+                            </CardContent>
+                        </Card>
                     ) : loanTypes.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={4}>No loan types found</TableCell>
-                        </TableRow>
+                        <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+                            <CardContent sx={{ p: 2 }}>
+                                <Typography variant='body2' color='text.secondary'>
+                                    No loan types found
+                                </Typography>
+                            </CardContent>
+                        </Card>
                     ) : (
                         loanTypes.map(lt => {
                             const iconMeta = getLoanTypeIcon(lt.name)
 
                             return (
-                                <TableRow key={lt.id}>
-                                    <TableCell>
-                                        <MuiLink
-                                            component={Link}
-                                            href={`/loan-types/${lt.id}`}
-                                            underline='hover'
-                                            color='text.primary'
-                                            sx={{
-                                                fontSize: '0.95rem',
-                                                fontWeight: 500,
-                                                transition: 'color .2s ease',
-                                                '&:hover': {
-                                                    color: 'primary.main'
-                                                }
-                                            }}
-                                        >
-                                            <Box className='inline-flex items-center gap-2'>
-                                                <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
-                                                    <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
-                                                </Box>
-                                                <span>{lt.name}</span>
+                                <Card
+                                    key={lt.id}
+                                    sx={{
+                                        borderRadius: 3,
+                                        boxShadow: 'none',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        backgroundColor: 'background.paper'
+                                    }}
+                                >
+                                    <CardContent sx={{ p: 2 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.25 }}>
+                                            <Avatar
+                                                sx={{
+                                                    width: 36,
+                                                    height: 36,
+                                                    bgcolor: 'action.hover',
+                                                    color: iconMeta.color
+                                                }}
+                                            >
+                                                <i className={`${iconMeta.icon} text-lg`} aria-hidden='true' />
+                                            </Avatar>
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                <MuiLink
+                                                    component={Link}
+                                                    href={`/loan-types/${lt.id}`}
+                                                    underline='hover'
+                                                    color='text.primary'
+                                                    sx={{
+                                                        fontSize: '1rem',
+                                                        fontWeight: 600,
+                                                        display: 'block',
+                                                        textOverflow: 'ellipsis',
+                                                        overflow: 'hidden',
+                                                        whiteSpace: 'nowrap',
+                                                        transition: 'color .2s ease',
+                                                        '&:hover': {
+                                                            color: 'primary.main'
+                                                        }
+                                                    }}
+                                                >
+                                                    {lt.name}
+                                                </MuiLink>
+                                                <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                                                    {lt.description || '-'}
+                                                </Typography>
                                             </Box>
-                                        </MuiLink>
-                                    </TableCell>
-                                    <TableCell align='center'>
-                                        {lt.checklistCount && lt.checklistCount > 0 ? (
                                             <Chip
+                                                label={lt.isActive ? 'Active' : 'Inactive'}
+                                                color={lt.isActive ? 'success' : 'default'}
                                                 size='small'
-                                                label={lt.checklistCount}
                                                 variant='outlined'
                                                 sx={{
                                                     boxShadow: 'none',
-                                                    backgroundColor: 'rgb(var(--mui-palette-text-primaryChannel) / 0.04)'
+                                                    backgroundColor: lt.isActive
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                        : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
                                                 }}
                                             />
-                                        ) : (
-                                            <Button
-                                                size='small'
-                                                variant='outlined'
-                                                startIcon={<i className='ri-add-line' />}
-                                                onClick={() => openMapping(lt.id, lt.name)}
-                                            >
-                                                Add Checklist
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={lt.isActive ? 'Active' : 'Inactive'}
-                                            color={lt.isActive ? 'success' : 'default'}
-                                            variant='outlined'
-                                            size='small'
-                                            sx={{
-                                                boxShadow: 'none',
-                                            backgroundColor: lt.isActive
-                                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
-                                                : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
-                                            }}
-                                        />
-                                    </TableCell>
-                                    <TableCell align='right'>
-                                        <Button
-                                            color='error'
-                                            size='small'
-                                            variant='outlined'
-                                            onClick={() => setConfirmId(lt.id)}
-                                        >
-                                            Delete
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            {lt.checklistCount && lt.checklistCount > 0 ? (
+                                                <Chip
+                                                    size='small'
+                                                    label={`${lt.checklistCount} items`}
+                                                    variant='outlined'
+                                                    sx={{
+                                                        boxShadow: 'none',
+                                                        backgroundColor: 'rgb(var(--mui-palette-text-primaryChannel) / 0.04)'
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Button
+                                                    size='small'
+                                                    variant='outlined'
+                                                    startIcon={<i className='ri-add-line' />}
+                                                    onClick={() => openMapping(lt.id, lt.name)}
+                                                >
+                                                    Add Checklist
+                                                </Button>
+                                            )}
+                                            <IconButton color='error' onClick={() => setConfirmId(lt.id)} aria-label='Delete loan type'>
+                                                <i className='ri-delete-bin-6-line' />
+                                            </IconButton>
+                                        </Box>
+                                    </CardContent>
+                                </Card>
                             )
                         })
                     )}
-                </TableBody>
-            </Table>
+                </Box>
+            ) : (
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Name</TableCell>
+                            <TableCell align='center'>Checklist</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align='right'>Actions</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={4}>Loading...</TableCell>
+                            </TableRow>
+                        ) : loanTypes.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={4}>No loan types found</TableCell>
+                            </TableRow>
+                        ) : (
+                            loanTypes.map(lt => {
+                                const iconMeta = getLoanTypeIcon(lt.name)
+
+                                return (
+                                    <TableRow key={lt.id}>
+                                        <TableCell>
+                                            <MuiLink
+                                                component={Link}
+                                                href={`/loan-types/${lt.id}`}
+                                                underline='hover'
+                                                color='text.primary'
+                                                sx={{
+                                                    fontSize: '0.95rem',
+                                                    fontWeight: 500,
+                                                    transition: 'color .2s ease',
+                                                    '&:hover': {
+                                                        color: 'primary.main'
+                                                    }
+                                                }}
+                                            >
+                                                <Box className='inline-flex items-center gap-2'>
+                                                    <Box component='span' sx={{ color: iconMeta.color, display: 'inline-flex' }}>
+                                                        <i className={`${iconMeta.icon} text-base`} aria-hidden='true' />
+                                                    </Box>
+                                                    <span>{lt.name}</span>
+                                                </Box>
+                                            </MuiLink>
+                                        </TableCell>
+                                        <TableCell align='center'>
+                                            {lt.checklistCount && lt.checklistCount > 0 ? (
+                                                <Chip
+                                                    size='small'
+                                                    label={lt.checklistCount}
+                                                    variant='outlined'
+                                                    sx={{
+                                                        boxShadow: 'none',
+                                                        backgroundColor: 'rgb(var(--mui-palette-text-primaryChannel) / 0.04)'
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Button
+                                                    size='small'
+                                                    variant='outlined'
+                                                    startIcon={<i className='ri-add-line' />}
+                                                    onClick={() => openMapping(lt.id, lt.name)}
+                                                >
+                                                    Add Checklist
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={lt.isActive ? 'Active' : 'Inactive'}
+                                                color={lt.isActive ? 'success' : 'default'}
+                                                variant='outlined'
+                                                size='small'
+                                                sx={{
+                                                    boxShadow: 'none',
+                                                    backgroundColor: lt.isActive
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                        : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
+                                                }}
+                                            />
+                                        </TableCell>
+                                        <TableCell align='right'>
+                                            <Button
+                                                color='error'
+                                                size='small'
+                                                variant='outlined'
+                                                onClick={() => setConfirmId(lt.id)}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
+                        )}
+                    </TableBody>
+                </Table>
+            )}
 
             <Dialog open={Boolean(confirmId)} onClose={() => setConfirmId(null)}>
                 <DialogTitle>Delete Loan Type</DialogTitle>
@@ -497,6 +635,22 @@ const LoanTypesList = () => {
                     {toast.msg}
                 </Alert>
             </Snackbar>
+            {isMobile && !openAdd ? (
+                <Fab
+                    color='primary'
+                    aria-label='Add loan type'
+                    onClick={() => setOpenAdd(true)}
+                    sx={{
+                        position: 'fixed',
+                        bottom: 24,
+                        right: 20,
+                        zIndex: theme.zIndex.drawer + 1,
+                        boxShadow: '0 14px 30px rgb(0 0 0 / 0.2)'
+                    }}
+                >
+                    <i className='ri-add-line text-2xl' />
+                </Fab>
+            ) : null}
         </Box>
     )
 }

@@ -17,8 +17,10 @@ const Page = async (props: { params: Promise<{ id: string }> }) => {
   const { id } = await props.params
 
   return (
-    <Box className='p-6 flex flex-col gap-4'>
-      <Typography variant='h4'>Document Details</Typography>
+    <Box sx={{ px: { xs: 2, sm: 6 }, py: { xs: 2, sm: 6 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant='h4' sx={{ display: { xs: 'none', sm: 'block' } }}>
+        Document Details
+      </Typography>
       <DocumentChecklistDetails id={id} />
     </Box>
   )
