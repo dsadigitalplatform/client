@@ -27,6 +27,7 @@ import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
 import IconButton from '@mui/material/IconButton'
 import FormControl from '@mui/material/FormControl'
+import Avatar from '@mui/material/Avatar'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
@@ -165,7 +166,7 @@ const LoanTypeDetails = ({ id }: Props) => {
   if (loading) {
 
     return (
-      <Box className='p-6'>
+      <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
         <Typography>Loading...</Typography>
       </Box>
     )
@@ -174,7 +175,7 @@ const LoanTypeDetails = ({ id }: Props) => {
   if (!data) {
 
     return (
-      <Box className='p-6'>
+      <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
         <Typography>Loan type not found</Typography>
       </Box>
     )
@@ -189,9 +190,9 @@ const LoanTypeDetails = ({ id }: Props) => {
     .filter(Boolean) as Array<LoanTypeDocumentItem & { status: LoanTypeDocumentStatus }>
 
   return (
-    <Box className='flex flex-col gap-4'>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Card>
-        {!fullScreen || !editMode ? (
+        {!fullScreen ? (
           <CardHeader
             title='Loan Type Details'
             action={
@@ -209,7 +210,30 @@ const LoanTypeDetails = ({ id }: Props) => {
             }
           />
         ) : null}
-        <CardContent>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+          {fullScreen && !editMode ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Button
+                variant='text'
+                onClick={() => router.push('/loan-types')}
+                startIcon={<i className='ri-arrow-left-line' />}
+                sx={{ minWidth: 'auto', px: 1 }}
+              >
+                Back
+              </Button>
+              <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+                Loan Type
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit loan type'>
+                  <i className='ri-pencil-line' />
+                </IconButton>
+                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete loan type'>
+                  <i className='ri-delete-bin-6-line' />
+                </IconButton>
+              </Box>
+            </Box>
+          ) : null}
           {editMode ? (
             <LoanTypesCreateForm
               showTitle={false}
@@ -228,9 +252,18 @@ const LoanTypeDetails = ({ id }: Props) => {
               }}
             />
           ) : (
-            <Box className='flex flex-col gap-3'>
-              <Box className='flex items-center gap-3'>
-                <Typography variant='h6'>{data.name}</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {fullScreen ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Avatar sx={{ width: 80, height: 80, bgcolor: 'action.hover', color: 'text.secondary' }}>
+                    <i className='ri-file-list-3-line text-3xl' />
+                  </Avatar>
+                </Box>
+              ) : null}
+              <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 1.5, flexWrap: 'wrap' }}>
+                <Typography variant='h6' sx={{ wordBreak: 'break-word' }}>
+                  {data.name}
+                </Typography>
                 <Chip
                   label={data.isActive ? 'Active' : 'Inactive'}
                   color={data.isActive ? 'success' : 'default'}
@@ -244,98 +277,170 @@ const LoanTypeDetails = ({ id }: Props) => {
                   }}
                 />
               </Box>
-              <Typography variant='body2'>{data.description || 'No description'}</Typography>
+              <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                {data.description || 'No description'}
+              </Typography>
             </Box>
           )}
         </CardContent>
       </Card>
 
-      {(!fullScreen || !editMode) ? (
+      {!editMode ? (
         <Card id='documents'>
           <CardHeader title='Document Checklist Mapping' subheader='Map documents to this loan type and set status' />
-          <CardContent>
-          {mappingError ? <Alert severity='error' sx={{ mb: 2 }}>{mappingError}</Alert> : null}
-          <Box className='flex flex-col gap-3 md:flex-row md:items-center'>
-            <FormControl size='small' sx={{ minWidth: 240 }}>
-              <TextField
-                select
-                size='small'
-                label='Add Document'
-                value={newDocumentId}
-                onChange={e => setNewDocumentId(e.target.value)}
-                disabled={mappingSaving}
-              >
-                {documents.length === 0 ? (
-                  <MenuItem value=''>No documents available</MenuItem>
+          <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+            {mappingError ? <Alert severity='error' sx={{ mb: 2 }}>{mappingError}</Alert> : null}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                gap: 1.5,
+                alignItems: { sm: 'center' }
+              }}
+            >
+              <FormControl size='small' sx={{ minWidth: { xs: 'auto', sm: 240 } }}>
+                <TextField
+                  select
+                  size='small'
+                  label='Add Document'
+                  value={newDocumentId}
+                  onChange={e => setNewDocumentId(e.target.value)}
+                  disabled={mappingSaving}
+                  fullWidth={fullScreen}
+                >
+                  {documents.length === 0 ? (
+                    <MenuItem value=''>No documents available</MenuItem>
+                  ) : (
+                    documents.map(d => (
+                      <MenuItem key={d.id} value={d.id}>
+                        {d.name}
+                      </MenuItem>
+                    ))
+                  )}
+                </TextField>
+              </FormControl>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
+                <Button variant='outlined' onClick={addDocument} disabled={!newDocumentId || mappingSaving} fullWidth={fullScreen}>
+                  Add
+                </Button>
+                <Button
+                  variant='text'
+                  onClick={() => setCreateOpen(true)}
+                  startIcon={<i className='ri-add-line' />}
+                  disabled={mappingSaving}
+                  fullWidth={fullScreen}
+                >
+                  Create Checklist
+                </Button>
+              </Box>
+            </Box>
+
+            <Divider sx={{ my: 3 }} />
+            {fullScreen ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {mappedRows.length === 0 ? (
+                  <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Typography variant='body2' color='text.secondary'>
+                        No documents mapped yet
+                      </Typography>
+                    </CardContent>
+                  </Card>
                 ) : (
-                  documents.map(d => (
-                    <MenuItem key={d.id} value={d.id}>
-                      {d.name}
-                    </MenuItem>
+                  mappedRows.map(row => (
+                    <Card
+                      key={row.id}
+                      sx={{
+                        borderRadius: 3,
+                        boxShadow: 'none',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        backgroundColor: 'background.paper'
+                      }}
+                    >
+                      <CardContent sx={{ p: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                              {row.name}
+                            </Typography>
+                            <TextField
+                              select
+                              size='small'
+                              value={row.status}
+                              onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
+                              disabled={mappingSaving}
+                              fullWidth
+                              sx={{ mt: 1 }}
+                            >
+                              {STATUS_OPTIONS.map(opt => (
+                                <MenuItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          </Box>
+                          <IconButton
+                            aria-label='Remove document'
+                            onClick={() => removeMapping(row.id)}
+                            disabled={mappingSaving}
+                            color='error'
+                            sx={{ mt: 0.25 }}
+                          >
+                            <i className='ri-delete-bin-6-line' />
+                          </IconButton>
+                        </Box>
+                      </CardContent>
+                    </Card>
                   ))
                 )}
-              </TextField>
-            </FormControl>
-            <Box className='flex flex-col gap-2 sm:flex-row sm:items-center'>
-              <Button variant='outlined' onClick={addDocument} disabled={!newDocumentId || mappingSaving}>
-                Add
-              </Button>
-              <Button
-                variant='text'
-                onClick={() => setCreateOpen(true)}
-                startIcon={<i className='ri-add-line' />}
-                disabled={mappingSaving}
-              >
-                Create Checklist
-              </Button>
-            </Box>
-          </Box>
-
-          <Divider sx={{ my: 3 }} />
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Document</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align='right'>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {mappedRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4}>No documents mapped yet</TableCell>
-                </TableRow>
-              ) : (
-                mappedRows.map(row => (
-                  <TableRow key={row.id}>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell>{row.description || '-'}</TableCell>
-                    <TableCell>
-                      <TextField
-                        select
-                        size='small'
-                        value={row.status}
-                        onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
-                        disabled={mappingSaving}
-                      >
-                        {STATUS_OPTIONS.map(opt => (
-                          <MenuItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    </TableCell>
-                    <TableCell align='right'>
-                      <IconButton aria-label='Remove document' onClick={() => removeMapping(row.id)} disabled={mappingSaving}>
-                        <i className='ri-delete-bin-line' />
-                      </IconButton>
-                    </TableCell>
+              </Box>
+            ) : (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Document</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align='right'>Actions</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHead>
+                <TableBody>
+                  {mappedRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4}>No documents mapped yet</TableCell>
+                    </TableRow>
+                  ) : (
+                    mappedRows.map(row => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.name}</TableCell>
+                        <TableCell>{row.description || '-'}</TableCell>
+                        <TableCell>
+                          <TextField
+                            select
+                            size='small'
+                            value={row.status}
+                            onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
+                            disabled={mappingSaving}
+                          >
+                            {STATUS_OPTIONS.map(opt => (
+                              <MenuItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        </TableCell>
+                        <TableCell align='right'>
+                          <IconButton aria-label='Remove document' onClick={() => removeMapping(row.id)} disabled={mappingSaving}>
+                            <i className='ri-delete-bin-line' />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       ) : null}
