@@ -107,7 +107,7 @@ const DocumentChecklistsList = () => {
     }
 
     return (
-        <Box sx={{ p: { xs: 2.5, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <Box sx={{ mx: { xs: -2, sm: 0 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Box
                 sx={{
                     display: 'flex',

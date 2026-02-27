@@ -86,7 +86,7 @@ const CustomersList = () => {
   }
 
   return (
-    <Box className='flex flex-col gap-4' sx={{ mx: { xs: -1, sm: 0 } }}>
+    <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
       <Box
         sx={{
           display: 'flex',

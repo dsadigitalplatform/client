@@ -189,7 +189,7 @@ const LoanTypesList = () => {
     }
 
     return (
-        <Box className='p-6 flex flex-col gap-4'>
+        <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
             <Box
                 sx={{
                     display: 'flex',
