@@ -96,7 +96,21 @@ const CustomersList = () => {
           justifyContent: 'space-between'
         }}
       >
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, flex: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
+          <Typography variant='h5'>Customers</Typography>
+          <Typography variant='body2' color='text.secondary'>
+            Manage customer records
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 1.5,
+            alignItems: { sm: 'center' },
+            flex: 1
+          }}
+        >
           <TextField
             size='small'
             value={search}
@@ -112,17 +126,17 @@ const CustomersList = () => {
               Search
             </Button>
           )}
+          {isMobile ? null : (
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', justifyContent: 'flex-end', flex: 1 }}>
+              <Button variant='outlined' onClick={handleExport} startIcon={<i className='ri-download-line' />}>
+                Export
+              </Button>
+              <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
+                Add Customer
+              </Button>
+            </Box>
+          )}
         </Box>
-        {isMobile ? null : (
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-            <Button variant='outlined' onClick={handleExport} startIcon={<i className='ri-download-line' />}>
-              Export
-            </Button>
-            <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
-              Add Customer
-            </Button>
-          </Box>
-        )}
       </Box>
       <Drawer anchor='right' open={openAdd} onClose={() => setOpenAdd(false)} keepMounted>
         <Box sx={{ width: { xs: '100vw', sm: 480, md: 520 }, p: 3, '& .MuiTextField-root': { mb: 1.5 } }}>
