@@ -8,6 +8,7 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Avatar from '@mui/material/Avatar'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -61,6 +62,23 @@ export const SubscriptionPlansManager = () => {
 
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+  const formatMoney = (currency: string, amount: number | null | undefined) => {
+    if (amount == null) return '-'
+
+    const locale = currency === 'INR' ? 'en-IN' : undefined
+
+    try {
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(amount)
+    } catch {
+      return `${currency} ${amount}`
+    }
+  }
 
   const isEdit = useMemo(() => Boolean(form.id), [form.id])
 
@@ -273,19 +291,26 @@ export const SubscriptionPlansManager = () => {
                       <i className='ri-price-tag-3-line text-lg' />
                     </Avatar>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
-                          {p.name}
-                        </Typography>
-                        {p.isDefault ? (
-                          <Chip
-                            size='small'
-                            label='Default'
-                            variant='outlined'
-                            sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
-                          />
-                        ) : null}
-                        {!p.isActive ? <Chip size='small' label='Inactive' variant='outlined' /> : null}
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                              {p.name}
+                            </Typography>
+                            {p.isDefault ? (
+                              <Chip
+                                size='small'
+                                label='Default'
+                                variant='outlined'
+                                sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
+                              />
+                            ) : null}
+                            {!p.isActive ? <Chip size='small' label='Inactive' variant='outlined' /> : null}
+                          </Box>
+                        </Box>
+                        <IconButton size='small' onClick={() => openEdit(p)} aria-label={`Edit ${p.name}`}>
+                          <i className='ri-edit-2-line' />
+                        </IconButton>
                       </Box>
                       <Typography
                         variant='body2'
@@ -304,27 +329,18 @@ export const SubscriptionPlansManager = () => {
                         <Chip
                           size='small'
                           variant='outlined'
-                          label={`Monthly: ${p.priceMonthly}`}
+                          label={`Monthly: ${formatMoney(p.currency, p.priceMonthly)}`}
                           sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
                         />
                         <Chip
                           size='small'
                           variant='outlined'
-                          label={`Yearly: ${p.priceYearly ?? '-'}`}
+                          label={`Yearly: ${p.priceYearly != null ? formatMoney(p.currency, p.priceYearly) : '-'}`}
                           sx={{ boxShadow: 'none' }}
                         />
-                        <Chip size='small' variant='outlined' label={`${p.currency}`} sx={{ boxShadow: 'none' }} />
                         <Chip size='small' variant='outlined' label={`Max users: ${p.maxUsers}`} sx={{ boxShadow: 'none' }} />
                       </Box>
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1.5 }}>
-                        <Button
-                          size='small'
-                          variant='outlined'
-                          onClick={() => openEdit(p)}
-                          startIcon={<i className='ri-edit-2-line' />}
-                        >
-                          Edit
-                        </Button>
                         <Button
                           size='small'
                           variant='outlined'
@@ -339,7 +355,6 @@ export const SubscriptionPlansManager = () => {
                           color='error'
                           onClick={() => setConfirmId(p._id)}
                           startIcon={<i className='ri-delete-bin-6-line' />}
-                          sx={{ gridColumn: '1 / -1' }}
                         >
                           Delete
                         </Button>
