@@ -132,7 +132,7 @@ const CustomersList = () => {
                 Export
               </Button>
               <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
-                Add Customer
+                Add
               </Button>
             </Box>
           )}

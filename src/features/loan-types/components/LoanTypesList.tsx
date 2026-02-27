@@ -205,7 +205,8 @@ const LoanTypesList = () => {
                         Manage loan type master records
                     </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
+                <Box
+                    sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
                     <TextField
                         size='small'
                         placeholder='Search by name'
@@ -218,7 +219,7 @@ const LoanTypesList = () => {
                     />
                     {isMobile ? null : (
                         <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
-                            Add Loan Type
+                            Add
                         </Button>
                     )}
                 </Box>

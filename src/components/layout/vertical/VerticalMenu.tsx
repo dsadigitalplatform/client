@@ -85,9 +85,16 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
         renderExpandedMenuItemIcon={{ icon: <i className='ri-circle-line' /> }}
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
-        <MenuItem href='/home' icon={<i className='ri-home-smile-line' />}>
-          Dashboard
-        </MenuItem>
+        <SubMenu label='Dashboard' icon={<i className='ri-home-smile-line' />}>
+          <MenuItem href='/home' icon={<i className='ri-dashboard-line' />}>
+            Overview
+          </MenuItem>
+          {hasTenant && (
+            <MenuItem href='/loan-cases' icon={<i className='ri-briefcase-4-line' />}>
+              Loan Cases
+            </MenuItem>
+          )}
+        </SubMenu>
 
         {hasTenant && (
           <SubMenu label='Lead Management' icon={<i className='ri-team-line' />}>

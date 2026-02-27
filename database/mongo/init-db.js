@@ -362,6 +362,53 @@ ensureIndex(
   { unique: true, name: 'uniq_tenant_loanType_document' }
 )
 
+const loanCasesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'customerId', 'loanTypeId', 'stageId', 'documents', 'createdBy', 'createdAt', 'updatedAt', 'isLocked'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      customerId: { bsonType: 'objectId' },
+      loanTypeId: { bsonType: 'objectId' },
+      stageId: { bsonType: 'objectId' },
+      bankName: { bsonType: ['string', 'null'] },
+      requestedAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      eligibleAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      interestRate: { bsonType: ['number', 'null'], minimum: 0 },
+      tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
+      emi: { bsonType: ['number', 'null'], minimum: 0 },
+      assignedAgentId: { bsonType: ['objectId', 'null'] },
+      documents: {
+        bsonType: 'array',
+        items: {
+          bsonType: 'object',
+          required: ['documentId', 'documentName', 'status'],
+          properties: {
+            documentId: { bsonType: 'objectId' },
+            documentName: { bsonType: 'string' },
+            status: { enum: ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] }
+          },
+          additionalProperties: true
+        }
+      },
+      createdBy: { bsonType: 'objectId' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+      isLocked: { bsonType: 'bool' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanCases', loanCasesValidator)
+ensureIndex('loanCases', { tenantId: 1 }, { name: 'idx_loanCases_tenantId' })
+ensureIndex('loanCases', { tenantId: 1, updatedAt: -1 }, { name: 'idx_loanCases_tenantId_updatedAt' })
+ensureIndex('loanCases', { tenantId: 1, customerId: 1 }, { name: 'idx_loanCases_tenantId_customerId' })
+ensureIndex('loanCases', { tenantId: 1, loanTypeId: 1 }, { name: 'idx_loanCases_tenantId_loanTypeId' })
+ensureIndex('loanCases', { tenantId: 1, stageId: 1 }, { name: 'idx_loanCases_tenantId_stageId' })
+ensureIndex('loanCases', { tenantId: 1, createdBy: 1 }, { name: 'idx_loanCases_tenantId_createdBy' })
+ensureIndex('loanCases', { tenantId: 1, assignedAgentId: 1 }, { name: 'idx_loanCases_tenantId_assignedAgentId' })
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {

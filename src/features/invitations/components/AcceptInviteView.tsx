@@ -66,7 +66,7 @@ const AcceptInviteView = ({ token }: AcceptInviteViewProps) => {
 
           if (d?.error === 'not_found') setError('Invitation link is invalid or expired.')
         }
-      } catch {}
+      } catch { }
     }
 
     run()
@@ -95,10 +95,10 @@ const AcceptInviteView = ({ token }: AcceptInviteViewProps) => {
 
             if (Number(b?.memberships?.count || 0) > 0) {
               await signOut({ callbackUrl: '/login' })
-              
-return
+
+              return
             }
-          } catch {}
+          } catch { }
         }
 
         if (err === 'email_mismatch') {
@@ -110,10 +110,10 @@ return
         }
 
         setProcessing(false)
-        
-return
-        
-return
+
+        return
+
+        return
       }
 
       try {

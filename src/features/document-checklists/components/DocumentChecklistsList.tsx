@@ -133,7 +133,7 @@ const DocumentChecklistsList = () => {
                     />
                     {isMobile ? null : (
                         <Button variant='contained' onClick={() => setOpenAdd(true)} startIcon={<i className='ri-add-line' />}>
-                            Add Document
+                            Add
                         </Button>
                     )}
                 </Box>
