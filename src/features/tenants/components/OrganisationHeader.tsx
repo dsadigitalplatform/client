@@ -6,6 +6,8 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Breadcrumbs from '@mui/material/Breadcrumbs'
 import Chip from '@mui/material/Chip'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 type TenantInfo = {
   _id: string
@@ -15,6 +17,8 @@ type TenantInfo = {
 export const OrganisationHeader = ({ title }: { title: string }) => {
   const [tenant, setTenant] = useState<TenantInfo | null>(null)
   const [loading, setLoading] = useState(false)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   useEffect(() => {
     const load = async () => {
@@ -42,14 +46,33 @@ export const OrganisationHeader = ({ title }: { title: string }) => {
   }, [])
 
   return (
-    <Box className='flex flex-col gap-2'>
-      <Breadcrumbs aria-label='breadcrumb'>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Breadcrumbs aria-label='breadcrumb' sx={{ display: { xs: 'none', sm: 'flex' } }}>
         <Typography color='text.secondary'>Admin</Typography>
         <Typography color='text.primary'>{title}</Typography>
       </Breadcrumbs>
-      <Box className='flex items-center gap-2'>
-        <Typography variant='h4'>{title}</Typography>
-        {tenant ? <Chip label={`Organisation: ${tenant.name}`} /> : !loading ? <Chip label='Organisation: —' /> : null}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { sm: 'center' },
+          justifyContent: 'space-between',
+          gap: { xs: 1, sm: 2 }
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          <Typography variant={isMobile ? 'h5' : 'h4'}>{title}</Typography>
+          {isMobile ? (
+            <Typography variant='body2' color='text.secondary'>
+              Admin
+            </Typography>
+          ) : null}
+        </Box>
+        {tenant ? (
+          <Chip size='small' variant='outlined' label={`Organisation: ${tenant.name}`} sx={{ width: 'fit-content' }} />
+        ) : !loading ? (
+          <Chip size='small' variant='outlined' label='Organisation: —' sx={{ width: 'fit-content' }} />
+        ) : null}
       </Box>
     </Box>
   )

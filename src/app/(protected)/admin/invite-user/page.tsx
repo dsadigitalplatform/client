@@ -5,7 +5,16 @@ import { OrganisationHeader } from '@features/tenants/components/OrganisationHea
 
 const InviteUserPage = async () => {
   return (
-    <Box className='p-6 flex flex-col gap-4'>
+    <Box
+      sx={{
+        mx: { xs: -2, sm: 0 },
+        px: { xs: 0, sm: 6 },
+        py: { xs: 2, sm: 6 },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2
+      }}
+    >
       <OrganisationHeader title='Invite Users' />
       <InviteUserForm />
     </Box>
