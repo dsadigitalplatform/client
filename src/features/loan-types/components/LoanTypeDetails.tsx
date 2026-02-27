@@ -364,31 +364,33 @@ const LoanTypeDetails = ({ id }: Props) => {
                             <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
                               {row.name}
                             </Typography>
-                            <TextField
-                              select
-                              size='small'
-                              value={row.status}
-                              onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
-                              disabled={mappingSaving}
-                              fullWidth
-                              sx={{ mt: 1 }}
-                            >
-                              {STATUS_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </MenuItem>
-                              ))}
-                            </TextField>
+                            <Box sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
+                              <TextField
+                                select
+                                size='small'
+                                label='Status'
+                                value={row.status}
+                                onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
+                                disabled={mappingSaving}
+                                sx={{ flex: 1 }}
+                              >
+                                {STATUS_OPTIONS.map(opt => (
+                                  <MenuItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <IconButton
+                                aria-label='Remove document'
+                                onClick={() => removeMapping(row.id)}
+                                disabled={mappingSaving}
+                                color='error'
+                                sx={{ mt: 'auto', mb: 0.25 }}
+                              >
+                                <i className='ri-delete-bin-6-line' />
+                              </IconButton>
+                            </Box>
                           </Box>
-                          <IconButton
-                            aria-label='Remove document'
-                            onClick={() => removeMapping(row.id)}
-                            disabled={mappingSaving}
-                            color='error'
-                            sx={{ mt: 0.25 }}
-                          >
-                            <i className='ri-delete-bin-6-line' />
-                          </IconButton>
                         </Box>
                       </CardContent>
                     </Card>
@@ -400,7 +402,6 @@ const LoanTypeDetails = ({ id }: Props) => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Document</TableCell>
-                    <TableCell>Description</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell align='right'>Actions</TableCell>
                   </TableRow>
@@ -408,13 +409,12 @@ const LoanTypeDetails = ({ id }: Props) => {
                 <TableBody>
                   {mappedRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4}>No documents mapped yet</TableCell>
+                      <TableCell colSpan={3}>No documents mapped yet</TableCell>
                     </TableRow>
                   ) : (
                     mappedRows.map(row => (
                       <TableRow key={row.id}>
                         <TableCell>{row.name}</TableCell>
-                        <TableCell>{row.description || '-'}</TableCell>
                         <TableCell>
                           <TextField
                             select
@@ -431,8 +431,13 @@ const LoanTypeDetails = ({ id }: Props) => {
                           </TextField>
                         </TableCell>
                         <TableCell align='right'>
-                          <IconButton aria-label='Remove document' onClick={() => removeMapping(row.id)} disabled={mappingSaving}>
-                            <i className='ri-delete-bin-line' />
+                          <IconButton
+                            aria-label='Remove document'
+                            onClick={() => removeMapping(row.id)}
+                            disabled={mappingSaving}
+                            color='error'
+                          >
+                            <i className='ri-delete-bin-6-line' />
                           </IconButton>
                         </TableCell>
                       </TableRow>
