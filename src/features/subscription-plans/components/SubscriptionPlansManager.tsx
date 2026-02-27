@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import Box from '@mui/material/Box'
+import Chip from '@mui/material/Chip'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Avatar from '@mui/material/Avatar'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -17,6 +21,8 @@ import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
 
 import type { SubscriptionPlan } from '../subscription-plans.types'
 import { subscriptionPlansService } from '../services/subscriptionPlansService'
@@ -52,6 +58,9 @@ export const SubscriptionPlansManager = () => {
     currency: 'USD',
     maxUsers: ''
   })
+
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const isEdit = useMemo(() => Boolean(form.id), [form.id])
 
@@ -200,73 +209,209 @@ export const SubscriptionPlansManager = () => {
   }
 
   return (
-    <Box className='flex flex-col gap-4'>
+    <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
       {error && <Typography color='error'>{error}</Typography>}
-      <Box className='flex items-center justify-between'>
-        <Typography variant='h6'>All Plans</Typography>
-        <Button variant='contained' size='small' onClick={openCreate} startIcon={<i className='ri-add-line' />}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          justifyContent: 'space-between',
+          gap: 2
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
+          <Typography variant='h5'>All Plans</Typography>
+          <Typography variant='body2' color='text.secondary'>
+            Manage subscription plans and features
+          </Typography>
+        </Box>
+        <Button
+          variant='contained'
+          onClick={openCreate}
+          startIcon={<i className='ri-add-line' />}
+          fullWidth={isMobile}
+          sx={{ minWidth: { sm: 180 } }}
+        >
           Create New Plan
         </Button>
       </Box>
-      <Table size='small'>
-        <TableHead>
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>Monthly</TableCell>
-            <TableCell>Yearly</TableCell>
-            <TableCell>Currency</TableCell>
-            <TableCell>Max Users</TableCell>
-            <TableCell align='right'>Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {plans.map(p => (
-            <TableRow key={p._id}>
-              <TableCell>{p.name}</TableCell>
-              <TableCell>{p.priceMonthly}</TableCell>
-              <TableCell>{p.priceYearly ?? '-'}</TableCell>
-              <TableCell>{p.currency}</TableCell>
-              <TableCell>{p.maxUsers}</TableCell>
-              <TableCell align='right'>
-                <Button size='small' onClick={() => openEdit(p)} startIcon={<i className='ri-edit-2-line' />}>
-                  Edit
-                </Button>
-                <Button size='small' onClick={() => openFeatures(p)} startIcon={<i className='ri-toggle-line' />}>
-                  Features
-                </Button>
-                <Button
-                  color='error'
-                  size='small'
-                  onClick={() => setConfirmId(p._id)}
-                  startIcon={<i className='ri-delete-bin-6-line' />}
-                >
-                  Delete
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-          {!loading && plans.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={6}>
-                <Typography color='text.secondary'>No plans yet.</Typography>
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
 
-      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='sm'>
+      {isMobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {loading ? (
+            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant='body2' color='text.secondary'>
+                  Loading...
+                </Typography>
+              </CardContent>
+            </Card>
+          ) : plans.length === 0 ? (
+            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant='body2' color='text.secondary'>
+                  No plans yet.
+                </Typography>
+              </CardContent>
+            </Card>
+          ) : (
+            plans.map(p => (
+              <Card
+                key={p._id}
+                sx={{
+                  borderRadius: 3,
+                  boxShadow: 'none',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  backgroundColor: 'background.paper'
+                }}
+              >
+                <CardContent sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                    <Avatar sx={{ width: 36, height: 36, bgcolor: 'action.hover', color: 'text.secondary' }}>
+                      <i className='ri-price-tag-3-line text-lg' />
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                          {p.name}
+                        </Typography>
+                        {p.isDefault ? (
+                          <Chip
+                            size='small'
+                            label='Default'
+                            variant='outlined'
+                            sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
+                          />
+                        ) : null}
+                        {!p.isActive ? <Chip size='small' label='Inactive' variant='outlined' /> : null}
+                      </Box>
+                      <Typography
+                        variant='body2'
+                        color='text.secondary'
+                        sx={{
+                          mt: 0.5,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {p.description}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.25, flexWrap: 'wrap' }}>
+                        <Chip
+                          size='small'
+                          variant='outlined'
+                          label={`Monthly: ${p.priceMonthly}`}
+                          sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
+                        />
+                        <Chip
+                          size='small'
+                          variant='outlined'
+                          label={`Yearly: ${p.priceYearly ?? '-'}`}
+                          sx={{ boxShadow: 'none' }}
+                        />
+                        <Chip size='small' variant='outlined' label={`${p.currency}`} sx={{ boxShadow: 'none' }} />
+                        <Chip size='small' variant='outlined' label={`Max users: ${p.maxUsers}`} sx={{ boxShadow: 'none' }} />
+                      </Box>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1.5 }}>
+                        <Button
+                          size='small'
+                          variant='outlined'
+                          onClick={() => openEdit(p)}
+                          startIcon={<i className='ri-edit-2-line' />}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size='small'
+                          variant='outlined'
+                          onClick={() => openFeatures(p)}
+                          startIcon={<i className='ri-toggle-line' />}
+                        >
+                          Features
+                        </Button>
+                        <Button
+                          size='small'
+                          variant='outlined'
+                          color='error'
+                          onClick={() => setConfirmId(p._id)}
+                          startIcon={<i className='ri-delete-bin-6-line' />}
+                          sx={{ gridColumn: '1 / -1' }}
+                        >
+                          Delete
+                        </Button>
+                      </Box>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </Box>
+      ) : (
+        <Table size='small'>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Monthly</TableCell>
+              <TableCell>Yearly</TableCell>
+              <TableCell>Currency</TableCell>
+              <TableCell>Max Users</TableCell>
+              <TableCell align='right'>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {plans.map(p => (
+              <TableRow key={p._id}>
+                <TableCell>{p.name}</TableCell>
+                <TableCell>{p.priceMonthly}</TableCell>
+                <TableCell>{p.priceYearly ?? '-'}</TableCell>
+                <TableCell>{p.currency}</TableCell>
+                <TableCell>{p.maxUsers}</TableCell>
+                <TableCell align='right'>
+                  <Button size='small' onClick={() => openEdit(p)} startIcon={<i className='ri-edit-2-line' />}>
+                    Edit
+                  </Button>
+                  <Button size='small' onClick={() => openFeatures(p)} startIcon={<i className='ri-toggle-line' />}>
+                    Features
+                  </Button>
+                  <Button
+                    color='error'
+                    size='small'
+                    onClick={() => setConfirmId(p._id)}
+                    startIcon={<i className='ri-delete-bin-6-line' />}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!loading && plans.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <Typography color='text.secondary'>No plans yet.</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      )}
+
+      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='sm' fullScreen={isMobile}>
         <DialogTitle>{isEdit ? 'Edit Plan' : 'Create Plan'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
-          <TextField label='Name' value={form.name} onChange={handleChange('name')} />
-          <TextField label='Slug' value={form.slug} onChange={handleChange('slug')} />
-          <TextField label='Description' value={form.description} onChange={handleChange('description')} />
-          <Box className='grid grid-cols-3 gap-3'>
-            <TextField label='Monthly Price' type='number' value={form.priceMonthly} onChange={handleChange('priceMonthly')} />
-            <TextField label='Yearly Price' type='number' value={form.priceYearly} onChange={handleChange('priceYearly')} />
-            <TextField label='Currency' value={form.currency} onChange={handleChange('currency')} />
+          <TextField label='Name' value={form.name} onChange={handleChange('name')} fullWidth />
+          <TextField label='Slug' value={form.slug} onChange={handleChange('slug')} fullWidth />
+          <TextField label='Description' value={form.description} onChange={handleChange('description')} fullWidth />
+          <Box className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+            <TextField label='Monthly Price' type='number' value={form.priceMonthly} onChange={handleChange('priceMonthly')} fullWidth />
+            <TextField label='Yearly Price' type='number' value={form.priceYearly} onChange={handleChange('priceYearly')} fullWidth />
+            <TextField label='Currency' value={form.currency} onChange={handleChange('currency')} fullWidth />
           </Box>
-          <TextField label='Max Users' type='number' value={form.maxUsers} onChange={handleChange('maxUsers')} />
+          <TextField label='Max Users' type='number' value={form.maxUsers} onChange={handleChange('maxUsers')} fullWidth />
         </DialogContent>
         <DialogActions>
           <Button variant='text' onClick={closeDialog}>Cancel</Button>
@@ -274,7 +419,7 @@ export const SubscriptionPlansManager = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={featuresOpen} onClose={closeFeatures} fullWidth maxWidth='sm'>
+      <Dialog open={featuresOpen} onClose={closeFeatures} fullWidth maxWidth='sm' fullScreen={isMobile}>
         <DialogTitle>Configure Features</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Box className='flex flex-col gap-2'>
@@ -287,11 +432,12 @@ export const SubscriptionPlansManager = () => {
               />
             ))}
           </Box>
-          <Box className='flex items-center gap-2'>
+          <Box className='flex flex-col sm:flex-row sm:items-center gap-2'>
             <TextField
               label='New Feature Key'
               value={newFeature}
               onChange={e => setNewFeature(e.target.value)}
+              fullWidth
             />
             <Button variant='outlined' onClick={addFeature}>Add</Button>
           </Box>
@@ -302,7 +448,7 @@ export const SubscriptionPlansManager = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(confirmId)} onClose={() => setConfirmId(null)}>
+      <Dialog open={Boolean(confirmId)} onClose={() => setConfirmId(null)} fullScreen={isMobile}>
         <DialogTitle>Delete Plan</DialogTitle>
         <DialogContent>
           <Typography>Are you sure you want to delete this plan?</Typography>
