@@ -456,6 +456,13 @@ const CustomersCreateForm = ({
             </Box>
           </Box>
         </Stack>
+        {isMobile ? (
+          <Box sx={{ mt: 3 }}>
+            <Button variant='contained' fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
+              {submitting ? 'Saving...' : submitLabel || 'Save Customer'}
+            </Button>
+          </Box>
+        ) : null}
       </CardContent>
       {!isMobile ? (
         <CardActions sx={{ p: 3, pt: 0 }}>
@@ -741,7 +748,13 @@ const CustomersCreateForm = ({
           </Box>
         </Stack>
       </Box>
-      {!isMobile ? (
+      {isMobile ? (
+        <Box sx={{ mt: 3 }}>
+          <Button variant='contained' fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
+            {submitting ? 'Saving...' : submitLabel || 'Save Customer'}
+          </Button>
+        </Box>
+      ) : (
         <Box sx={{ mt: 2 }}>
           <Box className='flex gap-2'>
             <Button
@@ -760,7 +773,7 @@ const CustomersCreateForm = ({
             </Button>
           </Box>
         </Box>
-      ) : null}
+      )}
     </Box>
   )
 }
