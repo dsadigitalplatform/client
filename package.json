@@ -84,5 +84,6 @@
     "@emoji-mart/react": {
       "react": "19.2.1"
     }
-  }
+  },
+  "packageManager": "pnpm@10.30.3"
 }
