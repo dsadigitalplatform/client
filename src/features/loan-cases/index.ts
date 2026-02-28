@@ -1,5 +1,6 @@
 export { default as LoanCasesList } from './components/LoanCasesList'
 export { default as LoanCaseForm } from './components/LoanCaseForm'
+export { default as LoanCasesPipelineDashboard } from './components/pipeline/LoanCasesPipelineDashboard'
 export * from './hooks/useLoanCases'
 export * from './services/loanCasesService'
 export * from './loan-cases.types'

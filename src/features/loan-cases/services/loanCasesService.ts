@@ -78,6 +78,26 @@ export async function updateLoanCase(id: string, body: UpdateLoanCaseInput) {
   return data as { ok: true }
 }
 
+export async function updateCaseStage(caseId: string, newStageId: string) {
+  const res = await fetch(`/api/loan-cases/${caseId}/stage`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newStageId })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to update case stage'
+    const err = new Error(message) as any
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return data as { ok: true; updatedAt?: string }
+}
+
 export async function getChecklistByLoanType(loanTypeId: string) {
   const res = await fetch(`/api/loan-types/${loanTypeId}/documents`, { cache: 'no-store' })
 

@@ -15,11 +15,14 @@ import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import CardActions from '@mui/material/CardActions'
 import Divider from '@mui/material/Divider'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import InputAdornment from '@mui/material/InputAdornment'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
+import LinearProgress from '@mui/material/LinearProgress'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
@@ -38,6 +41,8 @@ type Props = {
   }>
   onSubmitOverride?: (payload: any) => Promise<void>
   submitLabel?: string
+  redirectOnSuccess?: boolean
+  redirectPath?: string
 }
 
 const LoanTypesCreateForm = ({
@@ -48,7 +53,9 @@ const LoanTypesCreateForm = ({
   submitDisabled,
   initialValues,
   onSubmitOverride,
-  submitLabel
+  submitLabel,
+  redirectOnSuccess = false,
+  redirectPath = '/loan-types'
 }: Props) => {
   const router = useRouter()
   const theme = useTheme()
@@ -62,6 +69,10 @@ const LoanTypesCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [redirectOpen, setRedirectOpen] = useState(false)
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
+  const [redirectProgress, setRedirectProgress] = useState(0)
+  const [successMsg, setSuccessMsg] = useState('')
 
   useEffect(() => {
     if (!initialValues) return
@@ -69,6 +80,28 @@ const LoanTypesCreateForm = ({
     if (initialValues.description !== undefined) setDescription(initialValues.description || '')
     if (initialValues.isActive != null) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
+
+  useEffect(() => {
+    if (!redirectOpen || !redirectTarget) return
+
+    setRedirectProgress(0)
+    const totalMs = 2200
+    const tickMs = 50
+    const step = (100 * tickMs) / totalMs
+    let current = 0
+
+    const t = window.setInterval(() => {
+      current = Math.min(100, current + step)
+      setRedirectProgress(current)
+
+      if (current >= 100) {
+        window.clearInterval(t)
+        router.push(redirectTarget)
+      }
+    }, tickMs)
+
+    return () => window.clearInterval(t)
+  }, [redirectOpen, redirectTarget, router])
 
   const validate = () => {
     const next: Record<string, string> = {}
@@ -99,6 +132,17 @@ const LoanTypesCreateForm = ({
         const res = await createLoanType(payload)
 
         createdId = res?.id
+      }
+
+      setSuccessMsg(initialValues ? 'Loan type updated successfully' : 'Loan type created successfully')
+
+      if (redirectOnSuccess) {
+        if (onSuccess) onSuccess(createdId)
+
+        setRedirectTarget(redirectPath)
+        setRedirectOpen(true)
+
+        return
       }
 
       if (onSuccess) onSuccess(createdId)
@@ -217,6 +261,35 @@ const LoanTypesCreateForm = ({
           </Box>
         </CardActions>
       ) : null}
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Loan Types...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Card>
   ) : (
     <Box>
@@ -293,7 +366,53 @@ const LoanTypesCreateForm = ({
             label={isActive ? 'Active' : 'Inactive'}
           />
         </Stack>
+
+        {!isMobile ? (
+          <Box sx={{ mt: 2 }}>
+            <Box className='flex gap-2'>
+              <Button variant='contained' disabled={submitting || submitDisabled || !canSubmit} onClick={handleSubmit}>
+                {submitting ? 'Saving...' : submitLabel || 'Save Loan Type'}
+              </Button>
+              <Button
+                variant='outlined'
+                disabled={submitting}
+                onClick={() => (onCancel ? onCancel() : router.push('/loan-types'))}
+              >
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        ) : null}
       </Box>
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Loan Types...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Box>
   )
 }

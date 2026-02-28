@@ -20,6 +20,12 @@ export type LoanCaseListItem = {
   assignedAgentName: string | null
   assignedAgentEmail: string | null
   updatedAt: string | null
+  isLocked?: boolean
+  totalDocuments?: number
+  incompleteDocumentsCount?: number
+  pendingDocumentsCount?: number
+  hasIncompleteDocuments?: boolean
+  canMoveStage?: boolean
 }
 
 export type LoanCaseDetails = {
@@ -67,4 +73,3 @@ export type TenantUserOption = {
   name: string
   email: string | null
 }
-

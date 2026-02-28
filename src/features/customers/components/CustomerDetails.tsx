@@ -233,6 +233,7 @@ const CustomerDetails = ({ id }: Props) => {
               showTitle={false}
               variant='plain'
               submitLabel='Update Customer'
+              redirectOnSuccess
               initialValues={{
                 fullName: data.fullName,
                 mobile: data.mobile,
@@ -248,9 +249,6 @@ const CustomerDetails = ({ id }: Props) => {
               }}
               onSubmitOverride={async payload => {
                 await updateCustomer(id, payload)
-                await fetchData()
-                setEditMode(false)
-                setToast({ open: true, msg: 'Customer updated', severity: 'success' })
               }}
               onCancel={() => setEditMode(false)}
             />

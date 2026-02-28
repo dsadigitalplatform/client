@@ -15,9 +15,13 @@ import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import CardActions from '@mui/material/CardActions'
 import Divider from '@mui/material/Divider'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import InputAdornment from '@mui/material/InputAdornment'
+import Avatar from '@mui/material/Avatar'
+import LinearProgress from '@mui/material/LinearProgress'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
@@ -34,9 +38,20 @@ type Props = {
   }>
   onSubmitOverride?: (payload: any) => Promise<void>
   submitLabel?: string
+  redirectOnSuccess?: boolean
+  redirectPath?: string
 }
 
-const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, initialValues, onSubmitOverride, submitLabel }: Props) => {
+const DocumentChecklistsCreateForm = ({
+  onSuccess,
+  onCancel,
+  showTitle = true,
+  initialValues,
+  onSubmitOverride,
+  submitLabel,
+  redirectOnSuccess = false,
+  redirectPath = '/document-checklists'
+}: Props) => {
   const router = useRouter()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -48,6 +63,10 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [redirectOpen, setRedirectOpen] = useState(false)
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
+  const [redirectProgress, setRedirectProgress] = useState(0)
+  const [successMsg, setSuccessMsg] = useState('')
 
   useEffect(() => {
     if (!initialValues) return
@@ -55,6 +74,28 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
     if (initialValues.description !== undefined) setDescription(initialValues.description || '')
     if (initialValues.isActive != null) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
+
+  useEffect(() => {
+    if (!redirectOpen || !redirectTarget) return
+
+    setRedirectProgress(0)
+    const totalMs = 2200
+    const tickMs = 50
+    const step = (100 * tickMs) / totalMs
+    let current = 0
+
+    const t = window.setInterval(() => {
+      current = Math.min(100, current + step)
+      setRedirectProgress(current)
+
+      if (current >= 100) {
+        window.clearInterval(t)
+        router.push(redirectTarget)
+      }
+    }, tickMs)
+
+    return () => window.clearInterval(t)
+  }, [redirectOpen, redirectTarget, router])
 
   const validate = () => {
     const next: Record<string, string> = {}
@@ -81,6 +122,16 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
         await onSubmitOverride(payload)
       } else {
         await createDocumentChecklist(payload)
+      }
+
+      setSuccessMsg(initialValues ? 'Document updated successfully' : 'Document created successfully')
+
+      if (redirectOnSuccess) {
+        if (onSuccess) onSuccess()
+        setRedirectTarget(redirectPath)
+        setRedirectOpen(true)
+
+        return
       }
 
       if (onSuccess) onSuccess()
@@ -155,6 +206,35 @@ const DocumentChecklistsCreateForm = ({ onSuccess, onCancel, showTitle = true, i
           </Button>
         </Box>
       </CardActions>
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Document Checklist...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

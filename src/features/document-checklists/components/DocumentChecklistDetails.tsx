@@ -96,9 +96,11 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                                 <Button size='small' variant='text' onClick={() => router.push('/document-checklists')}>
                                     Back to List
                                 </Button>
-                                <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
-                                    {editMode ? 'Close Edit' : 'Edit'}
-                                </Button>
+                                {!editMode ? (
+                                    <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                                        Edit
+                                    </Button>
+                                ) : null}
                                 <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
                                     Delete
                                 </Button>
@@ -133,6 +135,8 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                     {editMode ? (
                         <DocumentChecklistsCreateForm
                             showTitle={false}
+                            redirectOnSuccess
+                            onCancel={() => setEditMode(false)}
                             initialValues={{
                                 name: data.name,
                                 description: data.description,
@@ -141,8 +145,6 @@ const DocumentChecklistDetails = ({ id }: Props) => {
                             submitLabel='Update Document'
                             onSubmitOverride={async payload => {
                                 await updateDocumentChecklist(id, payload)
-                                setEditMode(false)
-                                await load()
                             }}
                         />
                     ) : (

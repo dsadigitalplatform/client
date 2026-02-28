@@ -28,6 +28,7 @@ import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
+import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -37,6 +38,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
+import LinearProgress from '@mui/material/LinearProgress'
 import { useTheme } from '@mui/material/styles'
 
 import CustomersCreateForm from '@features/customers/components/CustomersCreateForm'
@@ -81,6 +83,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
+  const [redirectOpen, setRedirectOpen] = useState(false)
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
+  const [redirectProgress, setRedirectProgress] = useState(0)
 
   const [id, setId] = useState<string | null>(caseId ?? null)
   const [isLocked, setIsLocked] = useState(false)
@@ -109,6 +116,38 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const selectedLoanType = useMemo(() => loanTypes.find(l => l.id === loanTypeId) ?? null, [loanTypes, loanTypeId])
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
+
+  useEffect(() => {
+    const msg = sessionStorage.getItem('loanCaseSaveSuccess')
+
+    if (!msg) return
+
+    sessionStorage.removeItem('loanCaseSaveSuccess')
+    setSuccessMsg(msg)
+    setSuccessOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (!redirectOpen || !redirectTarget) return
+
+    setRedirectProgress(0)
+    const totalMs = 2200
+    const tickMs = 50
+    const step = (100 * tickMs) / totalMs
+    let current = 0
+
+    const t = window.setInterval(() => {
+      current = Math.min(100, current + step)
+      setRedirectProgress(current)
+
+      if (current >= 100) {
+        window.clearInterval(t)
+        router.push(redirectTarget)
+      }
+    }, tickMs)
+
+    return () => window.clearInterval(t)
+  }, [redirectOpen, redirectTarget, router])
 
   useEffect(() => {
     if (!customerId) return
@@ -263,16 +302,22 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
       if (!id) {
         const res = await createLoanCase(payloadBase)
-        const nextId = res.id
 
-        setId(nextId)
+        setId(res.id)
         setIsLocked(true)
-        router.replace(`/loan-cases/${nextId}`)
+
+        setSuccessMsg('Lead created successfully')
+        setRedirectTarget('/loan-cases')
+        setRedirectOpen(true)
       } else {
         await updateLoanCase(id, {
           ...payloadBase,
           documents: documents.map(d => ({ documentId: d.documentId, status: d.status }))
         })
+
+        setSuccessMsg('Lead updated successfully')
+        setRedirectTarget('/loan-cases')
+        setRedirectOpen(true)
       }
     } catch (e: any) {
       if (e?.details) setFieldErrors(e.details)
@@ -282,8 +327,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
     }
   }
 
-  const headerTitle = id ? 'Loan Case' : 'Create Loan Case'
-  const headerSub = id ? 'Update case details, checklist, and stage' : 'Create a new case and auto-generate checklist'
+  const headerTitle = id ? 'Lead manager' : 'Create Lead'
+  const headerSub = id ? 'Update lead' : 'Create & link a new lead '
 
   const statusChip = (s: LoanCaseDocumentStatus) => {
     switch (s) {
@@ -308,13 +353,13 @@ const LoanCaseForm = ({ caseId }: Props) => {
           subheader={headerSub}
           action={
             isMobile ? (
-              <IconButton onClick={() => router.push('/loan-cases')} aria-label='Back to loan cases'>
+              <IconButton onClick={() => router.push('/loan-cases')} aria-label='Back to lead manager'>
                 <i className='ri-close-line' />
               </IconButton>
             ) : null
           }
         />
-        <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '& .MuiFormHelperText-root': { mt: 0.75 } }}>
           {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
 
           {loading ? (
@@ -322,24 +367,12 @@ const LoanCaseForm = ({ caseId }: Props) => {
               Loading...
             </Typography>
           ) : (
-            <Stack spacing={isMobile ? 2 : 3}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Avatar sx={{ bgcolor: 'action.hover', color: 'text.secondary' }}>
-                  <i className='ri-briefcase-4-line' />
-                </Avatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                    Case Setup
-                  </Typography>
-                  <Typography variant='body2' color='text.secondary'>
-                    Select customer, loan type, and assign responsibility
-                  </Typography>
-                </Box>
-              </Box>
+            <Stack spacing={isMobile ? 3.5 : 3.5}>
+
 
               <Divider />
 
-              <Grid container spacing={2}>
+              <Grid container rowSpacing={{ xs: 3, sm: 3 }} columnSpacing={{ xs: 2, sm: 3 }}>
                 <Grid size={{ xs: 12, sm: 8 }}>
                   <Autocomplete
                     options={customers}
@@ -387,7 +420,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     sx={{ height: '100%' }}
                     disabled={isLocked}
                   >
-                    Add New
+                    Add Customer
                   </Button>
                 </Grid>
 
@@ -411,7 +444,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                         ))}
                     </Select>
                     {fieldErrors.loanTypeId ? (
-                      <Typography variant='caption' color='error'>
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
                         {fieldErrors.loanTypeId}
                       </Typography>
                     ) : null}
@@ -527,7 +560,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       ))}
                     </Select>
                     {fieldErrors.assignedAgentId ? (
-                      <Typography variant='caption' color='error'>
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
                         {fieldErrors.assignedAgentId}
                       </Typography>
                     ) : null}
@@ -550,7 +583,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       ))}
                     </Select>
                     {fieldErrors.stageId ? (
-                      <Typography variant='caption' color='error'>
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
                         {fieldErrors.stageId}
                       </Typography>
                     ) : null}
@@ -563,7 +596,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
                 <Box>
                   <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                    Intelligent Document Checklist
+                    Document Checklist
                   </Typography>
                   <Typography variant='body2' color='text.secondary'>
                     {selectedLoanType ? `Auto-mapped from “${selectedLoanType.name}”` : 'Select loan type to load checklist'}
@@ -609,7 +642,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     const meta = statusChip(d.status)
 
                     return (
-                      <Accordion key={d.documentId} disableGutters sx={{ borderRadius: 2.5, overflow: 'hidden', mb: 1 }}>
+                      <Accordion key={d.documentId} disableGutters sx={{ borderRadius: 2.5, overflow: 'hidden', mb: 1.5 }}>
                         <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
                             <Typography sx={{ fontWeight: 600, flex: 1, minWidth: 0 }}>{d.documentName}</Typography>
@@ -743,6 +776,69 @@ const LoanCaseForm = ({ caseId }: Props) => {
             }}
             submitLabel='Create Customer'
           />
+        </DialogContent>
+      </Dialog>
+
+      <Snackbar
+        open={successOpen}
+        autoHideDuration={3000}
+        onClose={() => setSuccessOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSuccessOpen(false)}
+          severity='success'
+          variant='filled'
+          icon={<i className='ri-checkbox-circle-line' />}
+          sx={{
+            width: '100%',
+            color: 'text.primary',
+            backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.4)',
+            boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
+            '& .MuiAlert-icon': {
+              color: 'var(--mui-palette-success-main)'
+            }
+          }}
+        >
+          {successMsg}
+        </Alert>
+      </Snackbar>
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent
+          sx={{
+            p: 3,
+            width: { xs: 'calc(100vw - 32px)', sm: 420 }
+          }}
+        >
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Lead Manager...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
         </DialogContent>
       </Dialog>
     </Box>

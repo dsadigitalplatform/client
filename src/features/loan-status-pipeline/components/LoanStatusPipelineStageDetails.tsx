@@ -100,9 +100,11 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                 <Button size='small' variant='text' onClick={() => router.push('/loan-status-pipeline')}>
                   Back to List
                 </Button>
-                <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
-                  {editMode ? 'Close Edit' : 'Edit'}
-                </Button>
+                {!editMode ? (
+                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                    Edit
+                  </Button>
+                ) : null}
                 <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
                   Delete
                 </Button>
@@ -138,6 +140,7 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
             <LoanStatusPipelineCreateForm
               showTitle={false}
               variant='plain'
+              redirectOnSuccess
               onCancel={() => setEditMode(false)}
               initialValues={{
                 name: data.name,
@@ -147,8 +150,6 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
               submitLabel='Update Stage'
               onSubmitOverride={async payload => {
                 await updateLoanStatusPipelineStage(id, payload)
-                setEditMode(false)
-                await load()
               }}
             />
           ) : (

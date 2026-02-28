@@ -200,9 +200,11 @@ const LoanTypeDetails = ({ id }: Props) => {
                 <Button size='small' variant='text' onClick={() => router.push('/loan-types')} startIcon={<i className='ri-arrow-left-line' />}>
                   Back to Loan Types
                 </Button>
-                <Button size='small' variant='outlined' onClick={() => setEditMode(v => !v)}>
-                  {editMode ? 'Close Edit' : 'Edit'}
-                </Button>
+                {!editMode ? (
+                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                    Edit
+                  </Button>
+                ) : null}
                 <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
                   Delete
                 </Button>
@@ -239,6 +241,7 @@ const LoanTypeDetails = ({ id }: Props) => {
               showTitle={false}
               variant='plain'
               submitLabel='Update Loan Type'
+              redirectOnSuccess
               onCancel={() => setEditMode(false)}
               initialValues={{
                 name: data.name,
@@ -247,8 +250,6 @@ const LoanTypeDetails = ({ id }: Props) => {
               }}
               onSubmitOverride={async payload => {
                 await updateLoanType(id, payload)
-                setEditMode(false)
-                await load()
               }}
             />
           ) : (

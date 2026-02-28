@@ -90,7 +90,7 @@ const LoanCasesList = () => {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
-          <Typography variant='h5'>Loan Cases</Typography>
+          <Typography variant='h5'>Lead Manager</Typography>
           <Typography variant='body2' color='text.secondary'>
             Track cases, documents, and assignments
           </Typography>
@@ -112,7 +112,7 @@ const LoanCasesList = () => {
             startIcon={<i className='ri-add-line' />}
             fullWidth={isMobile}
           >
-            Create Case
+            Create Lead
           </Button>
         </Box>
       </Box>

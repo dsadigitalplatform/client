@@ -17,9 +17,12 @@ import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import CardActions from '@mui/material/CardActions'
 import Divider from '@mui/material/Divider'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
 import InputAdornment from '@mui/material/InputAdornment'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
+import LinearProgress from '@mui/material/LinearProgress'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
@@ -45,6 +48,8 @@ type Props = {
   }>
   onSubmitOverride?: (payload: any) => Promise<void>
   submitLabel?: string
+  redirectOnSuccess?: boolean
+  redirectPath?: string
 }
 
 const CustomersCreateForm = ({
@@ -54,7 +59,9 @@ const CustomersCreateForm = ({
   variant = 'card',
   initialValues,
   onSubmitOverride,
-  submitLabel
+  submitLabel,
+  redirectOnSuccess = false,
+  redirectPath = '/customers'
 }: Props) => {
   const router = useRouter()
   const theme = useTheme()
@@ -67,6 +74,7 @@ const CustomersCreateForm = ({
   const [dob, setDob] = useState('')
   const [pan, setPan] = useState('')
   const [aadhaarMasked, setAadhaarMasked] = useState('')
+  const [aadhaarDigits, setAadhaarDigits] = useState('')
   const [address, setAddress] = useState('')
   const [employmentType, setEmploymentType] = useState<'SALARIED' | 'SELF_EMPLOYED'>('SALARIED')
   const [source, setSource] = useState<'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'>('WALK_IN')
@@ -76,6 +84,10 @@ const CustomersCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [redirectOpen, setRedirectOpen] = useState(false)
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
+  const [redirectProgress, setRedirectProgress] = useState(0)
+  const [successMsg, setSuccessMsg] = useState('')
 
   useEffect(() => {
     if (!initialValues) return
@@ -85,6 +97,7 @@ const CustomersCreateForm = ({
     if (initialValues.dob != null) setDob(initialValues.dob ? initialValues.dob.slice(0, 10) : '')
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
     if (initialValues.aadhaarMasked !== undefined) setAadhaarMasked(initialValues.aadhaarMasked || '')
+    setAadhaarDigits('')
     if (initialValues.address !== undefined) setAddress(initialValues.address || '')
     if (initialValues.employmentType) setEmploymentType(initialValues.employmentType)
     if (initialValues.source) setSource(initialValues.source)
@@ -94,10 +107,33 @@ const CustomersCreateForm = ({
       setCibilScore(String(initialValues.cibilScore))
   }, [initialValues])
 
+  useEffect(() => {
+    if (!redirectOpen || !redirectTarget) return
+
+    setRedirectProgress(0)
+    const totalMs = 2200
+    const tickMs = 50
+    const step = (100 * tickMs) / totalMs
+    let current = 0
+
+    const t = window.setInterval(() => {
+      current = Math.min(100, current + step)
+      setRedirectProgress(current)
+
+      if (current >= 100) {
+        window.clearInterval(t)
+        router.push(redirectTarget)
+      }
+    }, tickMs)
+
+    return () => window.clearInterval(t)
+  }, [redirectOpen, redirectTarget, router])
+
   // basic client-side validators
   const isValidMobile = (v: string) => /^[0-9]{10}$/.test(v)
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
+  const isValidAadhaar = (digits: string) => digits.length === 0 || digits.length === 12
   const isValidCibil = (v: string) => !v || (/^\d+$/.test(v) && Number(v) >= 300 && Number(v) <= 900)
 
   const canSubmit = useMemo(() => {
@@ -106,9 +142,10 @@ const CustomersCreateForm = ({
       isValidMobile(mobile) &&
       isValidEmail(email) &&
       isValidPAN(pan) &&
+      isValidAadhaar(aadhaarDigits) &&
       isValidCibil(cibilScore)
     )
-  }, [fullName, mobile, email, pan, cibilScore])
+  }, [fullName, mobile, email, pan, aadhaarDigits, cibilScore])
 
   // input normalizers
   const handleMobile = (v: string) => {
@@ -120,7 +157,9 @@ const CustomersCreateForm = ({
   }
 
   const handleAadhaar = (v: string) => {
-    const digits = v.replace(/\D/g, '').slice(-12)
+    const digits = v.replace(/\D/g, '').slice(0, 12)
+
+    setAadhaarDigits(digits)
 
     if (digits.length < 4) {
       setAadhaarMasked('')
@@ -159,12 +198,22 @@ const CustomersCreateForm = ({
         await createCustomer(payload)
       }
 
+      setSuccessMsg(initialValues ? 'Customer updated successfully' : 'Customer created successfully')
+
+      if (redirectOnSuccess) {
+        setRedirectTarget(redirectPath)
+        setRedirectOpen(true)
+
+        return
+      }
+
       setFullName('')
       setMobile('')
       setEmail('')
       setDob('')
       setPan('')
       setAadhaarMasked('')
+      setAadhaarDigits('')
       setAddress('')
       setEmploymentType('SALARIED')
       setSource('WALK_IN')
@@ -172,6 +221,7 @@ const CustomersCreateForm = ({
       setCibilScore('')
       setFieldErrors({})
       setError(null)
+
       if (onSuccess) onSuccess()
       else router.push('/customers')
     } catch (e: any) {
@@ -321,6 +371,11 @@ const CustomersCreateForm = ({
             label='Aadhaar (masked)'
             value={aadhaarMasked}
             onChange={e => handleAadhaar(e.target.value)}
+            error={Boolean(fieldErrors.aadhaarMasked) || (aadhaarDigits.length > 0 && !isValidAadhaar(aadhaarDigits))}
+            helperText={
+              fieldErrors.aadhaarMasked ||
+              (aadhaarDigits.length > 0 && !isValidAadhaar(aadhaarDigits) ? 'Enter 12-digit Aadhaar number' : ' ')
+            }
             fullWidth
             placeholder='XXXX-XXXX-1234'
             InputProps={{
@@ -330,6 +385,7 @@ const CustomersCreateForm = ({
                 </InputAdornment>
               )
             }}
+            inputProps={{ inputMode: 'numeric' }}
           />
 
           <TextField
@@ -484,6 +540,35 @@ const CustomersCreateForm = ({
           </Box>
         </CardActions>
       ) : null}
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Customer list...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Card>
   ) : (
     <Box>
@@ -612,6 +697,11 @@ const CustomersCreateForm = ({
             label='Aadhaar (masked)'
             value={aadhaarMasked}
             onChange={e => handleAadhaar(e.target.value)}
+            error={Boolean(fieldErrors.aadhaarMasked) || (aadhaarDigits.length > 0 && !isValidAadhaar(aadhaarDigits))}
+            helperText={
+              fieldErrors.aadhaarMasked ||
+              (aadhaarDigits.length > 0 && !isValidAadhaar(aadhaarDigits) ? 'Enter 12-digit Aadhaar number' : ' ')
+            }
             fullWidth
             placeholder='XXXX-XXXX-1234'
             InputProps={{
@@ -621,6 +711,7 @@ const CustomersCreateForm = ({
                 </InputAdornment>
               )
             }}
+            inputProps={{ inputMode: 'numeric' }}
           />
 
           <TextField
@@ -774,6 +865,35 @@ const CustomersCreateForm = ({
           </Box>
         </Box>
       )}
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you back to Customer list...
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress variant='determinate' value={redirectProgress} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant='caption' color='text.secondary'>
+                Please wait
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {Math.round(redirectProgress)}%
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Box>
   )
 }

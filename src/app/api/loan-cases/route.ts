@@ -161,6 +161,29 @@ export async function GET(request: Request) {
       },
       { $unwind: { path: '$assignedAgent', preserveNullAndEmptyArrays: true } },
       {
+        $addFields: {
+          totalDocuments: { $size: { $ifNull: ['$documents', []] } },
+          incompleteDocumentsCount: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$documents', []] },
+                as: 'd',
+                cond: { $ne: ['$$d.status', 'APPROVED'] }
+              }
+            }
+          },
+          pendingDocumentsCount: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$documents', []] },
+                as: 'd',
+                cond: { $eq: ['$$d.status', 'PENDING'] }
+              }
+            }
+          }
+        }
+      },
+      {
         $project: {
           _id: 1,
           customerId: 1,
@@ -170,6 +193,11 @@ export async function GET(request: Request) {
           stageId: 1,
           assignedAgentId: 1,
           updatedAt: 1,
+          createdBy: 1,
+          isLocked: 1,
+          totalDocuments: 1,
+          incompleteDocumentsCount: 1,
+          pendingDocumentsCount: 1,
           customerName: '$customer.fullName',
           loanTypeName: '$loanType.name',
           stageName: '$stage.name',
@@ -193,7 +221,17 @@ export async function GET(request: Request) {
     assignedAgentId: (r as any).assignedAgentId ? String((r as any).assignedAgentId) : null,
     assignedAgentName: (r as any).assignedAgentName ?? null,
     assignedAgentEmail: (r as any).assignedAgentEmail ?? null,
-    updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null
+    updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
+    isLocked: Boolean((r as any).isLocked),
+    totalDocuments: Number((r as any).totalDocuments || 0),
+    incompleteDocumentsCount: Number((r as any).incompleteDocumentsCount || 0),
+    pendingDocumentsCount: Number((r as any).pendingDocumentsCount || 0),
+    hasIncompleteDocuments: Number((r as any).incompleteDocumentsCount || 0) > 0,
+    canMoveStage:
+      role === 'ADMIN' ||
+      role === 'OWNER' ||
+      (Boolean((r as any).createdBy) && (r as any).createdBy.equals(userId)) ||
+      (Boolean((r as any).assignedAgentId) && (r as any).assignedAgentId.equals(userId))
   }))
 
   return NextResponse.json({ cases })

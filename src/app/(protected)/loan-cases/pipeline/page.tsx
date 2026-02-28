@@ -2,9 +2,9 @@ import { redirect } from 'next/navigation'
 
 import { getServerSession } from 'next-auth'
 
-import { CustomersCreateForm } from '@features/customers'
+import { LoanCasesPipelineDashboard } from '@features/loan-cases'
 import { authOptions } from '@/lib/auth'
- 
+
 const Page = async () => {
   const session = await getServerSession(authOptions)
 
@@ -12,8 +12,9 @@ const Page = async () => {
   const currentTenantId = (session as any)?.currentTenantId as string | undefined
 
   if (!currentTenantId) redirect('/home')
- 
-  return <CustomersCreateForm redirectOnSuccess />
+
+  return <LoanCasesPipelineDashboard />
 }
- 
- export default Page
+
+export default Page
+

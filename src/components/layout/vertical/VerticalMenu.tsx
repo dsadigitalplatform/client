@@ -91,13 +91,18 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
           </MenuItem>
           {hasTenant && (
             <MenuItem href='/loan-cases' icon={<i className='ri-briefcase-4-line' />}>
-              Loan Cases
+              Lead Manager
+            </MenuItem>
+          )}
+          {hasTenant && (
+            <MenuItem href='/loan-cases/pipeline' icon={<i className='ri-layout-grid-line' />}>
+              Lead Status Board
             </MenuItem>
           )}
         </SubMenu>
 
         {hasTenant && (
-          <SubMenu label='Lead Management' icon={<i className='ri-team-line' />}>
+          <SubMenu label='DSA Master' icon={<i className='ri-team-line' />}>
             <MenuItem href='/customers' icon={<i className='ri-user-line' />}>
               Customer
             </MenuItem>
