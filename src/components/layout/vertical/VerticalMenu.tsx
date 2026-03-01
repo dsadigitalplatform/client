@@ -123,6 +123,9 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
               Subscription Plans
             </MenuItem>
+            <MenuItem href='/super-admin/db-maintenance' icon={<i className='ri-database-line' />}>
+              DB Maintenance
+            </MenuItem>
           </SubMenu>
         )}
 
