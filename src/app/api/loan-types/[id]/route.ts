@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
@@ -18,9 +19,13 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const currentTenantId = String((session as any).currentTenantId || '')
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
 
   if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
   const db = await getDb()
   const tenantIdObj = new ObjectId(currentTenantId)
   const row = await db.collection('loanTypes').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
@@ -45,9 +50,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const currentTenantId = String((session as any).currentTenantId || '')
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
 
   if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
   const db = await getDb()
   const tenantIdObj = new ObjectId(currentTenantId)
   const body = await request.json().catch(() => ({}))
@@ -102,9 +111,13 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const currentTenantId = String((session as any).currentTenantId || '')
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
 
   if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
   const db = await getDb()
   const tenantIdObj = new ObjectId(currentTenantId)
   const loanTypeId = new ObjectId(id)

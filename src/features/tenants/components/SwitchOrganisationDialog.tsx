@@ -25,6 +25,8 @@ import ListItemText from '@mui/material/ListItemText'
 import Avatar from '@mui/material/Avatar'
 import Divider from '@mui/material/Divider'
 import Tooltip from '@mui/material/Tooltip'
+import LinearProgress from '@mui/material/LinearProgress'
+import Stack from '@mui/material/Stack'
 
 import { listTenantsByUser, type TenantItem } from '../services/tenantsOverviewService'
 import { useSettings } from '@core/hooks/useSettings'
@@ -39,10 +41,15 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
   const { update } = useSession()
   const { updateSettings } = useSettings()
   const [loading, setLoading] = useState(false)
+  const [switching, setSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<TenantItem[]>([])
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [redirectOpen, setRedirectOpen] = useState(false)
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
+  const [redirectProgress, setRedirectProgress] = useState(0)
+  const [successMsg, setSuccessMsg] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -62,6 +69,35 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
       .finally(() => setLoading(false))
   }, [open])
 
+  useEffect(() => {
+    if (!redirectOpen || !redirectTarget) return
+
+    setRedirectProgress(0)
+    const totalMs = 2200
+    const tickMs = 50
+    const step = (100 * tickMs) / totalMs
+    let current = 0
+
+    const t = window.setInterval(() => {
+      current = Math.min(100, current + step)
+      setRedirectProgress(current)
+
+      if (current >= 100) {
+        window.clearInterval(t)
+        setRedirectOpen(false)
+        setSwitching(false)
+        onClose()
+        router.replace(redirectTarget)
+
+        try {
+          router.refresh()
+        } catch {}
+      }
+    }, tickMs)
+
+    return () => window.clearInterval(t)
+  }, [onClose, redirectOpen, redirectTarget, router])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
 
@@ -72,6 +108,13 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
 
   const choose = async (id: string) => {
     try {
+      setSwitching(true)
+      setError(null)
+      setSuccessMsg('')
+      setRedirectProgress(0)
+      setRedirectTarget(null)
+      setRedirectOpen(true)
+
       const res = await fetch('/api/session/tenant?return=json', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -84,7 +127,7 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
 
       try {
         await mutate('/api/session/tenant')
-      } catch { }
+      } catch {}
 
       try {
         const tRes = await fetch(`/api/tenants/${encodeURIComponent(id)}`, { cache: 'no-store' })
@@ -94,24 +137,24 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
         if (primary) {
           updateSettings({ primaryColor: primary }, { updateCookie: false })
         }
-      } catch { }
+      } catch {}
 
       try {
         await update({ currentTenantId: id } as any)
-      } catch { }
+      } catch {}
 
-      router.replace('/home?welcome=1')
-
-      try {
-        router.refresh()
-      } catch { }
+      setCurrentTenantId(id)
+      setSuccessMsg('Organisation switched successfully')
+      setRedirectTarget('/home')
     } catch (e: any) {
       setError(e?.message || 'Failed to switch organisation')
+      setSwitching(false)
+      setRedirectOpen(false)
     }
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth='sm'>
+    <Dialog open={open} onClose={switching ? () => undefined : onClose} fullWidth maxWidth='sm'>
       <DialogTitle>Switch Organisation</DialogTitle>
       <DialogContent className='flex flex-col gap-3'>
         <Typography color='text.secondary'>Select an organisation to switch context.</Typography>
@@ -121,6 +164,7 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
           placeholder='Search organisations'
           value={query}
           onChange={e => setQuery(e.target.value)}
+          disabled={switching}
           InputProps={{
             startAdornment: (
               <InputAdornment position='start'>
@@ -141,6 +185,7 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
                   <Box key={t._id}>
                     <ListItemButton
                       onClick={() => choose(t._id)}
+                      disabled={isCurrent || switching}
                       className='rounded-lg'
                     >
                       <ListItemAvatar>
@@ -173,8 +218,41 @@ export const SwitchOrganisationDialog = ({ open, onClose }: Props) => {
         {!loading && filtered.length === 0 ? <Typography color='text.secondary'>No organisations found</Typography> : null}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose} disabled={switching}>Close</Button>
       </DialogActions>
+
+      <Dialog open={redirectOpen} onClose={() => undefined} disableEscapeKeyDown>
+        <DialogContent sx={{ p: 3, width: { xs: 'calc(100vw - 32px)', sm: 420 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Avatar sx={{ bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', color: 'success.main' }}>
+                <i className='ri-checkbox-circle-line' />
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                  {successMsg || 'Switching organisation...'}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  Taking you to Home...
+                </Typography>
+              </Box>
+            </Box>
+
+            {redirectTarget ? <LinearProgress variant='determinate' value={redirectProgress} /> : <LinearProgress />}
+
+            {redirectTarget ? (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant='caption' color='text.secondary'>
+                  Please wait
+                </Typography>
+                <Typography variant='caption' color='text.secondary'>
+                  {Math.round(redirectProgress)}%
+                </Typography>
+              </Box>
+            ) : null}
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
