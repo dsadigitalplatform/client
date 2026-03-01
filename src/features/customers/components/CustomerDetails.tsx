@@ -332,9 +332,42 @@ const CustomerDetails = ({ id }: Props) => {
                   sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-text-primaryChannel) / 0.04)' }}
                 />
               </Box>
-              <Typography variant='body2' color='text.secondary' sx={{ display: { xs: 'none', sm: 'block' } }}>
-                View lead records linked to this customer
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.25 }}>
+
+                {isMobile ? (
+                  <IconButton
+                    color='primary'
+                    aria-label='Create lead'
+                    onClick={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      router.push(`/loan-cases/create?customerId=${encodeURIComponent(id)}`)
+                    }}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      bgcolor: 'background.paper',
+                      boxShadow: 'var(--mui-customShadows-sm, 0px 4px 14px rgba(0,0,0,0.10))'
+                    }}
+                  >
+                    <i className='ri-lightbulb-flash-line' />
+                  </IconButton>
+                ) : (
+                  <Button
+                    variant='contained'
+                    size='small'
+                    startIcon={<i className='ri-lightbulb-flash-line' />}
+                    onClick={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      router.push(`/loan-cases/create?customerId=${encodeURIComponent(id)}`)
+                    }}
+                    sx={{ borderRadius: 99, boxShadow: 'none', textTransform: 'none' }}
+                  >
+                    Create Lead
+                  </Button>
+                )}
+              </Box>
             </Box>
           </AccordionSummary>
           <AccordionDetails sx={{ px: { xs: 2.5, sm: 3 }, pb: { xs: 2.5, sm: 3 } }}>

@@ -283,7 +283,7 @@ const LoanTypesList = () => {
                                 onClick={() => {
                                     setSuccessOpen(false)
                                     setOpenAdd(false)
-                                    router.push(`/loan-types/${lastCreatedId}?edit=1#documents`)
+                                    router.push(`/loan-types/${lastCreatedId}#documents`)
                                 }}
                             >
                                 Add Checklist

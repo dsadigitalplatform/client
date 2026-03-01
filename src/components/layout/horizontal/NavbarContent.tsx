@@ -2,9 +2,13 @@
 
 import { useMemo } from 'react'
 
+import Link from 'next/link'
+
 import useSWR from 'swr'
 import classnames from 'classnames'
 import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 
 import NavToggle from './NavToggle'
@@ -54,6 +58,40 @@ const NavbarContent = ({
       </div>
       <div className='flex items-center gap-2'>
         <ModeDropdown />
+        <Tooltip title='Add customer' arrow>
+          <IconButton
+            component={Link}
+            href='/customers/create'
+            color='primary'
+            size='small'
+            aria-label='Add customer'
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              boxShadow: 'var(--mui-customShadows-sm, 0px 4px 14px rgba(0,0,0,0.10))'
+            }}
+          >
+            <i className='ri-user-add-line' />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title='Create lead' arrow>
+          <IconButton
+            component={Link}
+            href='/loan-cases/create'
+            color='primary'
+            size='small'
+            aria-label='Create lead'
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              boxShadow: 'var(--mui-customShadows-sm, 0px 4px 14px rgba(0,0,0,0.10))'
+            }}
+          >
+            <i className='ri-lightbulb-flash-line' />
+          </IconButton>
+        </Tooltip>
         <div className='hidden sm:flex'>
           {tenantName ? (
             <Chip

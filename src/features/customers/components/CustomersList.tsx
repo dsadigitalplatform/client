@@ -8,8 +8,6 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
-import Snackbar from '@mui/material/Snackbar'
-import Alert from '@mui/material/Alert'
 import MuiLink from '@mui/material/Link'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -32,7 +30,6 @@ import CustomersCreateForm from '@features/customers/components/CustomersCreateF
 const CustomersList = () => {
   const { customers, loading, search, setSearch, refresh } = useCustomers()
   const [openAdd, setOpenAdd] = useState(false)
-  const [successOpen, setSuccessOpen] = useState(false)
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -150,43 +147,15 @@ const CustomersList = () => {
           </Box>
           <CustomersCreateForm
             showTitle={false}
+            redirectOnSuccess
             onSuccess={() => {
               setOpenAdd(false)
               refresh()
-              setSuccessOpen(true)
             }}
             onCancel={() => setOpenAdd(false)}
           />
         </Box>
       </Drawer>
-      <Snackbar
-        open={successOpen}
-        autoHideDuration={3000}
-        onClose={() => setSuccessOpen(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={() => setSuccessOpen(false)}
-          severity='success'
-          variant='filled'
-          icon={<i className='ri-checkbox-circle-line' />}
-          sx={{
-            width: '100%',
-            color: 'text.primary',
-            backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: 2.5,
-            border: '1px solid',
-            borderColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.4)',
-            boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
-            '& .MuiAlert-icon': {
-              color: 'var(--mui-palette-success-main)'
-            }
-          }}
-        >
-          Customer added successfully
-        </Alert>
-      </Snackbar>
       {isMobile ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {loading ? (

@@ -88,6 +88,8 @@ const CustomersCreateForm = ({
   const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
   const [redirectProgress, setRedirectProgress] = useState(0)
   const [successMsg, setSuccessMsg] = useState('')
+  const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null)
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!initialValues) return
@@ -195,14 +197,42 @@ const CustomersCreateForm = ({
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
-        await createCustomer(payload)
+        const res = await createCustomer(payload)
+
+        setCreatedCustomerId(res?.id ? String(res.id) : null)
       }
 
       setSuccessMsg(initialValues ? 'Customer updated successfully' : 'Customer created successfully')
 
       if (redirectOnSuccess) {
-        setRedirectTarget(redirectPath)
-        setRedirectOpen(true)
+        if (initialValues) {
+          setSuccessDialogOpen(false)
+          setRedirectTarget(redirectPath)
+          setRedirectOpen(true)
+
+          if (onSuccess) onSuccess()
+
+          return
+        }
+
+        setRedirectOpen(false)
+        setRedirectTarget(null)
+        setSuccessDialogOpen(true)
+
+        setFullName('')
+        setMobile('')
+        setEmail('')
+        setDob('')
+        setPan('')
+        setAadhaarMasked('')
+        setAadhaarDigits('')
+        setAddress('')
+        setEmploymentType('SALARIED')
+        setSource('WALK_IN')
+        setMonthlyIncome('')
+        setCibilScore('')
+        setFieldErrors({})
+        setError(null)
 
         return
       }
@@ -219,6 +249,7 @@ const CustomersCreateForm = ({
       setSource('WALK_IN')
       setMonthlyIncome('')
       setCibilScore('')
+      setCreatedCustomerId(null)
       setFieldErrors({})
       setError(null)
 
@@ -231,6 +262,79 @@ const CustomersCreateForm = ({
       setSubmitting(false)
     }
   }
+
+  const canCreateLeadFromSuccess = Boolean(createdCustomerId) && !initialValues
+
+  const handleCreateLeadFromSuccess = () => {
+    if (!createdCustomerId) return
+    setSuccessDialogOpen(false)
+    if (onSuccess) onSuccess()
+    router.push(`/loan-cases/create?customerId=${encodeURIComponent(createdCustomerId)}`)
+  }
+
+  const handleGoToCustomersFromSuccess = () => {
+    setSuccessDialogOpen(false)
+    if (onSuccess) onSuccess()
+    router.push(redirectPath)
+  }
+
+  const successDialog = (
+    <Dialog
+      open={successDialogOpen}
+      onClose={() => undefined}
+      PaperProps={{
+        sx: {
+          width: { xs: 'calc(100vw - 32px)', sm: 460 },
+          borderRadius: 4,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'rgb(var(--mui-palette-background-paperChannel) / 0.72)',
+          backdropFilter: 'blur(14px)',
+          boxShadow: 'var(--mui-customShadows-lg, 0px 10px 34px rgba(0,0,0,0.18))'
+        }
+      }}
+    >
+      <DialogContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Stack spacing={2.25}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Avatar
+              sx={{
+                bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)',
+                color: 'success.main',
+                border: '1px solid',
+                borderColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.22)'
+              }}
+            >
+              <i className='ri-checkbox-circle-line' />
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant='subtitle1' sx={{ fontWeight: 800 }}>
+                {successMsg}
+              </Typography>
+              <Typography variant='body2' color='text.secondary'>
+                What would you like to do next?
+              </Typography>
+            </Box>
+          </Box>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+            {canCreateLeadFromSuccess ? (
+              <Button
+                variant='contained'
+                onClick={handleCreateLeadFromSuccess}
+                startIcon={<i className='ri-lightbulb-flash-line' />}
+                fullWidth={isMobile}
+              >
+                Create Lead
+              </Button>
+            ) : null}
+            <Button variant='outlined' onClick={handleGoToCustomersFromSuccess} fullWidth={isMobile}>
+              Go to Customers
+            </Button>
+          </Stack>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  )
 
   const mobileTitle = submitLabel || (initialValues ? 'Update Customer' : 'Add Customer')
 
@@ -569,6 +673,7 @@ const CustomersCreateForm = ({
           </Stack>
         </DialogContent>
       </Dialog>
+      {successDialog}
     </Card>
   ) : (
     <Box>
@@ -894,6 +999,7 @@ const CustomersCreateForm = ({
           </Stack>
         </DialogContent>
       </Dialog>
+      {successDialog}
     </Box>
   )
 }

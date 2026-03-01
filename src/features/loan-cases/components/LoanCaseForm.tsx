@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
@@ -72,6 +72,7 @@ const DOCUMENT_STATUS_OPTIONS: Array<{ value: LoanCaseDocumentStatus; label: str
 
 const LoanCaseForm = ({ caseId }: Props) => {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -116,6 +117,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const selectedLoanType = useMemo(() => loanTypes.find(l => l.id === loanTypeId) ?? null, [loanTypes, loanTypeId])
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
+
+  useEffect(() => {
+    if (caseId) return
+    if (customerId) return
+    const qp = searchParams.get('customerId')
+
+    if (!qp) return
+
+    setCustomerId(qp)
+  }, [caseId, customerId, searchParams])
 
   useEffect(() => {
     const msg = sessionStorage.getItem('loanCaseSaveSuccess')
