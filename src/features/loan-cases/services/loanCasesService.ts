@@ -7,13 +7,14 @@ import type {
   UpdateLoanCaseInput
 } from '@features/loan-cases/loan-cases.types'
 
-export type GetLoanCasesParams = { stageId?: string; assignedAgentId?: string }
+export type GetLoanCasesParams = { stageId?: string; assignedAgentId?: string; customerId?: string }
 
 export async function getLoanCases(params: GetLoanCasesParams = {}) {
   const url = new URL('/api/loan-cases', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
 
   if (params.stageId) url.searchParams.set('stageId', params.stageId)
   if (params.assignedAgentId) url.searchParams.set('assignedAgentId', params.assignedAgentId)
+  if (params.customerId) url.searchParams.set('customerId', params.customerId)
 
   const res = await fetch(url.toString(), { cache: 'no-store' })
 

@@ -95,6 +95,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const stageId = url.searchParams.get('stageId') || ''
   const assignedAgentId = url.searchParams.get('assignedAgentId') || ''
+  const customerId = url.searchParams.get('customerId') || ''
 
   const baseFilter: any = { tenantId: tenantIdObj }
 
@@ -106,6 +107,11 @@ export async function GET(request: Request) {
   if (assignedAgentId) {
     if (!ObjectId.isValid(assignedAgentId)) return NextResponse.json({ error: 'invalid_assignedAgentId' }, { status: 400 })
     baseFilter.assignedAgentId = new ObjectId(assignedAgentId)
+  }
+
+  if (customerId) {
+    if (!ObjectId.isValid(customerId)) return NextResponse.json({ error: 'invalid_customerId' }, { status: 400 })
+    baseFilter.customerId = new ObjectId(customerId)
   }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
