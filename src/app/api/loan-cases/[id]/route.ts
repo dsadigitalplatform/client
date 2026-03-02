@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
+import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
+
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
@@ -162,6 +164,20 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const patch: any = {}
   const errors: Record<string, string> = {}
 
+  if (body.nextFollowUpDate !== undefined) {
+    const d = body.nextFollowUpDate ? new Date(body.nextFollowUpDate) : null
+
+    if (!d || Number.isNaN(d.getTime())) errors.nextFollowUpDate = 'Invalid nextFollowUpDate'
+    else patch.nextFollowUpDate = d
+  }
+
+  if (body.expectedActionDate !== undefined) {
+    const d = body.expectedActionDate ? new Date(body.expectedActionDate) : null
+
+    if (!d || Number.isNaN(d.getTime())) errors.expectedActionDate = 'Invalid expectedActionDate'
+    else patch.expectedActionDate = d
+  }
+
   if (body.customerId != null && String(body.customerId) !== String((existing as any).customerId)) {
     errors.customerId = 'Customer cannot be changed after first save'
   }
@@ -299,6 +315,56 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   patch.updatedAt = new Date()
 
   await db.collection('loanCases').updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { $set: patch })
+
+  if (patch.nextFollowUpDate !== undefined || patch.expectedActionDate !== undefined || patch.assignedAgentId !== undefined) {
+    const priorAssigned: ObjectId | null = (existing as any).assignedAgentId ?? null
+    const nextAssigned: ObjectId | null = patch.assignedAgentId === undefined ? priorAssigned : patch.assignedAgentId
+    const reminderUserId: ObjectId = (nextAssigned ?? (existing as any).createdBy) as ObjectId
+
+    const nextFollowUp: Date | null = patch.nextFollowUpDate === undefined ? ((existing as any).nextFollowUpDate ?? null) : patch.nextFollowUpDate
+
+    const nextExpected: Date | null =
+      patch.expectedActionDate === undefined ? ((existing as any).expectedActionDate ?? null) : patch.expectedActionDate
+
+    const reminderDateTime = nextFollowUp ?? nextExpected
+
+    if (priorAssigned && nextAssigned && !priorAssigned.equals(nextAssigned)) {
+      await db.collection('reminders').deleteMany({
+        tenantId: tenantIdObj,
+        source: 'CASE_FOLLOW_UP',
+        status: 'pending',
+        caseId: new ObjectId(id),
+        userId: priorAssigned
+      })
+    }
+
+    if (!reminderDateTime) {
+      await db.collection('reminders').deleteMany({
+        tenantId: tenantIdObj,
+        source: 'CASE_FOLLOW_UP',
+        status: 'pending',
+        caseId: new ObjectId(id)
+      })
+    } else {
+      try {
+        await upsertCaseFollowUpReminder({
+          db,
+          tenantId: tenantIdObj,
+          caseId: new ObjectId(id),
+          userId: reminderUserId,
+          customerId: ((existing as any).customerId ?? null) as ObjectId | null,
+          reminderDateTime,
+          caseNumber: body?.caseNumber
+        })
+      } catch (e: any) {
+        console.error('reminder_upsert_failed', {
+          err: e?.message || String(e),
+          tenantId: tenantIdObj.toHexString(),
+          caseId: id
+        })
+      }
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }

@@ -56,7 +56,8 @@ const WIDGET_IDS = [
   'trend-cases',
   'trend-loan-volume',
   'agents',
-  'appointments'
+  'appointments',
+  'reminders'
 ] as const
 
 function isWidgetId(v: unknown): v is (typeof WIDGET_IDS)[number] {

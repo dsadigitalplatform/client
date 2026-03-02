@@ -99,6 +99,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
               Lead Status Board
             </MenuItem>
           )}
+          {hasTenant && (
+            <MenuItem href='/appointments' icon={<i className='ri-calendar-event-line' />}>
+              Appointments
+            </MenuItem>
+          )}
         </SubMenu>
 
         {hasTenant && (

@@ -410,6 +410,44 @@ ensureIndex('loanCases', { tenantId: 1, stageId: 1 }, { name: 'idx_loanCases_ten
 ensureIndex('loanCases', { tenantId: 1, createdBy: 1 }, { name: 'idx_loanCases_tenantId_createdBy' })
 ensureIndex('loanCases', { tenantId: 1, assignedAgentId: 1 }, { name: 'idx_loanCases_tenantId_assignedAgentId' })
 
+/* =========================
+   appointments
+   Scheduling and follow-up chain support.
+   ========================= */
+const appointmentsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'leadId', 'customerId', 'scheduledAt', 'followUpType', 'status', 'createdBy', 'createdAt', 'updatedAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      leadId: { bsonType: 'objectId' },
+      customerId: { bsonType: 'objectId' },
+      caseId: { bsonType: ['objectId', 'null'] },
+      scheduledAt: { bsonType: 'date' },
+      durationMinutes: { bsonType: ['number', 'null'], minimum: 1 },
+      followUpType: { enum: ['CALL', 'WHATSAPP', 'VISIT', 'EMAIL'] },
+      status: { enum: ['SCHEDULED', 'COMPLETED', 'RESCHEDULED', 'CANCELLED', 'NO_SHOW'] },
+      outcomeComments: { bsonType: ['string', 'null'] },
+      assignedTo: { bsonType: ['objectId', 'null'] },
+      createdBy: { bsonType: 'objectId' },
+      parentAppointmentId: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('appointments', appointmentsValidator)
+
+// Indexes
+ensureIndex('appointments', { tenantId: 1 }, { name: 'idx_appointments_tenantId' })
+ensureIndex('appointments', { leadId: 1 }, { name: 'idx_appointments_leadId' })
+ensureIndex('appointments', { customerId: 1 }, { name: 'idx_appointments_customerId' })
+ensureIndex('appointments', { scheduledAt: 1 }, { name: 'idx_appointments_scheduledAt' })
+ensureIndex('appointments', { assignedTo: 1 }, { name: 'idx_appointments_assignedTo' })
+ensureIndex('appointments', { parentAppointmentId: 1 }, { name: 'idx_appointments_parentAppointmentId' })
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {

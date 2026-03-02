@@ -14,7 +14,8 @@ const WIDGET_IDS: DashboardWidgetId[] = [
   'trend-cases',
   'trend-loan-volume',
   'agents',
-  'appointments'
+  'appointments',
+  'reminders'
 ]
 
 function normalizeGridItem(input: any): DashboardGridItem | null {

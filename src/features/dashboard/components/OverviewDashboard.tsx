@@ -29,6 +29,8 @@ import type { Layout, LayoutItem, ResponsiveLayouts } from 'react-grid-layout'
 import { useDashboardOverview } from '@features/dashboard/hooks/useDashboardOverview'
 import { useDashboardLayout } from '@features/dashboard/hooks/useDashboardLayout'
 import type { DashboardWidgetId, TrendPoint } from '@features/dashboard/dashboard.types'
+import { getReminders, updateReminderStatus } from '@features/reminders/services/remindersService'
+import type { ReminderListItem, ReminderStatus } from '@features/reminders/reminders.types'
 
 type Props = {
   hasTenantSelected: boolean
@@ -69,7 +71,8 @@ const ALL_WIDGET_IDS: DashboardWidgetId[] = [
   'trend-loan-volume',
   'stage-breakdown',
   'agents',
-  'appointments'
+  'appointments',
+  'reminders'
 ]
 
 const ADMIN_ONLY_WIDGET_IDS = new Set<DashboardWidgetId>(['agents'])
@@ -106,7 +109,14 @@ function defaultGridItem(id: DashboardWidgetId, bp: Breakpoint): LayoutItem {
     return { i: id, x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, maxW: Math.min(cols, 6) }
   }
 
-  if (id === 'trend-cases' || id === 'trend-loan-volume' || id === 'stage-breakdown' || id === 'agents' || id === 'appointments') {
+  if (
+    id === 'trend-cases' ||
+    id === 'trend-loan-volume' ||
+    id === 'stage-breakdown' ||
+    id === 'agents' ||
+    id === 'appointments' ||
+    id === 'reminders'
+  ) {
     return { i: id, x: 0, y: 0, w: bp === 'md' ? 6 : 4, h: 5, minW: bp === 'md' ? 6 : 3, minH: 4 }
   }
 
@@ -437,7 +447,8 @@ const ALL_WIDGETS: WidgetMeta[] = [
   { id: 'trend-loan-volume', title: 'Loan Volume Trend', icon: 'ri-funds-line' },
   { id: 'stage-breakdown', title: 'Case Stages', icon: 'ri-git-merge-line' },
   { id: 'agents', title: 'Sales Agents', icon: 'ri-team-line' },
-  { id: 'appointments', title: 'Appointments', icon: 'ri-calendar-event-line' }
+  { id: 'appointments', title: 'Appointments', icon: 'ri-calendar-event-line' },
+  { id: 'reminders', title: 'Reminders', icon: 'ri-notification-3-line' }
 ]
 
 export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Props) {
@@ -454,6 +465,52 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
     error: layoutError,
     save: saveLayout
   } = useDashboardLayout(hasTenantSelected)
+
+  const [reminders, setReminders] = useState<ReminderListItem[]>([])
+  const [remindersLoading, setRemindersLoading] = useState(false)
+  const [remindersError, setRemindersError] = useState<string | null>(null)
+
+  const refreshReminders = useCallback(async () => {
+    if (!hasTenantSelected) {
+      setReminders([])
+      setRemindersError(null)
+      setRemindersLoading(false)
+
+      return
+    }
+
+    setRemindersLoading(true)
+    setRemindersError(null)
+
+    try {
+      const items = await getReminders({ status: 'pending', limit: 10 })
+
+      setReminders(items)
+    } catch (e: any) {
+      setReminders([])
+      setRemindersError(e?.message || 'Failed to load reminders')
+    } finally {
+      setRemindersLoading(false)
+    }
+  }, [hasTenantSelected])
+
+  const setReminderStatus = useCallback(
+    async (reminderId: string, status: ReminderStatus) => {
+      setRemindersError(null)
+
+      try {
+        await updateReminderStatus(reminderId, status)
+        await refreshReminders()
+      } catch (e: any) {
+        setRemindersError(e?.message || 'Failed to update reminder')
+      }
+    },
+    [refreshReminders]
+  )
+
+  useEffect(() => {
+    void refreshReminders()
+  }, [refreshReminders])
 
   const defaultLayouts = useMemo(() => {
     const base = canEdit ? ALL_WIDGET_IDS : ALL_WIDGET_IDS.filter(id => id !== 'agents')
@@ -858,35 +915,163 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
       }
 
       if (id === 'appointments') {
-        const upcoming = [
-          { id: 'a1', title: 'Call with Customer', time: 'Today | 18:00-18:30', tag: 'New lead', color: 'primary' as const },
-          { id: 'a2', title: 'Document collection', time: 'Tomorrow | 11:00-11:30', tag: 'Documents', color: 'warning' as const },
-          { id: 'a3', title: 'Bank follow-up', time: 'Fri | 15:00-15:45', tag: 'Pipeline', color: 'info' as const }
-        ]
+        const formatWhen = (iso: string | null) => {
+          if (!iso) return '-'
+          const d = new Date(iso)
+
+          if (Number.isNaN(d.getTime())) return '-'
+
+          return d.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        }
+
+        const a = data?.appointments
+        const upcoming = a?.upcoming ?? []
 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            <Typography variant='body2' color='text.secondary'>
-              Upcoming customer appointments (placeholder)
-            </Typography>
-            <Divider />
-            {upcoming.map(a => (
-              <Box key={a.id} sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a.title}>
-                    {a.title}
-                  </Typography>
-                  <Typography variant='caption' color='text.secondary' noWrap>
-                    <i className='ri-time-line' style={{ marginRight: 6 }} />
-                    {a.time}
-                  </Typography>
-                </Box>
-                <Chip size='small' label={a.tag} color={a.color} variant='outlined' />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Chip size='small' variant='outlined' color='primary' label={`Upcoming: ${a?.upcomingCount?.toLocaleString?.() || 0}`} />
+                <Chip size='small' variant='outlined' color='success' label={`Completed: ${a?.completedCount?.toLocaleString?.() || 0}`} />
+                <Chip size='small' variant='outlined' color='warning' label={`Pending outcomes: ${a?.pendingOutcomeCount?.toLocaleString?.() || 0}`} />
               </Box>
-            ))}
-            <Typography variant='caption' color='text.secondary'>
-              This widget is ready to connect to real appointment data when available.
-            </Typography>
+              <Tooltip title='Refresh'>
+                <IconButton size='small' onClick={refresh} aria-label='Refresh appointments'>
+                  <i className='ri-refresh-line' />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Divider />
+            {loading ? (
+              <Typography variant='body2' color='text.secondary'>
+                Loading appointments…
+              </Typography>
+            ) : error ? (
+              <Typography variant='body2' color='error.main' sx={{ fontWeight: 700 }}>
+                {error}
+              </Typography>
+            ) : upcoming.length === 0 ? (
+              <Typography variant='body2' color='text.secondary'>
+                No upcoming appointments.
+              </Typography>
+            ) : (
+              upcoming.map(row => (
+                <Box key={row.id} sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={row.customerName || ''}>
+                      {row.customerName || 'Customer'}
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' noWrap title={row.leadTitle || ''}>
+                      {row.leadTitle || 'Lead'}
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' noWrap>
+                      <i className='ri-time-line' style={{ marginRight: 6 }} />
+                      {formatWhen(row.scheduledAt)}
+                      {row.followUpType ? ` • ${row.followUpType}` : ''}
+                    </Typography>
+                  </Box>
+                  <Chip size='small' variant='outlined' label={row.assignedAgentName || row.assignedAgentEmail || 'Unassigned'} />
+                </Box>
+              ))
+            )}
+          </Box>
+        )
+      }
+
+      if (id === 'reminders') {
+        const now = Date.now()
+
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            {remindersLoading ? (
+              <Typography variant='body2' color='text.secondary'>
+                Loading reminders…
+              </Typography>
+            ) : remindersError ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant='body2' color='error.main' sx={{ fontWeight: 700 }}>
+                  {remindersError}
+                </Typography>
+                <Button size='small' variant='outlined' onClick={refreshReminders}>
+                  Retry
+                </Button>
+              </Box>
+            ) : reminders.length === 0 ? (
+              <Typography variant='body2' color='text.secondary'>
+                No pending reminders.
+              </Typography>
+            ) : (
+              <>
+                {reminders.map(r => {
+                  const dt = new Date(r.reminderDateTime)
+                  const ts = Number.isFinite(dt.getTime()) ? dt.getTime() : null
+                  const overdue = ts != null ? ts < now : false
+
+                  const dateLabel =
+                    ts != null
+                      ? dt.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      : r.reminderDateTime
+
+                  const refLabel = r.customerName
+                    ? r.caseRef
+                      ? `${r.customerName} • Case #${r.caseRef}`
+                      : r.customerId
+                        ? r.customerName
+                        : r.customerName
+                    : r.caseRef
+                      ? `Case #${r.caseRef}`
+                      : null
+
+                  return (
+                    <Box
+                      key={r.id}
+                      sx={{
+                        display: 'flex',
+                        alignItems: { xs: 'stretch', sm: 'center' },
+                        justifyContent: 'space-between',
+                        gap: 1,
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        border: '1px solid',
+                        borderColor: overdue ? 'error.main' : 'divider',
+                        borderRadius: 2,
+                        px: 1.25,
+                        py: 1
+                      }}
+                    >
+                      <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                          <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={r.title}>
+                            {r.title}
+                          </Typography>
+                          <Chip
+                            size='small'
+                            variant='outlined'
+                            color={overdue ? 'error' : 'info'}
+                            label={overdue ? 'Overdue' : 'Upcoming'}
+                          />
+                        </Box>
+                        <Typography variant='caption' color='text.secondary' noWrap title={refLabel || ''}>
+                          {refLabel || '—'}
+                        </Typography>
+                        <Typography variant='caption' color={overdue ? 'error.main' : 'text.secondary'} noWrap title={String(dateLabel)}>
+                          <i className='ri-time-line' style={{ marginRight: 6 }} />
+                          {dateLabel}
+                        </Typography>
+                      </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                        <Button size='small' variant='outlined' onClick={() => void setReminderStatus(r.id, 'done')}>
+                          Done
+                        </Button>
+                        <Button size='small' variant='outlined' color='inherit' onClick={() => void setReminderStatus(r.id, 'skipped')}>
+                          Skip
+                        </Button>
+                      </Box>
+                    </Box>
+                  )
+                })}
+              </>
+            )}
           </Box>
         )
       }
@@ -897,7 +1082,21 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
         </Typography>
       )
     },
-    [data, loading, error, refresh, theme.palette.primary.main, theme.palette.info.main, theme.palette.success.main, totals]
+    [
+      data,
+      loading,
+      error,
+      refresh,
+      refreshReminders,
+      reminders,
+      remindersError,
+      remindersLoading,
+      setReminderStatus,
+      theme.palette.primary.main,
+      theme.palette.info.main,
+      theme.palette.success.main,
+      totals
+    ]
   )
 
   const header = (
@@ -1054,7 +1253,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                   >
                     <ListItemText
                       primary={meta.title}
-                      secondary={id === 'appointments' ? 'Placeholder until appointment integration' : undefined}
+                      secondary={id === 'appointments' ? 'Upcoming, completed, and pending outcomes' : undefined}
                     />
                     <i className='ri-add-line' />
                   </ListItemButton>

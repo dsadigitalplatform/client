@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
+import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
+
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
@@ -264,6 +266,12 @@ export async function POST(request: Request) {
   const stageId = String(body?.stageId || '')
   const assignedAgentId = body?.assignedAgentId == null ? null : String(body.assignedAgentId)
 
+  const nextFollowUpDateRaw = body?.nextFollowUpDate
+  const expectedActionDateRaw = body?.expectedActionDate
+
+  const nextFollowUpDate = nextFollowUpDateRaw ? new Date(nextFollowUpDateRaw) : null
+  const expectedActionDate = expectedActionDateRaw ? new Date(expectedActionDateRaw) : null
+
   const bankName = body?.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
   const requestedAmount = body?.requestedAmount == null ? null : Number(body.requestedAmount)
   const eligibleAmount = body?.eligibleAmount == null ? null : Number(body.eligibleAmount)
@@ -284,6 +292,14 @@ export async function POST(request: Request) {
     errors.interestRate = 'Interest rate must be numeric'
   if (tenureMonths != null && !(typeof tenureMonths === 'number' && Number.isFinite(tenureMonths) && tenureMonths >= 0))
     errors.tenureMonths = 'Tenure must be numeric'
+
+  if (nextFollowUpDateRaw != null && (!nextFollowUpDate || Number.isNaN(nextFollowUpDate.getTime()))) {
+    errors.nextFollowUpDate = 'Invalid nextFollowUpDate'
+  }
+
+  if (expectedActionDateRaw != null && (!expectedActionDate || Number.isNaN(expectedActionDate.getTime()))) {
+    errors.expectedActionDate = 'Invalid expectedActionDate'
+  }
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
@@ -345,7 +361,33 @@ export async function POST(request: Request) {
     isLocked: true
   }
 
+  if (nextFollowUpDate) doc.nextFollowUpDate = nextFollowUpDate
+  if (expectedActionDate) doc.expectedActionDate = expectedActionDate
+
   const res = await db.collection('loanCases').insertOne(doc)
+
+  const reminderDateTime = nextFollowUpDate ?? expectedActionDate
+  const reminderUserId = assignedAgentObjId ?? userId
+
+  if (reminderDateTime) {
+    try {
+      await upsertCaseFollowUpReminder({
+        db,
+        tenantId: tenantIdObj,
+        caseId: res.insertedId,
+        userId: reminderUserId,
+        customerId: new ObjectId(customerId),
+        reminderDateTime,
+        caseNumber: body?.caseNumber
+      })
+    } catch (e: any) {
+      console.error('reminder_upsert_failed', {
+        err: e?.message || String(e),
+        tenantId: tenantIdObj.toHexString(),
+        caseId: res.insertedId.toHexString()
+      })
+    }
+  }
 
   return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
 }

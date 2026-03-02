@@ -20,6 +20,24 @@ export type DashboardOverview = {
     trend: LoanCasesTrendPoint[]
     byStage: Array<{ stageId: string | null; stageName: string; count: number }>
   }
+  appointments: {
+    upcomingCount: number
+    completedCount: number
+    pendingOutcomeCount: number
+    upcoming: Array<{
+      id: string
+      leadId: string | null
+      customerId: string | null
+      leadTitle: string | null
+      customerName: string | null
+      scheduledAt: string | null
+      followUpType: string | null
+      status: string
+      outcomeComments: string | null
+      assignedAgentName: string | null
+      assignedAgentEmail: string | null
+    }>
+  }
   agents: null | {
     top: Array<{
       id: string
@@ -41,6 +59,7 @@ export type DashboardWidgetId =
   | 'trend-loan-volume'
   | 'agents'
   | 'appointments'
+  | 'reminders'
 
 export type DashboardGridItem = {
   i: DashboardWidgetId
