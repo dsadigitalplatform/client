@@ -8,6 +8,7 @@ export type CreateCustomerInput = {
   pan?: string | null
   aadhaarMasked?: string | null
   address?: string | null
+  remarks?: string | null
   employmentType: 'SALARIED' | 'SELF_EMPLOYED'
   monthlyIncome?: number | null
   cibilScore?: number | null

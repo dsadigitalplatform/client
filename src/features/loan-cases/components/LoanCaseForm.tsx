@@ -217,6 +217,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           fullName: data.customerName || '',
           mobile: '',
           email: null,
+          remarks: null,
           employmentType: 'SALARIED',
           monthlyIncome: null,
           cibilScore: null,

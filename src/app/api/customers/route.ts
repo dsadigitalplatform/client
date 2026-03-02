@@ -106,6 +106,7 @@ export async function GET(request: Request) {
         fullName: 1,
         mobile: 1,
         email: 1,
+        remarks: 1,
         employmentType: 1,
         monthlyIncome: 1,
         cibilScore: 1,
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
     fullName: String((r as any).fullName || ''),
     mobile: String((r as any).mobile || ''),
     email: (r as any).email ? String((r as any).email) : null,
+    remarks: (r as any).remarks ? String((r as any).remarks) : null,
     employmentType: String((r as any).employmentType || '') as EmploymentType,
     monthlyIncome: (r as any).monthlyIncome ?? null,
     cibilScore: (r as any).cibilScore ?? null,
@@ -177,6 +179,10 @@ export async function POST(request: Request) {
   const pan = body.pan ? String(body.pan).toUpperCase().trim() : null
   const aadhaarMasked = body.aadhaarMasked ? maskAadhaar(body.aadhaarMasked) : null
   const address = body.address ? String(body.address).trim() : null
+
+  const remarks =
+    body.remarks == null || String(body.remarks).trim().length === 0 ? null : String(body.remarks).trim()
+
   const employmentType = String(body.employmentType || '').toUpperCase() as EmploymentType
   const monthlyIncome = body.monthlyIncome == null ? null : Number(body.monthlyIncome)
   const cibilScore = body.cibilScore == null ? null : Number(body.cibilScore)
@@ -191,6 +197,7 @@ export async function POST(request: Request) {
   if (!['SALARIED', 'SELF_EMPLOYED'].includes(employmentType)) errors.employmentType = 'Invalid employment type'
   if (!['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'].includes(source)) errors.source = 'Invalid source'
   if (!isValidPAN(pan)) errors.pan = 'Invalid PAN format'
+  if (remarks != null && remarks.length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'
   if (monthlyIncome != null && !(monthlyIncome >= 0)) errors.monthlyIncome = 'Monthly income must be ≥ 0'
   if (cibilScore != null && !(Number.isInteger(cibilScore) && cibilScore >= 300 && cibilScore <= 900))
     errors.cibilScore = 'CIBIL must be 300–900'
@@ -211,6 +218,7 @@ export async function POST(request: Request) {
     pan,
     aadhaarMasked,
     address,
+    remarks,
     employmentType,
     monthlyIncome,
     cibilScore,

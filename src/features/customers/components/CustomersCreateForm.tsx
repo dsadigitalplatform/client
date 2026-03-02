@@ -41,6 +41,7 @@ type Props = {
     pan: string | null
     aadhaarMasked: string | null
     address: string | null
+    remarks: string | null
     employmentType: 'SALARIED' | 'SELF_EMPLOYED'
     source: 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
     monthlyIncome: number | null
@@ -76,6 +77,7 @@ const CustomersCreateForm = ({
   const [aadhaarMasked, setAadhaarMasked] = useState('')
   const [aadhaarDigits, setAadhaarDigits] = useState('')
   const [address, setAddress] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [employmentType, setEmploymentType] = useState<'SALARIED' | 'SELF_EMPLOYED'>('SALARIED')
   const [source, setSource] = useState<'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'>('WALK_IN')
   const [monthlyIncome, setMonthlyIncome] = useState<string>('')
@@ -101,6 +103,7 @@ const CustomersCreateForm = ({
     if (initialValues.aadhaarMasked !== undefined) setAadhaarMasked(initialValues.aadhaarMasked || '')
     setAadhaarDigits('')
     if (initialValues.address !== undefined) setAddress(initialValues.address || '')
+    if (initialValues.remarks !== undefined) setRemarks(initialValues.remarks || '')
     if (initialValues.employmentType) setEmploymentType(initialValues.employmentType)
     if (initialValues.source) setSource(initialValues.source)
     if (initialValues.monthlyIncome !== undefined && initialValues.monthlyIncome !== null)
@@ -188,6 +191,7 @@ const CustomersCreateForm = ({
         pan: pan ? pan.toUpperCase() : null,
         aadhaarMasked: aadhaarMasked || null,
         address: address || null,
+        remarks: remarks ? remarks.trim() : null,
         employmentType,
         monthlyIncome: monthlyIncome ? Number(monthlyIncome) : null,
         cibilScore: cibilScore ? Number(cibilScore) : null,
@@ -227,6 +231,7 @@ const CustomersCreateForm = ({
         setAadhaarMasked('')
         setAadhaarDigits('')
         setAddress('')
+        setRemarks('')
         setEmploymentType('SALARIED')
         setSource('WALK_IN')
         setMonthlyIncome('')
@@ -245,6 +250,7 @@ const CustomersCreateForm = ({
       setAadhaarMasked('')
       setAadhaarDigits('')
       setAddress('')
+      setRemarks('')
       setEmploymentType('SALARIED')
       setSource('WALK_IN')
       setMonthlyIncome('')
@@ -437,6 +443,24 @@ const CustomersCreateForm = ({
               startAdornment: (
                 <InputAdornment position='start'>
                   <i className='ri-mail-line' />
+                </InputAdornment>
+              )
+            }}
+          />
+
+          <TextField
+            label='Remarks'
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            error={!!fieldErrors.remarks}
+            helperText={fieldErrors.remarks || 'Optional (max 500 characters)'}
+            fullWidth
+            multiline
+            minRows={2}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-sticky-note-line' />
                 </InputAdornment>
               )
             }}
@@ -764,6 +788,24 @@ const CustomersCreateForm = ({
               startAdornment: (
                 <InputAdornment position='start'>
                   <i className='ri-mail-line' />
+                </InputAdornment>
+              )
+            }}
+          />
+
+          <TextField
+            label='Remarks'
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            error={!!fieldErrors.remarks}
+            helperText={fieldErrors.remarks || 'Optional (max 500 characters)'}
+            fullWidth
+            multiline
+            minRows={2}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-sticky-note-line' />
                 </InputAdornment>
               )
             }}

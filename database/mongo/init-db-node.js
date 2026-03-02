@@ -227,6 +227,7 @@ async function main() {
         pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
         aadhaarMasked: { bsonType: ['string', 'null'] },
         address: { bsonType: ['string', 'null'] },
+        remarks: { bsonType: ['string', 'null'], maxLength: 500 },
         employmentType: { enum: ['SALARIED', 'SELF_EMPLOYED'] },
         monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
         cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },

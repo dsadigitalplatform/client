@@ -50,6 +50,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     fullName: (row as any).fullName || '',
     mobile: (row as any).mobile || '',
     email: (row as any).email ?? null,
+    remarks: (row as any).remarks ?? null,
     dob: (row as any).dob ? new Date((row as any).dob).toISOString() : null,
     pan: (row as any).pan ?? null,
     aadhaarMasked: (row as any).aadhaarMasked ?? null,
@@ -91,6 +92,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.pan !== undefined) patch.pan = body.pan ? String(body.pan).toUpperCase().trim() : null
   if (body.aadhaarMasked !== undefined) patch.aadhaarMasked = body.aadhaarMasked ? String(body.aadhaarMasked) : null
   if (body.address !== undefined) patch.address = body.address ? String(body.address) : null
+  if (body.remarks !== undefined)
+    patch.remarks = body.remarks == null || String(body.remarks).trim().length === 0 ? null : String(body.remarks).trim()
   if (body.employmentType != null) patch.employmentType = String(body.employmentType).toUpperCase()
   if (body.monthlyIncome !== undefined) patch.monthlyIncome = body.monthlyIncome == null ? null : Number(body.monthlyIncome)
   if (body.cibilScore !== undefined) patch.cibilScore = body.cibilScore == null ? null : Number(body.cibilScore)
@@ -103,6 +106,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 10 digits'
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'
+  if (patch.remarks != null && String(patch.remarks).length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'
   if (patch.cibilScore != null && !(Number.isInteger(patch.cibilScore) && patch.cibilScore >= 300 && patch.cibilScore <= 900))
     errors.cibilScore = 'CIBIL must be 300–900'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })

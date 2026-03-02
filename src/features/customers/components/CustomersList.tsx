@@ -35,21 +35,6 @@ const CustomersList = () => {
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 
-  const sourceMeta = (v: string) => {
-    switch (v) {
-      case 'WALK_IN':
-        return { label: 'Walk-in', icon: 'ri-walk-line' }
-      case 'REFERRAL':
-        return { label: 'Referral', icon: 'ri-user-shared-line' }
-      case 'ONLINE':
-        return { label: 'Online', icon: 'ri-global-line' }
-      case 'SOCIAL_MEDIA':
-        return { label: 'Social Media', icon: 'ri-share-circle-line' }
-      default:
-        return { label: 'Other', icon: 'ri-more-2-line' }
-    }
-  }
-
   const cibilMeta = (v: number) => {
     if (v >= 750) return { label: 'High', color: 'success' as const, icon: 'ri-arrow-up-s-line' }
     if (v >= 650) return { label: 'Average', color: 'warning' as const, icon: 'ri-equalizer-line' }
@@ -59,15 +44,14 @@ const CustomersList = () => {
 
   const handleExport = () => {
     const rows = [
-      ['Full Name', 'Mobile', 'Email', 'Employment Type', 'Monthly Income', 'CIBIL', 'Source'],
+      ['Full Name', 'Mobile', 'Email', 'Employment Type', 'Monthly Income', 'CIBIL'],
       ...customers.map(c => [
         c.fullName,
         c.mobile,
         c.email ?? '',
         c.employmentType,
         c.monthlyIncome != null ? String(c.monthlyIncome) : '',
-        c.cibilScore != null ? String(c.cibilScore) : '',
-        c.source
+        c.cibilScore != null ? String(c.cibilScore) : ''
       ])
     ]
 
@@ -266,17 +250,16 @@ const CustomersList = () => {
               <TableCell>Employment</TableCell>
               <TableCell>Income</TableCell>
               <TableCell>CIBIL</TableCell>
-              <TableCell>Source</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7}>Loading...</TableCell>
+                <TableCell colSpan={6}>Loading...</TableCell>
               </TableRow>
             ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>No customers found</TableCell>
+                <TableCell colSpan={6}>No customers found</TableCell>
               </TableRow>
             ) : (
               customers.map(c => (
@@ -380,18 +363,6 @@ const CustomersList = () => {
                     ) : (
                       '-'
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const s = sourceMeta(c.source)
-
-                      return (
-                        <Box className='flex items-center gap-1.5'>
-                          <i className={`${s.icon} text-lg`} />
-                          <span>{s.label}</span>
-                        </Box>
-                      )
-                    })()}
                   </TableCell>
                 </TableRow>
               ))

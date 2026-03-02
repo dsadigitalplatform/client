@@ -6,6 +6,7 @@ export type Customer = {
   fullName: string
   mobile: string
   email: string | null
+  remarks: string | null
   employmentType: EmploymentType
   monthlyIncome: number | null
   cibilScore: number | null

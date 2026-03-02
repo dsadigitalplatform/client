@@ -218,6 +218,12 @@ const CustomerDetails = ({ id }: Props) => {
                       {data.address || '-'}
                     </Typography>
                   </Box>
+                  <Box className='flex items-center gap-1.5'>
+                    <i className='ri-sticky-note-line text-base' />
+                    <Typography color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                      {data.remarks || '-'}
+                    </Typography>
+                  </Box>
                   <Box className='flex items-center justify-between'>
                     <Typography color='text.secondary'>Income</Typography>
                     <Typography color='text.primary'>
@@ -240,6 +246,7 @@ const CustomerDetails = ({ id }: Props) => {
                   <Typography color='text.secondary'>PAN: {data.pan || '-'}</Typography>
                   <Typography color='text.secondary'>Aadhaar: {data.aadhaarMasked || '-'}</Typography>
                   <Typography color='text.secondary'>Address: {data.address || '-'}</Typography>
+                  <Typography color='text.secondary'>Remarks: {data.remarks || '-'}</Typography>
                   <Typography color='text.secondary'>
                     Income: {data.monthlyIncome != null ? formatINR(data.monthlyIncome) : '-'}
                   </Typography>
@@ -289,6 +296,7 @@ const CustomerDetails = ({ id }: Props) => {
                   pan: data.pan,
                   aadhaarMasked: data.aadhaarMasked,
                   address: data.address,
+                  remarks: data.remarks,
                   employmentType: data.employmentType,
                   source: data.source,
                   monthlyIncome: data.monthlyIncome,
