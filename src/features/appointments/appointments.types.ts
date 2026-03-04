@@ -20,7 +20,6 @@ export type Appointment = {
   status: AppointmentStatus | string
   outcomeComments: string | null
   outcomeHistory: AppointmentOutcomeHistoryEntry[]
-  assignedTo: string | null
   createdBy: string | null
   parentAppointmentId: string | null
   createdAt: string | null
@@ -34,7 +33,6 @@ export type CreateAppointmentInput = {
   scheduledAt: string | Date
   durationMinutes?: number
   followUpType: AppointmentFollowUpType
-  assignedTo?: string | null
   outcomeComments?: string | null
   notes?: string | null
 }
@@ -44,12 +42,10 @@ export type UpdateAppointmentInput = {
   durationMinutes?: number | null
   status?: AppointmentStatus
   outcomeComments?: string | null
-  assignedTo?: string | null
 }
 
 export type GetAppointmentsParams = {
   leadId?: string
-  assignedTo?: string
   status?: AppointmentStatus
   dateFrom?: string | Date
   dateTo?: string | Date
@@ -59,5 +55,5 @@ export type CreateFollowUpInput = {
   scheduledAt: string | Date
   durationMinutes?: number
   followUpType: AppointmentFollowUpType
-  assignedTo?: string | null
+  outcomeComments?: string | null
 }

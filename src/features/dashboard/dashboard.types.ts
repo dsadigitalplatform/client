@@ -34,8 +34,6 @@ export type DashboardOverview = {
       followUpType: string | null
       status: string
       outcomeComments: string | null
-      assignedAgentName: string | null
-      assignedAgentEmail: string | null
     }>
   }
   agents: null | {

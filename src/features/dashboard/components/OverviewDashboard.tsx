@@ -970,7 +970,6 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                       {row.followUpType ? ` • ${row.followUpType}` : ''}
                     </Typography>
                   </Box>
-                  <Chip size='small' variant='outlined' label={row.assignedAgentName || row.assignedAgentEmail || 'Unassigned'} />
                 </Box>
               ))
             )}

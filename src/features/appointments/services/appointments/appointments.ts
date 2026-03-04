@@ -37,8 +37,8 @@ function toIsoOrString(v: string | Date) {
 export type AppointmentListItem = Appointment & {
   customerName?: string | null
   leadTitle?: string | null
-  assignedAgentName?: string | null
-  assignedAgentEmail?: string | null
+  organizerName?: string | null
+  organizerEmail?: string | null
 }
 
 export type AppointmentDetails = AppointmentListItem & {
@@ -51,7 +51,6 @@ export async function listAppointmentsByLead(leadId: string, params: Omit<GetApp
 
   url.searchParams.set('leadId', leadId)
 
-  if (params.assignedTo) url.searchParams.set('assignedTo', params.assignedTo)
   if (params.status) url.searchParams.set('status', params.status as AppointmentStatus)
   if (params.dateFrom) url.searchParams.set('dateFrom', toIsoOrString(params.dateFrom))
   if (params.dateTo) url.searchParams.set('dateTo', toIsoOrString(params.dateTo))
@@ -65,7 +64,6 @@ export async function listAppointments(params: GetAppointmentsParams = {}) {
   const url = new URL('/api/appointments', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
 
   if (params.leadId) url.searchParams.set('leadId', params.leadId)
-  if (params.assignedTo) url.searchParams.set('assignedTo', params.assignedTo)
   if (params.status) url.searchParams.set('status', params.status as AppointmentStatus)
   if (params.dateFrom) url.searchParams.set('dateFrom', toIsoOrString(params.dateFrom))
   if (params.dateTo) url.searchParams.set('dateTo', toIsoOrString(params.dateTo))

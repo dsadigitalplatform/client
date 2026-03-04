@@ -4,12 +4,20 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useRouter, useSearchParams } from 'next/navigation'
 
+import { useSession } from 'next-auth/react'
+
+import dayjs, { type Dayjs } from 'dayjs'
+
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Avatar from '@mui/material/Avatar'
+import Badge from '@mui/material/Badge'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
@@ -18,7 +26,9 @@ import CardContent from '@mui/material/CardContent'
 import CardHeader from '@mui/material/CardHeader'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
@@ -52,6 +62,7 @@ import type { AppointmentFollowUpType } from '@features/appointments/appointment
 import { createAppointment } from '@features/appointments/services/appointments'
 import {
   createLoanCase,
+  getLoanCases,
   getChecklistByLoanType,
   getLoanCaseById,
   getTenantUsers,
@@ -65,7 +76,7 @@ type DraftAppointment = {
   scheduledAt: string
   followUpType: AppointmentFollowUpType | ''
   outcomeComments: string
-  assignedTo: string
+  customerName: string
 }
 
 type Props = {
@@ -79,9 +90,25 @@ const DOCUMENT_STATUS_OPTIONS: Array<{ value: LoanCaseDocumentStatus; label: str
   { value: 'APPROVED', label: 'Approved' }
 ]
 
+const CREATE_CUSTOMER_OPTION_ID = '__create_customer__'
+
+const CREATE_CUSTOMER_OPTION: Customer = {
+  id: CREATE_CUSTOMER_OPTION_ID,
+  fullName: 'Add New Customer',
+  mobile: '',
+  email: null,
+  remarks: null,
+  employmentType: 'SALARIED',
+  monthlyIncome: null,
+  cibilScore: null,
+  source: 'OTHER',
+  createdAt: null
+}
+
 const LoanCaseForm = ({ caseId }: Props) => {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -112,6 +139,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
 
   const [bankName, setBankName] = useState<string>('')
+  const [bankNameOptions, setBankNameOptions] = useState<string[]>([])
   const [requestedAmount, setRequestedAmount] = useState<string>('')
   const [eligibleAmount, setEligibleAmount] = useState<string>('')
   const [interestRate, setInterestRate] = useState<string>('')
@@ -124,15 +152,44 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [openAddCustomer, setOpenAddCustomer] = useState(false)
 
   const [draftAppointments, setDraftAppointments] = useState<DraftAppointment[]>([])
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
+  const [editingDraftAppointmentId, setEditingDraftAppointmentId] = useState<string | null>(null)
   const [apptScheduledAt, setApptScheduledAt] = useState('')
   const [apptFollowUpType, setApptFollowUpType] = useState<DraftAppointment['followUpType']>('')
   const [apptOutcomeComments, setApptOutcomeComments] = useState('')
-  const [apptAssignedTo, setApptAssignedTo] = useState('')
   const [apptErrors, setApptErrors] = useState<Record<string, string>>({})
+
+  const apptScheduledAtValue = useMemo(() => {
+    if (!apptScheduledAt) return null
+    const d = dayjs(apptScheduledAt)
+
+    return d.isValid() ? d : null
+  }, [apptScheduledAt])
 
   const selectedLoanType = useMemo(() => loanTypes.find(l => l.id === loanTypeId) ?? null, [loanTypes, loanTypeId])
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
+
+  const assignedAgentLabel = useMemo(() => {
+    if (!assignedAgentId) return 'Unassigned'
+
+    const agent = userOptions.find(u => u.id === assignedAgentId)
+
+    return agent?.name || agent?.email || 'Assigned Agent'
+  }, [assignedAgentId, userOptions])
+
+  const selectedCustomerLabel = useMemo(() => {
+    if (customerValue?.fullName) return customerValue.fullName
+
+    const match = customers.find(c => c.id === customerId)
+
+    return match?.fullName || ''
+  }, [customerId, customerValue?.fullName, customers])
+
+  const customerOptions = useMemo(() => [...customers, CREATE_CUSTOMER_OPTION], [customers])
+
+  const canOpenAppointmentDialog = Boolean(customerId && assignedAgentId)
+  const sessionUserId = (session as any)?.userId as string | undefined
 
   useEffect(() => {
     if (caseId) return
@@ -153,12 +210,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
     setSuccessMsg(msg)
     setSuccessOpen(true)
   }, [])
-
-  useEffect(() => {
-    if (isLocked) return
-    if (apptAssignedTo) return
-    if (assignedAgentId) setApptAssignedTo(assignedAgentId)
-  }, [assignedAgentId, apptAssignedTo, isLocked])
 
   useEffect(() => {
     if (!redirectOpen || !redirectTarget) return
@@ -285,41 +336,122 @@ const LoanCaseForm = ({ caseId }: Props) => {
     })()
   }, [loanTypeId, id])
 
+  useEffect(() => {
+    if (caseId) return
+    if (id) return
+    if (stageId) return
+    if (stageOptions.length === 0) return
+
+    setStageId(stageOptions[0].id)
+  }, [caseId, id, stageId, stageOptions])
+
+  useEffect(() => {
+    if (caseId) return
+    if (id) return
+    if (assignedAgentId) return
+    if (!sessionUserId) return
+    if (!userOptions.some(u => u.id === sessionUserId)) return
+
+    setAssignedAgentId(sessionUserId)
+  }, [assignedAgentId, caseId, id, sessionUserId, userOptions])
+
+  useEffect(() => {
+
+    void (async () => {
+      try {
+        const cases = await getLoanCases()
+        const byKey = new Map<string, string>()
+
+        cases.forEach(c => {
+          const value = (c.bankName || '').trim()
+
+          if (!value) return
+          const key = value.toLowerCase()
+
+          if (!byKey.has(key)) byKey.set(key, value)
+        })
+
+        setBankNameOptions(Array.from(byKey.values()).sort((a, b) => a.localeCompare(b)))
+      } catch {
+        setBankNameOptions([])
+      }
+    })()
+  }, [])
+
+  const followUpMeta = (type: DraftAppointment['followUpType']) => {
+    switch (type) {
+      case 'CALL':
+        return { label: 'Call', icon: 'ri-phone-line' }
+      case 'WHATSAPP':
+        return { label: 'WhatsApp', icon: 'ri-whatsapp-line' }
+      case 'VISIT':
+        return { label: 'Visit', icon: 'ri-map-pin-line' }
+      case 'EMAIL':
+        return { label: 'Email', icon: 'ri-mail-line' }
+      default:
+        return { label: '-', icon: 'ri-calendar-event-line' }
+    }
+  }
+
+  const openDraftAppointment = (a: DraftAppointment) => {
+    setEditingDraftAppointmentId(a.id)
+    setApptScheduledAt(a.scheduledAt)
+    setApptFollowUpType(a.followUpType)
+    setApptOutcomeComments(a.outcomeComments)
+    setApptErrors({})
+    setAppointmentDialogOpen(true)
+  }
+
   const addAppointment = () => {
     const next: Record<string, string> = {}
 
     if (!customerId) next.customerId = 'Select a customer first'
     if (!apptScheduledAt) next.scheduledAt = 'Date & time is required'
     if (!apptFollowUpType) next.followUpType = 'Follow-up type is required'
-    if (!apptAssignedTo) next.assignedTo = 'Assigned agent is required'
 
     const scheduledAtDate = apptScheduledAt ? new Date(apptScheduledAt) : null
 
     if (scheduledAtDate && Number.isNaN(scheduledAtDate.getTime())) next.scheduledAt = 'Invalid date & time'
     if (scheduledAtDate && scheduledAtDate.getTime() <= Date.now()) next.scheduledAt = 'Date & time must be in the future'
 
-    if (apptAssignedTo && !users.some(u => u.id === apptAssignedTo)) next.assignedTo = 'Assigned agent must belong to tenant'
-
     setApptErrors(next)
     if (Object.keys(next).length > 0) return
 
-    const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    if (editingDraftAppointmentId) {
+      setDraftAppointments(prev =>
+        prev.map(a =>
+          a.id === editingDraftAppointmentId
+            ? {
+              ...a,
+              scheduledAt: apptScheduledAt,
+              followUpType: apptFollowUpType,
+              outcomeComments: apptOutcomeComments,
+              customerName: selectedCustomerLabel || 'Customer'
+            }
+            : a
+        )
+      )
+    } else {
+      const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`
 
-    setDraftAppointments(prev => [
-      ...prev,
-      {
-        id,
-        scheduledAt: apptScheduledAt,
-        followUpType: apptFollowUpType,
-        outcomeComments: apptOutcomeComments,
-        assignedTo: apptAssignedTo
-      }
-    ])
+      setDraftAppointments(prev => [
+        ...prev,
+        {
+          id,
+          scheduledAt: apptScheduledAt,
+          followUpType: apptFollowUpType,
+          outcomeComments: apptOutcomeComments,
+          customerName: selectedCustomerLabel || 'Customer'
+        }
+      ])
+    }
 
+    setEditingDraftAppointmentId(null)
     setApptScheduledAt('')
     setApptFollowUpType('')
     setApptOutcomeComments('')
     setApptErrors({})
+    setAppointmentDialogOpen(false)
   }
 
   const validate = () => {
@@ -386,7 +518,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
               caseId: res.id,
               scheduledAt: a.scheduledAt,
               followUpType: a.followUpType as AppointmentFollowUpType,
-              assignedTo: a.assignedTo,
               outcomeComments: a.outcomeComments.trim().length === 0 ? null : a.outcomeComments.trim(),
               notes: a.outcomeComments.trim().length === 0 ? null : a.outcomeComments.trim()
             })
@@ -480,14 +611,22 @@ const LoanCaseForm = ({ caseId }: Props) => {
               <Divider />
 
               <Grid container rowSpacing={{ xs: 3, sm: 3 }} columnSpacing={{ xs: 2, sm: 3 }}>
-                <Grid size={{ xs: 12, sm: 8 }}>
+                <Grid size={{ xs: 12 }}>
                   <Autocomplete
-                    options={customers}
+                    options={customerOptions}
                     value={customerValue}
                     loading={customersLoading}
-                    getOptionLabel={o => `${o.fullName}${o.mobile ? ` (${o.mobile})` : ''}`}
+                    getOptionLabel={o =>
+                      o.id === CREATE_CUSTOMER_OPTION_ID ? o.fullName : `${o.fullName}${o.mobile ? ` (${o.mobile})` : ''}`
+                    }
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     onChange={(_, v) => {
+                      if (v?.id === CREATE_CUSTOMER_OPTION_ID) {
+                        setOpenAddCustomer(true)
+
+                        return
+                      }
+
                       setCustomerValue(v)
                       setCustomerId(v?.id || '')
                       setCustomerInputValue(v ? `${v.fullName}${v.mobile ? ` (${v.mobile})` : ''}` : '')
@@ -500,6 +639,36 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       if (reason === 'clear') setSearch('')
                     }}
                     disabled={isLocked}
+                    renderOption={(props, option) => (
+                      <Box
+                        component='li'
+                        {...props}
+                        sx={
+                          option.id === CREATE_CUSTOMER_OPTION_ID
+                            ? {
+                              position: 'sticky',
+                              bottom: 0,
+                              zIndex: 1,
+                              borderTop: '1px solid',
+                              borderColor: 'divider',
+                              bgcolor: 'background.paper',
+                              fontWeight: 700,
+                              color: 'primary.main',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 1,
+                              py: 1.25
+                            }
+                            : undefined
+                        }
+                      >
+                        {option.id === CREATE_CUSTOMER_OPTION_ID ? <i className='ri-user-add-line' /> : null}
+                        {option.id === CREATE_CUSTOMER_OPTION_ID
+                          ? 'Add New Customer'
+                          : `${option.fullName}${option.mobile ? ` (${option.mobile})` : ''}`}
+                      </Box>
+                    )}
                     renderInput={params => (
                       <TextField
                         {...params}
@@ -517,18 +686,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       />
                     )}
                   />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <Button
-                    variant='outlined'
-                    startIcon={<i className='ri-user-add-line' />}
-                    onClick={() => setOpenAddCustomer(true)}
-                    fullWidth
-                    sx={{ height: '100%' }}
-                    disabled={isLocked}
-                  >
-                    Add Customer
-                  </Button>
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -559,19 +716,30 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label='Bank / NBFC'
+                  <Autocomplete
+                    freeSolo
+                    options={bankNameOptions}
                     value={bankName}
-                    onChange={e => setBankName(e.target.value)}
-                    fullWidth
-                    size='small'
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position='start'>
-                          <i className='ri-bank-line' />
-                        </InputAdornment>
-                      )
-                    }}
+                    onChange={(_, v) => setBankName(typeof v === 'string' ? v : '')}
+                    inputValue={bankName}
+                    onInputChange={(_, v) => setBankName(v)}
+                    disabled={isLocked}
+                    renderInput={params => (
+                      <TextField
+                        {...params}
+                        label='Bank / NBFC'
+                        fullWidth
+                        size='small'
+                        InputProps={{
+                          ...params.InputProps,
+                          startAdornment: (
+                            <InputAdornment position='start'>
+                              <i className='ri-bank-line' />
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    )}
                   />
                 </Grid>
 
@@ -705,12 +873,105 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
                     Appointments
                   </Typography>
-                  <Typography variant='body2' color='text.secondary'>
-                    {id ? 'Manage appointments from the Appointments page' : 'Add at least one appointment before saving this lead'}
-                  </Typography>
+                  {!isMobile ? (
+                    <Typography variant='body2' color='text.secondary'>
+                      {id ? 'Manage appointments from the Appointments page' : 'Add at least one appointment before saving this lead'}
+                    </Typography>
+                  ) : null}
                 </Box>
                 {!id ? (
-                  <Chip size='small' label={`${draftAppointments.length} added`} variant='outlined' color={draftAppointments.length > 0 ? 'success' : 'default'} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {isMobile ? (
+                      <Badge
+                        badgeContent={draftAppointments.length}
+                        color='error'
+                        invisible={draftAppointments.length === 0}
+                        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                        sx={{
+                          '& .MuiBadge-badge': {
+                            fontWeight: 800,
+                            minWidth: 22,
+                            height: 22,
+                            borderRadius: 999,
+                            border: '2px solid',
+                            borderColor: 'background.paper',
+                            top: 4,
+                            right: 2
+                          }
+                        }}
+                      >
+                        <IconButton
+                          onClick={() => {
+                            setEditingDraftAppointmentId(null)
+                            setApptScheduledAt('')
+                            setApptFollowUpType('')
+                            setApptOutcomeComments('')
+                            setApptErrors({})
+                            setAppointmentDialogOpen(true)
+                          }}
+                          disabled={isLocked || !canOpenAppointmentDialog}
+                          aria-label='Add appointment'
+                          sx={{
+                            width: 46,
+                            height: 46,
+                            color: 'common.white',
+                            background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
+                            boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
+                            '&:hover': {
+                              background: 'linear-gradient(135deg, var(--mui-palette-primary-dark), var(--mui-palette-info-dark))',
+                              boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                            }
+                          }}
+                        >
+                          <i className='ri-calendar-event-line' />
+                        </IconButton>
+                      </Badge>
+                    ) : (
+                      <Badge
+                        badgeContent={draftAppointments.length}
+                        color='error'
+                        invisible={draftAppointments.length === 0}
+                        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                        sx={{
+                          '& .MuiBadge-badge': {
+                            fontWeight: 800,
+                            minWidth: 22,
+                            height: 22,
+                            borderRadius: 999,
+                            border: '2px solid',
+                            borderColor: 'background.paper',
+                            top: 4,
+                            right: 6
+                          }
+                        }}
+                      >
+                        <Button
+                          variant='contained'
+                          startIcon={<i className='ri-calendar-event-line' />}
+                          onClick={() => {
+                            setEditingDraftAppointmentId(null)
+                            setApptScheduledAt('')
+                            setApptFollowUpType('')
+                            setApptOutcomeComments('')
+                            setApptErrors({})
+                            setAppointmentDialogOpen(true)
+                          }}
+                          disabled={isLocked || !canOpenAppointmentDialog}
+                          sx={{
+                            borderRadius: 999,
+                            px: 2.25,
+                            background: 'linear-gradient(95deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
+                            boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
+                            '&:hover': {
+                              boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                            }
+                          }}
+                        >
+                          Add Appointment
+                        </Button>
+                      </Badge>
+                    )}
+                  </Box>
                 ) : null}
               </Box>
 
@@ -722,132 +983,121 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
               {!id ? (
                 <Paper variant='outlined' sx={{ borderRadius: 2.5, p: { xs: 2, sm: 2.5 } }}>
-                  <Grid container rowSpacing={{ xs: 2, sm: 2.5 }} columnSpacing={{ xs: 2, sm: 2.5 }}>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        label='Date & Time'
-                        type='datetime-local'
-                        value={apptScheduledAt}
-                        onChange={e => setApptScheduledAt(e.target.value)}
-                        size='small'
-                        fullWidth
-                        error={!!apptErrors.scheduledAt}
-                        helperText={apptErrors.scheduledAt || apptErrors.customerId}
-                        InputLabelProps={{ shrink: true }}
-                        disabled={isLocked}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <FormControl size='small' fullWidth error={!!apptErrors.followUpType}>
-                        <InputLabel id='loan-case-appt-followup'>Follow-up Type</InputLabel>
-                        <Select
-                          labelId='loan-case-appt-followup'
-                          label='Follow-up Type'
-                          value={apptFollowUpType}
-                          onChange={e => setApptFollowUpType(String(e.target.value).toUpperCase() as any)}
-                          disabled={isLocked}
-                        >
-                          <MenuItem value='CALL'>Call</MenuItem>
-                          <MenuItem value='WHATSAPP'>WhatsApp</MenuItem>
-                          <MenuItem value='VISIT'>Visit</MenuItem>
-                          <MenuItem value='EMAIL'>Email</MenuItem>
-                        </Select>
-                        {apptErrors.followUpType ? (
-                          <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
-                            {apptErrors.followUpType}
-                          </Typography>
-                        ) : null}
-                      </FormControl>
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <FormControl size='small' fullWidth error={!!apptErrors.assignedTo}>
-                        <InputLabel id='loan-case-appt-assigned'>Assigned Agent</InputLabel>
-                        <Select
-                          labelId='loan-case-appt-assigned'
-                          label='Assigned Agent'
-                          value={apptAssignedTo}
-                          onChange={e => setApptAssignedTo(String(e.target.value))}
-                          disabled={isLocked}
-                          renderValue={v => userOptions.find(x => x.id === v)?.name || userOptions.find(x => x.id === v)?.email || 'Select'}
-                        >
-                          {userOptions.map(u => (
-                            <MenuItem key={u.id} value={u.id}>
-                              {u.name || u.email || u.id}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                        {apptErrors.assignedTo ? (
-                          <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
-                            {apptErrors.assignedTo}
-                          </Typography>
-                        ) : null}
-                      </FormControl>
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        label='Outcome / comments'
-                        value={apptOutcomeComments}
-                        onChange={e => setApptOutcomeComments(e.target.value)}
-                        size='small'
-                        fullWidth
-                        multiline
-                        minRows={2}
-                        disabled={isLocked}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <Button variant='contained' onClick={addAppointment} disabled={isLocked}>
-                          Add Appointment
-                        </Button>
-                      </Box>
-                    </Grid>
-                  </Grid>
-
-                  {draftAppointments.length > 0 ? (
-                    <Box sx={{ mt: 2 }}>
-                      <Divider sx={{ mb: 1.5 }} />
-                      <Stack spacing={1.25}>
-                        {draftAppointments.map(a => {
-                          const user = userOptions.find(u => u.id === a.assignedTo)
-
-                          return (
-                            <Box
-                              key={a.id}
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                justifyContent: 'space-between',
-                                gap: 1.5
-                              }}
-                            >
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a.scheduledAt}>
-                                  {a.scheduledAt}
-                                </Typography>
-                                <Typography variant='caption' color='text.secondary' noWrap>
-                                  {a.followUpType || '-'}
-                                  {user ? ` • ${user.name || user.email || user.id}` : ''}
-                                </Typography>
-                                {a.outcomeComments.trim().length > 0 ? (
-                                  <Typography variant='caption' color='text.secondary' noWrap title={a.outcomeComments}>
-                                    {a.outcomeComments}
-                                  </Typography>
-                                ) : null}
-                              </Box>
-                              <IconButton
-                                size='small'
-                                onClick={() => setDraftAppointments(prev => prev.filter(x => x.id !== a.id))}
-                                aria-label='Remove appointment'
-                                disabled={isLocked}
-                              >
-                                <i className='ri-close-line' />
-                              </IconButton>
-                            </Box>
-                          )
-                        })}
-                      </Stack>
+                  {draftAppointments.length === 0 ? (
+                    <Box
+                      sx={{
+                        border: '1px dashed',
+                        borderColor: 'divider',
+                        borderRadius: 2.5,
+                        p: { xs: 2, sm: 2.5 },
+                        bgcolor: 'background.default'
+                      }}
+                    >
+                      <Typography variant='body2' color='text.secondary'>
+                        No appointments added yet. Use Add Appointment to schedule the first touchpoint.
+                      </Typography>
                     </Box>
+                  ) : null}
+                  {draftAppointments.length > 0 ? (
+                    isMobile ? (
+                      <Stack spacing={1.5}>
+                        {draftAppointments.map(a => (
+                          <Card
+                            key={a.id}
+                            variant='outlined'
+                            onClick={() => openDraftAppointment(a)}
+                            sx={{
+                              borderRadius: 2.5,
+                              boxShadow: 'none',
+                              borderColor: 'divider',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <CardContent sx={{ p: 2 }}>
+                              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 1.5 }}>
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a.customerName}>
+                                    {a.customerName}
+                                  </Typography>
+                                  <Typography variant='caption' color='text.secondary' sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <i className={followUpMeta(a.followUpType).icon} />
+                                    {followUpMeta(a.followUpType).label}
+                                  </Typography>
+                                  <Typography variant='body2' sx={{ mt: 0.5 }}>
+                                    {dayjs(a.scheduledAt).isValid() ? dayjs(a.scheduledAt).format('DD MMM YYYY, hh:mm A') : a.scheduledAt}
+                                  </Typography>
+                                  <Typography variant='caption' color='text.secondary'>
+                                    Organizer: {assignedAgentLabel}
+                                  </Typography>
+                                </Box>
+                                <IconButton
+                                  size='small'
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setDraftAppointments(prev => prev.filter(x => x.id !== a.id))
+                                  }}
+                                  aria-label='Remove appointment'
+                                  disabled={isLocked}
+                                >
+                                  <i className='ri-close-line' />
+                                </IconButton>
+                              </Box>
+                              {a.outcomeComments.trim().length > 0 ? (
+                                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
+                                  {a.outcomeComments}
+                                </Typography>
+                              ) : null}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Paper variant='outlined' sx={{ borderRadius: 2.5, overflow: 'hidden', mt: 0.5 }}>
+                        <Table size='small'>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Customer Name</TableCell>
+                              <TableCell>Follow-up Type</TableCell>
+                              <TableCell>Date & Time</TableCell>
+                              <TableCell>Organizer</TableCell>
+                              <TableCell width={90} align='right'>Action</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {draftAppointments.map(a => (
+                              <TableRow key={a.id} hover onClick={() => openDraftAppointment(a)} sx={{ cursor: 'pointer' }}>
+                                <TableCell>
+                                  <Typography variant='body2' sx={{ fontWeight: 700 }} noWrap title={a.customerName}>
+                                    {a.customerName}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                    <i className={followUpMeta(a.followUpType).icon} />
+                                    <Typography variant='body2'>{followUpMeta(a.followUpType).label}</Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell>{dayjs(a.scheduledAt).isValid() ? dayjs(a.scheduledAt).format('DD MMM YYYY, hh:mm A') : a.scheduledAt}</TableCell>
+                                <TableCell>{assignedAgentLabel}</TableCell>
+                                <TableCell align='right'>
+                                  <IconButton
+                                    size='small'
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      setDraftAppointments(prev => prev.filter(x => x.id !== a.id))
+                                    }}
+                                    aria-label='Remove appointment'
+                                    disabled={isLocked}
+                                  >
+                                    <i className='ri-close-line' />
+                                  </IconButton>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </Paper>
+                    )
                   ) : null}
                 </Paper>
               ) : null}
@@ -1038,6 +1288,154 @@ const LoanCaseForm = ({ caseId }: Props) => {
             submitLabel='Create Customer'
           />
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={appointmentDialogOpen}
+        onClose={() => setAppointmentDialogOpen(false)}
+        fullScreen={isMobile}
+        maxWidth='sm'
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1.5 }}>
+          <Typography variant='h6' sx={{ fontWeight: 800 }}>
+            {editingDraftAppointmentId ? 'Edit Appointment' : 'Add Appointment'}
+          </Typography>
+          <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+            Organizer: {assignedAgentLabel}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, px: { xs: 2.5, sm: 3 }, pb: 1 }}>
+          <Grid container rowSpacing={{ xs: 2, sm: 2.5 }} columnSpacing={{ xs: 2, sm: 2.5 }}>
+            <Grid size={{ xs: 12 }}>
+              <TextField
+                label='Customer'
+                value={selectedCustomerLabel || 'Select customer first'}
+                size='small'
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                InputProps={{ readOnly: true }}
+                error={!!apptErrors.customerId}
+                helperText={apptErrors.customerId}
+                sx={{
+                  mt: 0.5,
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 600
+                  }
+                }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DateTimePicker
+                  label='Date & Time'
+                  value={apptScheduledAtValue}
+                  onChange={(v: Dayjs | null) => setApptScheduledAt(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                  format='YYYY-MM-DD HH:mm'
+                  minutesStep={30}
+                  disablePast
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      fullWidth: true,
+                      error: !!apptErrors.scheduledAt,
+                      helperText: apptErrors.scheduledAt,
+                      disabled: isLocked,
+                      sx: {
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 2,
+                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                            borderWidth: 2
+                          }
+                        }
+                      }
+                    }
+                  }}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <FormControl size='small' fullWidth error={!!apptErrors.followUpType}>
+                <InputLabel id='loan-case-appt-followup'>Follow-up Type</InputLabel>
+                <Select
+                  labelId='loan-case-appt-followup'
+                  label='Follow-up Type'
+                  value={apptFollowUpType}
+                  onChange={e => setApptFollowUpType(String(e.target.value).toUpperCase() as any)}
+                  disabled={isLocked}
+                  renderValue={value => {
+                    const meta = followUpMeta(String(value).toUpperCase() as DraftAppointment['followUpType'])
+
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <i className={meta.icon} />
+                        <span>{meta.label}</span>
+                      </Box>
+                    )
+                  }}
+                >
+                  <MenuItem value='CALL'>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className='ri-phone-line' />
+                      <span>Call</span>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value='WHATSAPP'>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className='ri-whatsapp-line' />
+                      <span>WhatsApp</span>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value='VISIT'>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className='ri-map-pin-line' />
+                      <span>Visit</span>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value='EMAIL'>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className='ri-mail-line' />
+                      <span>Email</span>
+                    </Box>
+                  </MenuItem>
+                </Select>
+                {apptErrors.followUpType ? (
+                  <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                    {apptErrors.followUpType}
+                  </Typography>
+                ) : null}
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField
+                label='Outcome / comments'
+                value={apptOutcomeComments}
+                onChange={e => setApptOutcomeComments(e.target.value)}
+                size='small'
+                fullWidth
+                multiline
+                minRows={2}
+                disabled={isLocked}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button
+            variant='outlined'
+            onClick={() => {
+              setAppointmentDialogOpen(false)
+              setEditingDraftAppointmentId(null)
+              setApptErrors({})
+            }}
+            disabled={isLocked}
+          >
+            Cancel
+          </Button>
+          <Button variant='contained' onClick={addAppointment} disabled={isLocked || !canOpenAppointmentDialog}>
+            {editingDraftAppointmentId ? 'Update Appointment' : 'Save Appointment'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar

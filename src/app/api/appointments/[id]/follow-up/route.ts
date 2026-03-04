@@ -49,19 +49,6 @@ async function getTenantContext(session: any) {
   return { db, tenantIdObj, userId, role: String((membership as any).role || 'USER') as Role }
 }
 
-async function ensureAssignedToInTenant(db: any, tenantIdObj: ObjectId, assignedToObjId: ObjectId) {
-  const m = await db.collection('memberships').findOne(
-    {
-      tenantId: tenantIdObj,
-      status: 'active',
-      userId: assignedToObjId
-    },
-    { projection: { _id: 1 } }
-  )
-
-  return Boolean(m)
-}
-
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
 
@@ -80,11 +67,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const originalFilter: any = { _id: new ObjectId(id), tenantId: tenantIdObj }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    originalFilter.assignedTo = userId
+    originalFilter.createdBy = userId
   }
 
   const original = await db.collection('appointments').findOne(originalFilter, {
-    projection: { tenantId: 1, leadId: 1, customerId: 1, caseId: 1, assignedTo: 1 }
+    projection: { tenantId: 1, leadId: 1, customerId: 1, caseId: 1, scheduledAt: 1 }
   })
 
   if (!original) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -94,33 +81,29 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const scheduledAtRaw = body.scheduledAt
   const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null
   const followUpType = String(body.followUpType || '').toUpperCase().trim()
+  const outcomeCommentsRaw = body?.outcomeComments
+
+  const outcomeComments =
+    outcomeCommentsRaw == null || String(outcomeCommentsRaw).trim().length === 0 ? null : String(outcomeCommentsRaw).trim()
 
   const durationMinutes =
     body.durationMinutes == null || Number.isNaN(Number(body.durationMinutes)) ? 30 : Number(body.durationMinutes)
 
-  const assignedToRaw =
-    body.assignedTo == null || String(body.assignedTo).trim().length === 0 ? null : String(body.assignedTo).trim()
-
   const errors: Record<string, string> = {}
 
   if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) errors.scheduledAt = 'Invalid scheduledAt'
-  if (scheduledAt && scheduledAt.getTime() <= Date.now()) errors.scheduledAt = 'scheduledAt must be in the future'
   if (!FOLLOW_UP_TYPES.includes(followUpType as any)) errors.followUpType = 'Invalid followUpType'
   if (!(durationMinutes >= 1)) errors.durationMinutes = 'durationMinutes must be ≥ 1'
 
-  let assignedToObjId: ObjectId | null = (original as any).assignedTo ?? null
+  const parentScheduledAt = (original as any)?.scheduledAt ? new Date((original as any).scheduledAt) : null
 
-  if (role !== 'ADMIN' && role !== 'OWNER') {
-    assignedToObjId = userId
-  } else if (assignedToRaw) {
-    if (!ObjectId.isValid(assignedToRaw)) {
-      errors.assignedTo = 'Invalid assignedTo'
-    } else {
-      assignedToObjId = new ObjectId(assignedToRaw)
-      const ok = await ensureAssignedToInTenant(db, tenantIdObj, assignedToObjId)
-
-      if (!ok) errors.assignedTo = 'assignedTo_not_in_tenant'
-    }
+  if (
+    scheduledAt &&
+    parentScheduledAt &&
+    !Number.isNaN(parentScheduledAt.getTime()) &&
+    scheduledAt.getTime() <= parentScheduledAt.getTime()
+  ) {
+    errors.scheduledAt = 'scheduledAt must be after parent appointment'
   }
 
   if (Object.keys(errors).length > 0) {
@@ -138,8 +121,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     durationMinutes,
     followUpType,
     status: 'SCHEDULED',
-    outcomeComments: null,
-    assignedTo: assignedToObjId,
+    outcomeComments,
     createdBy: userId,
     parentAppointmentId: (original as any)._id,
     createdAt: now,
@@ -148,38 +130,31 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 
   const res = await db.collection('appointments').insertOne(doc)
 
-  if (!assignedToObjId) {
-    console.warn('reminder_skipped_missing_assigned_user', {
+  const customerIdObj: ObjectId | null = (original as any).customerId ?? null
+
+  const customer = customerIdObj
+    ? await db.collection('customers').findOne({ _id: customerIdObj, tenantId: tenantIdObj }, { projection: { fullName: 1 } })
+    : null
+
+  try {
+    await upsertAppointmentReminder({
+      db,
+      tenantId: tenantIdObj,
+      appointmentId: res.insertedId,
+      userId,
+      caseId: (original as any).caseId ?? null,
+      customerId: customerIdObj,
+      customerName: customer ? String((customer as any).fullName || '') : null,
+      followUpType,
+      notes: outcomeComments,
+      appointmentDateTime: scheduledAt
+    })
+  } catch (e: any) {
+    console.error('reminder_upsert_failed', {
+      err: e?.message || String(e),
       tenantId: tenantIdObj.toHexString(),
       appointmentId: res.insertedId.toHexString()
     })
-  } else {
-    const customerIdObj: ObjectId | null = (original as any).customerId ?? null
-
-    const customer = customerIdObj
-      ? await db.collection('customers').findOne({ _id: customerIdObj, tenantId: tenantIdObj }, { projection: { fullName: 1 } })
-      : null
-
-    try {
-      await upsertAppointmentReminder({
-        db,
-        tenantId: tenantIdObj,
-        appointmentId: res.insertedId,
-        userId: assignedToObjId,
-        caseId: (original as any).caseId ?? null,
-        customerId: customerIdObj,
-        customerName: customer ? String((customer as any).fullName || '') : null,
-        followUpType,
-        notes: null,
-        appointmentDateTime: scheduledAt
-      })
-    } catch (e: any) {
-      console.error('reminder_upsert_failed', {
-        err: e?.message || String(e),
-        tenantId: tenantIdObj.toHexString(),
-        appointmentId: res.insertedId.toHexString()
-      })
-    }
   }
 
   return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })

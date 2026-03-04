@@ -50,19 +50,6 @@ async function getTenantContext(session: any) {
   return { db, tenantIdObj, userId, role: String((membership as any).role || 'USER') as Role }
 }
 
-async function ensureAssignedToInTenant(db: any, tenantIdObj: ObjectId, assignedToObjId: ObjectId) {
-  const m = await db.collection('memberships').findOne(
-    {
-      tenantId: tenantIdObj,
-      status: 'active',
-      userId: assignedToObjId
-    },
-    { projection: { _id: 1 } }
-  )
-
-  return Boolean(m)
-}
-
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
 
@@ -72,7 +59,7 @@ export async function POST(request: Request) {
 
   if ('error' in ctx) return ctx.error
 
-  const { db, tenantIdObj, userId, role } = ctx
+  const { db, tenantIdObj, userId } = ctx
   const body = await request.json().catch(() => ({}))
 
   const leadId = String(body.leadId || '').trim()
@@ -89,7 +76,6 @@ export async function POST(request: Request) {
   const durationMinutes =
     body.durationMinutes == null || Number.isNaN(Number(body.durationMinutes)) ? 30 : Number(body.durationMinutes)
 
-  const assignedToRaw = body.assignedTo == null || String(body.assignedTo).trim().length === 0 ? null : String(body.assignedTo).trim()
   const caseIdRaw = body.caseId == null || String(body.caseId).trim().length === 0 ? null : String(body.caseId).trim()
 
   const errors: Record<string, string> = {}
@@ -102,21 +88,6 @@ export async function POST(request: Request) {
   if (!(durationMinutes >= 1)) errors.durationMinutes = 'durationMinutes must be ≥ 1'
 
   if (caseIdRaw && !ObjectId.isValid(caseIdRaw)) errors.caseId = 'Invalid caseId'
-
-  let assignedToObjId: ObjectId | null = null
-
-  if (role !== 'ADMIN' && role !== 'OWNER') {
-    assignedToObjId = userId
-  } else if (assignedToRaw) {
-    if (!ObjectId.isValid(assignedToRaw)) {
-      errors.assignedTo = 'Invalid assignedTo'
-    } else {
-      assignedToObjId = new ObjectId(assignedToRaw)
-      const ok = await ensureAssignedToInTenant(db, tenantIdObj, assignedToObjId)
-
-      if (!ok) errors.assignedTo = 'assignedTo_not_in_tenant'
-    }
-  }
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
@@ -151,7 +122,6 @@ export async function POST(request: Request) {
     followUpType,
     status: 'SCHEDULED',
     outcomeComments,
-    assignedTo: assignedToObjId,
     createdBy: userId,
     parentAppointmentId: null,
     createdAt: now,
@@ -160,32 +130,25 @@ export async function POST(request: Request) {
 
   const res = await db.collection('appointments').insertOne(doc)
 
-  if (!assignedToObjId) {
-    console.warn('reminder_skipped_missing_assigned_user', {
+  try {
+    await upsertAppointmentReminder({
+      db,
+      tenantId: tenantIdObj,
+      appointmentId: res.insertedId,
+      userId,
+      caseId: caseIdRaw ? new ObjectId(caseIdRaw) : null,
+      customerId: customerIdObj,
+      customerName: (customer as any)?.fullName ? String((customer as any).fullName) : null,
+      followUpType,
+      notes: body?.notes,
+      appointmentDateTime: scheduledAt
+    })
+  } catch (e: any) {
+    console.error('reminder_upsert_failed', {
+      err: e?.message || String(e),
       tenantId: tenantIdObj.toHexString(),
       appointmentId: res.insertedId.toHexString()
     })
-  } else {
-    try {
-      await upsertAppointmentReminder({
-        db,
-        tenantId: tenantIdObj,
-        appointmentId: res.insertedId,
-        userId: assignedToObjId,
-        caseId: caseIdRaw ? new ObjectId(caseIdRaw) : null,
-        customerId: customerIdObj,
-        customerName: (customer as any)?.fullName ? String((customer as any).fullName) : null,
-        followUpType,
-        notes: body?.notes,
-        appointmentDateTime: scheduledAt
-      })
-    } catch (e: any) {
-      console.error('reminder_upsert_failed', {
-        err: e?.message || String(e),
-        tenantId: tenantIdObj.toHexString(),
-        appointmentId: res.insertedId.toHexString()
-      })
-    }
   }
 
   return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
@@ -205,7 +168,6 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const leadId = url.searchParams.get('leadId') || ''
   const customerId = url.searchParams.get('customerId') || ''
-  const assignedTo = url.searchParams.get('assignedTo') || ''
   const status = url.searchParams.get('status') || ''
   const dateFrom = url.searchParams.get('dateFrom') || ''
   const dateTo = url.searchParams.get('dateTo') || ''
@@ -220,11 +182,6 @@ export async function GET(request: Request) {
   if (customerId) {
     if (!ObjectId.isValid(customerId)) return NextResponse.json({ error: 'invalid_customerId' }, { status: 400 })
     baseFilter.customerId = new ObjectId(customerId)
-  }
-
-  if (assignedTo) {
-    if (!ObjectId.isValid(assignedTo)) return NextResponse.json({ error: 'invalid_assignedTo' }, { status: 400 })
-    baseFilter.assignedTo = new ObjectId(assignedTo)
   }
 
   if (status) {
@@ -252,7 +209,7 @@ export async function GET(request: Request) {
   }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    baseFilter.assignedTo = userId
+    baseFilter.createdBy = userId
   }
 
   const rows = await db
@@ -279,12 +236,22 @@ export async function GET(request: Request) {
           let: { leadId: '$leadId', tenantId: '$tenantId' },
           pipeline: [
             { $match: { $expr: { $and: [{ $eq: ['$_id', '$$leadId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
-            { $project: { loanTypeId: 1, bankName: 1 } }
+            { $project: { loanTypeId: 1, bankName: 1, assignedAgentId: 1 } }
           ],
           as: 'lead'
         }
       },
       { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'lead.assignedAgentId',
+          foreignField: '_id',
+          pipeline: [{ $project: { name: 1, email: 1 } }],
+          as: 'assignedAgent'
+        }
+      },
+      { $unwind: { path: '$assignedAgent', preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: 'loanTypes',
@@ -307,16 +274,6 @@ export async function GET(request: Request) {
       },
       { $unwind: { path: '$loanType', preserveNullAndEmptyArrays: true } },
       {
-        $lookup: {
-          from: 'users',
-          localField: 'assignedTo',
-          foreignField: '_id',
-          pipeline: [{ $project: { name: 1, email: 1 } }],
-          as: 'assignedAgent'
-        }
-      },
-      { $unwind: { path: '$assignedAgent', preserveNullAndEmptyArrays: true } },
-      {
         $project: {
           _id: 1,
           leadId: 1,
@@ -328,7 +285,6 @@ export async function GET(request: Request) {
           status: 1,
           outcomeComments: 1,
           outcomeHistory: 1,
-          assignedTo: 1,
           createdBy: 1,
           parentAppointmentId: 1,
           createdAt: 1,
@@ -336,8 +292,8 @@ export async function GET(request: Request) {
           customerName: '$customer.fullName',
           leadLoanTypeName: '$loanType.name',
           leadBankName: '$lead.bankName',
-          assignedAgentName: '$assignedAgent.name',
-          assignedAgentEmail: '$assignedAgent.email'
+          organizerName: '$assignedAgent.name',
+          organizerEmail: '$assignedAgent.email'
         }
       }
     ])
@@ -366,15 +322,14 @@ export async function GET(request: Request) {
             changedBy: h?.changedBy ? String(h.changedBy) : null
           }))
         : [],
-      assignedTo: (r as any).assignedTo ? String((r as any).assignedTo) : null,
       createdBy: (r as any).createdBy ? String((r as any).createdBy) : null,
       parentAppointmentId: (r as any).parentAppointmentId ? String((r as any).parentAppointmentId) : null,
       createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
       updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
       customerName: (r as any).customerName ? String((r as any).customerName) : null,
       leadTitle,
-      assignedAgentName: (r as any).assignedAgentName ? String((r as any).assignedAgentName) : null,
-      assignedAgentEmail: (r as any).assignedAgentEmail ?? null
+      organizerName: (r as any).organizerName ? String((r as any).organizerName) : null,
+      organizerEmail: (r as any).organizerEmail ? String((r as any).organizerEmail) : null
     }
   })
 

@@ -49,19 +49,6 @@ async function getTenantContext(session: any) {
   return { db, tenantIdObj, userId, role: String((membership as any).role || 'USER') as Role }
 }
 
-async function ensureAssignedToInTenant(db: any, tenantIdObj: ObjectId, assignedToObjId: ObjectId) {
-  const m = await db.collection('memberships').findOne(
-    {
-      tenantId: tenantIdObj,
-      status: 'active',
-      userId: assignedToObjId
-    },
-    { projection: { _id: 1 } }
-  )
-
-  return Boolean(m)
-}
-
 function mapAppointment(row: any) {
   const statusRaw = row?.status ? String(row.status) : 'SCHEDULED'
   const status = statusRaw === 'SCHEDULED' ? 'PENDING' : statusRaw
@@ -84,7 +71,6 @@ function mapAppointment(row: any) {
           changedBy: h?.changedBy ? String(h.changedBy) : null
         }))
       : [],
-    assignedTo: row?.assignedTo ? String(row.assignedTo) : null,
     createdBy: row?.createdBy ? String(row.createdBy) : null,
     parentAppointmentId: row?.parentAppointmentId ? String(row.parentAppointmentId) : null,
     createdAt: row?.createdAt ? new Date(row.createdAt).toISOString() : null,
@@ -110,7 +96,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const filter: any = { _id: new ObjectId(id), tenantId: tenantIdObj }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    filter.assignedTo = userId
+    filter.createdBy = userId
   }
 
   const row = await db.collection('appointments').findOne(filter)
@@ -121,9 +107,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const customerIdObj: ObjectId | null = (row as any).customerId ?? null
   const leadIdObj: ObjectId | null = (row as any).leadId ?? null
-  const assignedToObj: ObjectId | null = (row as any).assignedTo ?? null
 
-  const [customer, lead, assignedAgent] = await Promise.all([
+  const [customer, lead] = await Promise.all([
     customerIdObj
       ? db
           .collection('customers')
@@ -133,9 +118,6 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       ? db
           .collection('loanCases')
           .findOne({ _id: leadIdObj, tenantId: tenantIdObj }, { projection: { loanTypeId: 1, bankName: 1 } })
-      : null,
-    assignedToObj
-      ? db.collection('users').findOne({ _id: assignedToObj }, { projection: { name: 1, email: 1 } })
       : null
   ])
 
@@ -153,8 +135,6 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     ...base,
     customerName: customer ? String((customer as any).fullName || '') : null,
     leadTitle,
-    assignedAgentName: assignedAgent ? String((assignedAgent as any).name || '') : null,
-    assignedAgentEmail: assignedAgent ? ((assignedAgent as any).email ?? null) : null,
     customer: customer
       ? {
           id: base.customerId!,
@@ -217,26 +197,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     patch.outcomeComments = body.outcomeComments == null ? null : String(body.outcomeComments)
   }
 
-  if (body.assignedTo !== undefined) {
-    if (role !== 'ADMIN' && role !== 'OWNER') {
-      errors.assignedTo = 'forbidden'
-    } else {
-    const v = body.assignedTo == null || String(body.assignedTo).trim().length === 0 ? null : String(body.assignedTo).trim()
-
-    if (v == null) {
-      patch.assignedTo = null
-    } else if (!ObjectId.isValid(v)) {
-      errors.assignedTo = 'Invalid assignedTo'
-    } else {
-      const assignedToObjId = new ObjectId(v)
-      const ok = await ensureAssignedToInTenant(db, tenantIdObj, assignedToObjId)
-
-      if (!ok) errors.assignedTo = 'assignedTo_not_in_tenant'
-      else patch.assignedTo = assignedToObjId
-    }
-    }
-  }
-
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'no_changes' }, { status: 400 })
   }
@@ -250,12 +210,12 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const filter: any = { _id: new ObjectId(id), tenantId: tenantIdObj }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    filter.assignedTo = userId
+    filter.createdBy = userId
   }
 
   const current = await db
     .collection('appointments')
-    .findOne(filter, { projection: { status: 1, outcomeComments: 1, scheduledAt: 1, assignedTo: 1, leadId: 1, customerId: 1, caseId: 1, followUpType: 1 } })
+    .findOne(filter, { projection: { status: 1, outcomeComments: 1, scheduledAt: 1, leadId: 1, customerId: 1, caseId: 1, followUpType: 1 } })
 
   if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -277,17 +237,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   await db.collection('appointments').updateOne(filter, update)
 
-  if (patch.scheduledAt !== undefined || patch.assignedTo !== undefined) {
-    const nextAssignedTo: ObjectId | null = patch.assignedTo === undefined ? ((current as any).assignedTo ?? null) : patch.assignedTo
+  if (patch.scheduledAt !== undefined) {
     const nextScheduledAt: Date | null = patch.scheduledAt === undefined ? ((current as any).scheduledAt ?? null) : patch.scheduledAt
 
     if (!nextScheduledAt) {
       console.warn('reminder_skipped_missing_appointment_datetime', {
-        tenantId: tenantIdObj.toHexString(),
-        appointmentId: id
-      })
-    } else if (!nextAssignedTo) {
-      console.warn('reminder_skipped_missing_assigned_user', {
         tenantId: tenantIdObj.toHexString(),
         appointmentId: id
       })
@@ -303,7 +257,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
           db,
           tenantId: tenantIdObj,
           appointmentId: new ObjectId(id),
-          userId: nextAssignedTo,
+          userId,
           caseId: ((current as any).caseId ?? null) as ObjectId | null,
           customerId: customerIdObj,
           customerName: customer ? String((customer as any).fullName || '') : null,

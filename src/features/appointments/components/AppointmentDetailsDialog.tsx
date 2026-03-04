@@ -16,9 +16,13 @@ import Select from '@mui/material/Select'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 
 import { createFollowUpAppointment, getAppointmentById, updateAppointment } from '@features/appointments/services/appointments'
-import { getTenantUsers } from '@features/appointments/services/tenantUsersService'
 import type { AppointmentStatus, AppointmentFollowUpType } from '@features/appointments/appointments.types'
 
 type Props = {
@@ -44,8 +48,19 @@ function formatDateTime(v: string | null) {
   }).format(d)
 }
 
-function normalizeStatusLabel(s: string) {
+function normalizeStatusKey(s: string) {
   return s === 'SCHEDULED' ? 'PENDING' : s
+}
+
+function formatStatusLabel(status: string) {
+  const s = normalizeStatusKey(status)
+
+  if (s === 'COMPLETED') return 'Completed'
+  if (s === 'RESCHEDULED') return 'Rescheduled'
+  if (s === 'CANCELLED') return 'Cancelled'
+  if (s === 'NO_SHOW') return 'No Show'
+
+  return 'Pending'
 }
 
 export default function AppointmentDetailsDialog({ open, appointmentId, initialTab = 'details', onClose, onUpdated }: Props) {
@@ -63,36 +78,12 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
 
   const [followUpType, setFollowUpType] = useState<AppointmentFollowUpType>('CALL')
   const [followUpScheduledAtLocal, setFollowUpScheduledAtLocal] = useState<string>('')
-  const [followUpDurationMinutes, setFollowUpDurationMinutes] = useState<number>(30)
-  const [followUpAssignedTo, setFollowUpAssignedTo] = useState<string>('')
-
-  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string | null }>>([])
+  const [followUpOutcomeComments, setFollowUpOutcomeComments] = useState<string>('')
 
   useEffect(() => {
     if (!open) return
     setTab(initialTab)
   }, [open, initialTab])
-
-  useEffect(() => {
-    if (!open) return
-    let active = true
-
-    void (async () => {
-      try {
-        const u = await getTenantUsers()
-
-        if (!active) return
-        setUsers(u)
-      } catch {
-        if (!active) return
-        setUsers([])
-      }
-    })()
-
-    return () => {
-      active = false
-    }
-  }, [open])
 
   useEffect(() => {
     if (!open || !appointmentId) return
@@ -109,7 +100,6 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
         setData(d)
         setStatus((d?.status as AppointmentStatus) || 'PENDING')
         setOutcomeComments(typeof d?.outcomeComments === 'string' ? d.outcomeComments : '')
-        setFollowUpAssignedTo(typeof d?.assignedTo === 'string' ? d.assignedTo : '')
       } catch (e: any) {
         if (!active) return
         setData(null)
@@ -140,13 +130,21 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
       .reverse()
       .map((h: any, idx: number) => ({
         key: `${idx}-${String(h?.changedAt || '')}`,
-        status: normalizeStatusLabel(String(h?.status || '')),
+        status: normalizeStatusKey(String(h?.status || '')),
         outcomeComments: h?.outcomeComments ?? null,
         changedAt: h?.changedAt ? String(h.changedAt) : null
       }))
   }, [data])
 
   const canRender = open && appointmentId
+  const isFollowUpMode = tab === 'followup'
+
+  const followUpScheduledAtValue = useMemo(() => {
+    if (!followUpScheduledAtLocal) return null
+    const d = dayjs(followUpScheduledAtLocal)
+
+    return d.isValid() ? d : null
+  }, [followUpScheduledAtLocal])
 
   const close = () => {
     setData(null)
@@ -154,7 +152,7 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
     setStatus('')
     setOutcomeComments('')
     setFollowUpScheduledAtLocal('')
-    setFollowUpDurationMinutes(30)
+    setFollowUpOutcomeComments('')
     setFollowUpType('CALL')
     onClose()
   }
@@ -199,13 +197,13 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
       await createFollowUpAppointment(appointmentId, {
         followUpType,
         scheduledAt: dt.toISOString(),
-        durationMinutes: followUpDurationMinutes,
-        assignedTo: followUpAssignedTo || null
+        durationMinutes: 30,
+        outcomeComments: followUpOutcomeComments.length > 0 ? followUpOutcomeComments : null
       })
       onUpdated()
       setTab('details')
       setFollowUpScheduledAtLocal('')
-      setFollowUpDurationMinutes(30)
+      setFollowUpOutcomeComments('')
       const d = await getAppointmentById(appointmentId)
 
       setData(d)
@@ -217,39 +215,41 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
   }
 
   const statusOptions: Array<{ value: AppointmentStatus; label: string }> = [
-    { value: 'PENDING', label: 'PENDING' },
-    { value: 'COMPLETED', label: 'COMPLETED' },
-    { value: 'RESCHEDULED', label: 'RESCHEDULED' },
-    { value: 'CANCELLED', label: 'CANCELLED' },
-    { value: 'NO_SHOW', label: 'NO_SHOW' }
+    { value: 'PENDING', label: formatStatusLabel('PENDING') },
+    { value: 'COMPLETED', label: formatStatusLabel('COMPLETED') },
+    { value: 'RESCHEDULED', label: formatStatusLabel('RESCHEDULED') },
+    { value: 'CANCELLED', label: formatStatusLabel('CANCELLED') },
+    { value: 'NO_SHOW', label: formatStatusLabel('NO_SHOW') }
   ]
 
   return (
     <Dialog open={open} onClose={close} fullWidth maxWidth='md'>
       <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
-          <Typography variant='h6'>Appointment</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button
-              size='small'
-              variant={tab === 'details' ? 'contained' : 'outlined'}
-              onClick={() => setTab('details')}
-              disabled={!canRender}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+            <Box
+              sx={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                bgcolor: 'primary.50',
+                color: 'primary.main',
+                display: 'grid',
+                placeItems: 'center'
+              }}
             >
-              Details
-            </Button>
-            <Button
-              size='small'
-              variant={tab === 'followup' ? 'contained' : 'outlined'}
-              onClick={() => setTab('followup')}
-              disabled={!canRender}
-            >
-              Add Follow-up
-            </Button>
+              <i className={isFollowUpMode ? 'ri-add-circle-line' : 'ri-calendar-event-line'} />
+            </Box>
+            <Box>
+              <Typography variant='h6'>{isFollowUpMode ? 'Add Follow-up' : 'Appointment Details'}</Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {isFollowUpMode ? 'Schedule the next follow-up activity' : 'Review and update appointment outcome'}
+              </Typography>
+            </Box>
           </Box>
         </Box>
       </DialogTitle>
-      <DialogContent sx={{ pt: 0 }}>
+      <DialogContent sx={{ pt: 2, pb: 1 }}>
         {error ? (
           <Alert severity='error' sx={{ mb: 2 }}>
             {error}
@@ -289,26 +289,12 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
 
             <Divider />
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
               <Box>
                 <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
                   Appointment
                 </Typography>
-                <Typography variant='body2'>
-                  {formatDateTime(data?.scheduledAt)} • {data?.durationMinutes || 30} min
-                </Typography>
-                <Typography variant='caption' color='text.secondary'>
-                  {data?.followUpType || '-'}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
-                  Assigned Agent
-                </Typography>
-                <Typography variant='body2'>{data?.assignedAgentName || data?.assignedAgentEmail || '-'}</Typography>
-                <Typography variant='caption' color='text.secondary'>
-                  {data?.assignedAgentEmail || ''}
-                </Typography>
+                <Typography variant='body2'>{formatDateTime(data?.scheduledAt)}</Typography>
               </Box>
             </Box>
 
@@ -369,7 +355,7 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                     }}
                   >
                     <Typography variant='body2' sx={{ fontWeight: 700 }}>
-                      {h.status || '-'}
+                      {h.status ? formatStatusLabel(h.status) : '-'}
                     </Typography>
                     <Typography variant='caption' color='text.secondary'>
                       {formatDateTime(h.changedAt)}
@@ -386,8 +372,8 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              <FormControl size='small' fullWidth>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 0.95fr' }, gap: 2, mt: 0.75 }}>
+              <FormControl size='small' fullWidth sx={{ minWidth: 0 }}>
                 <InputLabel id='follow-up-type'>Follow-up Type</InputLabel>
                 <Select
                   labelId='follow-up-type'
@@ -402,54 +388,45 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                 </Select>
               </FormControl>
 
-              <TextField
-                size='small'
-                label='Date & Time'
-                type='datetime-local'
-                value={followUpScheduledAtLocal}
-                onChange={e => setFollowUpScheduledAtLocal(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-              />
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DateTimePicker
+                  label='Date & Time'
+                  value={followUpScheduledAtValue}
+                  onChange={(v: Dayjs | null) => setFollowUpScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                  format='YYYY-MM-DD HH:mm'
+                  minutesStep={30}
+                  disablePast
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      fullWidth: true,
+                      sx: {
+                        minWidth: 0
+                      }
+                    }
+                  }}
+                />
+              </LocalizationProvider>
             </Box>
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              <TextField
-                size='small'
-                label='Duration (minutes)'
-                type='number'
-                value={followUpDurationMinutes}
-                onChange={e => setFollowUpDurationMinutes(Number(e.target.value))}
-                fullWidth
-              />
-              <FormControl size='small' fullWidth>
-                <InputLabel id='follow-up-assigned-to'>Assigned Agent</InputLabel>
-                <Select
-                  labelId='follow-up-assigned-to'
-                  label='Assigned Agent'
-                  value={followUpAssignedTo}
-                  onChange={e => setFollowUpAssignedTo(String(e.target.value))}
-                >
-                  <MenuItem value=''>Default</MenuItem>
-                  {users.map(u => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.name || u.email || u.id}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button variant='contained' onClick={addFollowUp} disabled={savingFollowUp}>
-                {savingFollowUp ? 'Creating...' : 'Create Follow-up'}
-              </Button>
-            </Box>
+            <TextField
+              size='small'
+              label='Outcome Description'
+              value={followUpOutcomeComments}
+              onChange={e => setFollowUpOutcomeComments(e.target.value)}
+              fullWidth
+              multiline
+              minRows={3}
+            />
           </Box>
         )}
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ px: 3, pb: 2, pt: 1, justifyContent: isFollowUpMode ? 'space-between' : 'flex-end' }}>
         <Button onClick={close}>Close</Button>
+        {isFollowUpMode ? (
+          <Button variant='contained' onClick={addFollowUp} disabled={savingFollowUp || !canRender}>
+            {savingFollowUp ? 'Creating...' : 'Create Follow-up'}
+          </Button>
+        ) : null}
       </DialogActions>
     </Dialog>
   )

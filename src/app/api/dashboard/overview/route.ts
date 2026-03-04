@@ -97,7 +97,7 @@ export async function GET() {
   if (role !== 'ADMIN' && role !== 'OWNER') {
     baseLoanCasesFilter.$or = [{ createdBy: userId }, { assignedAgentId: userId }]
     baseCustomersFilter.createdBy = userId
-    baseAppointmentsFilter.assignedTo = userId
+    baseAppointmentsFilter.createdBy = userId
   }
 
   const { start: trendStart, buckets } = weekBuckets(12)
@@ -248,16 +248,6 @@ export async function GET() {
         },
         { $unwind: { path: '$loanType', preserveNullAndEmptyArrays: true } },
         {
-          $lookup: {
-            from: 'users',
-            localField: 'assignedTo',
-            foreignField: '_id',
-            pipeline: [{ $project: { name: 1, email: 1 } }],
-            as: 'assignedAgent'
-          }
-        },
-        { $unwind: { path: '$assignedAgent', preserveNullAndEmptyArrays: true } },
-        {
           $project: {
             _id: 1,
             leadId: 1,
@@ -268,9 +258,7 @@ export async function GET() {
             outcomeComments: 1,
             customerName: '$customer.fullName',
             leadLoanTypeName: '$loanType.name',
-            leadBankName: '$lead.bankName',
-            assignedAgentName: '$assignedAgent.name',
-            assignedAgentEmail: '$assignedAgent.email'
+            leadBankName: '$lead.bankName'
           }
         }
       ])
@@ -327,9 +315,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
       status: String(r?.status || 'SCHEDULED') === 'SCHEDULED' ? 'PENDING' : String(r?.status || 'PENDING'),
       outcomeComments: r?.outcomeComments ?? null,
       customerName: r?.customerName ? String(r.customerName) : null,
-      leadTitle,
-      assignedAgentName: r?.assignedAgentName ? String(r.assignedAgentName) : null,
-      assignedAgentEmail: r?.assignedAgentEmail ?? null
+      leadTitle
     }
   })
 
