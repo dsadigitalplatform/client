@@ -1,8 +1,12 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import Link from 'next/link'
+
+import { useSession } from 'next-auth/react'
+
+import useSWR from 'swr'
 
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -33,6 +37,15 @@ import type { AppointmentListItem } from '@features/appointments/services/appoin
 
 type Props = {
     leadId?: string
+    embedded?: boolean
+    refreshKey?: number
+    onLoaded?: (count: number) => void
+}
+
+type TenantUser = {
+    id: string
+    name: string
+    email: string | null
 }
 
 type AppointmentTreeNode = {
@@ -99,9 +112,25 @@ function getSortedDescendants(node: AppointmentTreeNode): AppointmentTreeNode[] 
     return out
 }
 
-export default function LeadAppointmentsDashboard({ leadId }: Props) {
+export default function LeadAppointmentsDashboard({ leadId, embedded = false, refreshKey, onLoaded }: Props) {
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+    const { data: session } = useSession()
+    const sessionUserId = String((session as any)?.userId || '')
+    const isSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+
+    const fetcher = useCallback((url: string) => fetch(url, { cache: 'no-store' }).then(r => r.json()), [])
+
+    const { data: tenantInfo } = useSWR('/api/session/tenant', fetcher, { revalidateOnFocus: false })
+    const tenantRole = (tenantInfo as any)?.role as 'OWNER' | 'ADMIN' | 'USER' | undefined
+    const isAdminOrOwner = tenantRole === 'OWNER' || tenantRole === 'ADMIN' || isSuperAdmin
+
+    const { data: tenantUsersData } = useSWR(tenantInfo?.currentTenantId ? '/api/tenant-users' : null, fetcher, {
+        revalidateOnFocus: false
+    })
+
+    const tenantUsers = (Array.isArray((tenantUsersData as any)?.users) ? (tenantUsersData as any).users : []) as TenantUser[]
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -109,6 +138,7 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
 
     const [view, setView] = useState<'list' | 'kanban'>('list')
 
+    const [organizerId, setOrganizerId] = useState<string>('')
     const [status, setStatus] = useState<string>('')
     const [dateFrom, setDateFrom] = useState<string>('')
     const [dateTo, setDateTo] = useState<string>('')
@@ -116,8 +146,26 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [detailsTab, setDetailsTab] = useState<'details' | 'followup'>('details')
-    const [collapsedLeadGroups, setCollapsedLeadGroups] = useState<Record<string, boolean>>({})
     const [collapsedFollowUpNodes, setCollapsedFollowUpNodes] = useState<Record<string, boolean>>({})
+    const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null)
+    const onLoadedRef = useRef<Props['onLoaded']>(onLoaded)
+
+    useEffect(() => {
+        onLoadedRef.current = onLoaded
+    }, [onLoaded])
+
+    useEffect(() => {
+        if (!sessionUserId) return
+
+        setOrganizerId(v => (v ? v : sessionUserId))
+    }, [sessionUserId])
+
+    useEffect(() => {
+        if (!sessionUserId) return
+        if (isAdminOrOwner) return
+
+        setOrganizerId(sessionUserId)
+    }, [isAdminOrOwner, sessionUserId])
 
     const refresh = useCallback(async () => {
         setLoading(true)
@@ -125,6 +173,7 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
 
         try {
             const baseParams = {
+                organizerId: organizerId || undefined,
                 status: (status || undefined) as AppointmentStatus | undefined,
                 dateFrom: dateFrom || undefined,
                 dateTo: dateTo || undefined
@@ -133,17 +182,34 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
             const rows = leadId ? await listAppointmentsByLead(leadId, baseParams) : await listAppointments(baseParams)
 
             setAppointments(rows)
+
+            const cb = onLoadedRef.current
+
+            if (cb) cb(rows.length)
         } catch (e: any) {
             setAppointments([])
             setError(e?.message || 'Failed to load appointments')
         } finally {
             setLoading(false)
         }
-    }, [leadId, status, dateFrom, dateTo])
+    }, [leadId, organizerId, status, dateFrom, dateTo])
 
     useEffect(() => {
         void refresh()
     }, [refresh])
+
+    useEffect(() => {
+        if (refreshKey == null) return
+
+        void refresh()
+    }, [refreshKey, refresh])
+
+    useEffect(() => {
+        if (!lastUpdatedId) return
+        const t = setTimeout(() => setLastUpdatedId(null), 3000)
+
+        return () => clearTimeout(t)
+    }, [lastUpdatedId])
 
     const grouped = useMemo(() => {
         const out: Record<string, any[]> = { PENDING: [], COMPLETED: [], RESCHEDULED: [], CANCELLED: [] }
@@ -158,6 +224,35 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
         Object.values(out).forEach(arr => arr.sort((a, b) => String(a?.scheduledAt || '').localeCompare(String(b?.scheduledAt || ''))))
 
         return out
+    }, [appointments])
+
+    const latestAppointmentByCase = useMemo(() => {
+        const map = new Map<string, AppointmentListItem>()
+
+        const getTimeValue = (a: AppointmentListItem) => {
+            const scheduledTime = a?.scheduledAt ? new Date(a.scheduledAt).getTime() : NaN
+            const updatedTime = a?.updatedAt ? new Date(a.updatedAt).getTime() : NaN
+
+            if (!Number.isNaN(scheduledTime)) return scheduledTime
+            if (!Number.isNaN(updatedTime)) return updatedTime
+
+            return 0
+        }
+
+        appointments.forEach(a => {
+            const key = String(a?.caseId || a?.leadId || a?.id || 'UNASSIGNED')
+            const existing = map.get(key)
+
+            if (!existing) {
+                map.set(key, a)
+
+                return
+            }
+
+            if (getTimeValue(a) >= getTimeValue(existing)) map.set(key, a)
+        })
+
+        return map
     }, [appointments])
 
     const leadTreeGroups = useMemo(() => {
@@ -217,18 +312,6 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
     }, [appointments])
 
     useEffect(() => {
-        setCollapsedLeadGroups(prev => {
-            const next = { ...prev }
-
-            leadTreeGroups.forEach(group => {
-                if (typeof next[group.leadId] !== 'boolean') next[group.leadId] = false
-            })
-
-            return next
-        })
-    }, [leadTreeGroups])
-
-    useEffect(() => {
         setCollapsedFollowUpNodes(prev => {
             const next = { ...prev }
 
@@ -243,15 +326,6 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
             return next
         })
     }, [leadTreeGroups])
-
-    const isGroupCollapsed = (groupLeadId: string) => Boolean(collapsedLeadGroups[groupLeadId])
-
-    const toggleGroup = (groupLeadId: string) => {
-        setCollapsedLeadGroups(prev => ({
-            ...prev,
-            [groupLeadId]: !prev[groupLeadId]
-        }))
-    }
 
     const isNodeCollapsed = (nodeId: string) => Boolean(collapsedFollowUpNodes[nodeId])
 
@@ -271,6 +345,26 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
     const closeDetails = () => {
         setDetailsOpen(false)
         setSelectedId(null)
+    }
+
+    const handleUpdated = (id?: string | null) => {
+        if (id) setLastUpdatedId(String(id))
+        void refresh()
+    }
+
+    const isHighlighted = (id: string) => lastUpdatedId === id
+
+    const canAddFollowUp = (a: AppointmentListItem) => {
+        const key = String(a?.caseId || a?.leadId || a?.id || 'UNASSIGNED')
+        const latest = latestAppointmentByCase.get(key)
+
+        return latest ? String(latest.id) === String(a?.id || '') : true
+    }
+
+    const clearNonOrganizerFilters = () => {
+        setStatus('')
+        setDateFrom('')
+        setDateTo('')
     }
 
     const header = (
@@ -309,48 +403,89 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
     )
 
     const filters = (
-        <Box
-            sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
-                gap: 2
-            }}
-        >
-            <FormControl size='small' fullWidth>
-                <InputLabel id='appointments-status-filter'>Status</InputLabel>
-                <Select
-                    labelId='appointments-status-filter'
-                    label='Status'
-                    value={status}
-                    onChange={e => setStatus(String(e.target.value))}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(4, 1fr)' },
+                    gap: 2
+                }}
+            >
+                <FormControl size='small' fullWidth>
+                    <InputLabel id='appointments-organizer-filter'>Organizer</InputLabel>
+                    <Select
+                        labelId='appointments-organizer-filter'
+                        label='Organizer'
+                        value={organizerId}
+                        onChange={e => setOrganizerId(String(e.target.value))}
+                        disabled={!isAdminOrOwner}
+                    >
+                        {isAdminOrOwner ? <MenuItem value=''>All</MenuItem> : null}
+                        {tenantUsers.map(u => {
+                            const label = String(u?.name || u?.email || u?.id || '').trim() || 'User'
+                            const isYou = sessionUserId && String(u.id) === sessionUserId
+
+                            return (
+                                <MenuItem key={u.id} value={u.id}>
+                                    {label}
+                                    {isYou ? ' (You)' : ''}
+                                </MenuItem>
+                            )
+                        })}
+                        {sessionUserId && !tenantUsers.some(u => String(u.id) === sessionUserId) ? (
+                            <MenuItem value={sessionUserId}>You</MenuItem>
+                        ) : null}
+                    </Select>
+                </FormControl>
+
+                <FormControl size='small' fullWidth>
+                    <InputLabel id='appointments-status-filter'>Status</InputLabel>
+                    <Select
+                        labelId='appointments-status-filter'
+                        label='Status'
+                        value={status}
+                        onChange={e => setStatus(String(e.target.value))}
+                    >
+                        <MenuItem value=''>All</MenuItem>
+                        <MenuItem value='PENDING'>Pending</MenuItem>
+                        <MenuItem value='COMPLETED'>Completed</MenuItem>
+                        <MenuItem value='RESCHEDULED'>Rescheduled</MenuItem>
+                        <MenuItem value='CANCELLED'>Cancelled</MenuItem>
+                    </Select>
+                </FormControl>
+
+                <TextField
+                    size='small'
+                    label='From'
+                    type='date'
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                />
+
+                <TextField
+                    size='small'
+                    label='To'
+                    type='date'
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                />
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                    size='small'
+                    variant='text'
+                    onClick={clearNonOrganizerFilters}
+                    disabled={!status && !dateFrom && !dateTo}
+                    fullWidth={isMobile}
                 >
-                    <MenuItem value=''>All</MenuItem>
-                    <MenuItem value='PENDING'>Pending</MenuItem>
-                    <MenuItem value='COMPLETED'>Completed</MenuItem>
-                    <MenuItem value='RESCHEDULED'>Rescheduled</MenuItem>
-                    <MenuItem value='CANCELLED'>Cancelled</MenuItem>
-                </Select>
-            </FormControl>
-
-            <TextField
-                size='small'
-                label='From'
-                type='date'
-                value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-            />
-
-            <TextField
-                size='small'
-                label='To'
-                type='date'
-                value={dateTo}
-                onChange={e => setDateTo(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-            />
+                    Clear filters
+                </Button>
+            </Box>
         </Box>
     )
 
@@ -373,13 +508,12 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                     </CardContent>
                 </Card>
             ) : (
-                leadTreeGroups.map(group => {
-                    const collapsed = isGroupCollapsed(group.leadId)
-
+                leadTreeGroups.flatMap(group => {
                     const renderNode = (node: AppointmentTreeNode, depth: number) => {
                         const a = node.item
                         const sc = statusChip(String(a?.status || 'PENDING'))
                         const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
+                        const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
                         const descendants = depth === 0 ? getSortedDescendants(node) : []
                         const hasChildren = depth === 0 && descendants.length > 0
                         const nodeCollapsed = hasChildren && isNodeCollapsed(String(a.id))
@@ -390,10 +524,14 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                     onClick={() => openDetails(String(a.id), 'details')}
                                     sx={{
                                         borderRadius: 3,
-                                        boxShadow: 'none',
                                         border: '1px solid',
-                                        borderColor: 'divider',
-                                        backgroundColor: 'background.paper',
+                                        borderColor: isHighlighted(String(a?.id || ''))
+                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.4)'
+                                            : 'divider',
+                                        backgroundColor: isHighlighted(String(a?.id || ''))
+                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                            : 'background.paper',
+                                        boxShadow: isHighlighted(String(a?.id || '')) ? '0 12px 30px rgb(0 0 0 / 0.12)' : 'none',
                                         cursor: 'pointer',
                                         ml: depth * 1.25
                                     }}
@@ -416,13 +554,34 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                                         ) : null}
                                                     </Box>
                                                     {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
-                                                    <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a?.customerName || ''}>
-                                                        {a?.customerName || 'Customer'}
-                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
+                                                        <Typography
+                                                            variant='body2'
+                                                            sx={{ fontWeight: 800, minWidth: 0, flex: 1 }}
+                                                            noWrap
+                                                            title={depth === 0 ? caseTitle : a?.customerName || ''}
+                                                        >
+                                                            {depth === 0 ? caseTitle : a?.customerName || 'Customer'}
+                                                        </Typography>
+                                                        {depth === 0 && a?.leadId ? (
+                                                            <Tooltip title='View case'>
+                                                                <IconButton
+                                                                    size='small'
+                                                                    component={Link}
+                                                                    href={`/loan-cases/${encodeURIComponent(String(a.leadId))}`}
+                                                                    onClick={e => e.stopPropagation()}
+                                                                >
+                                                                    <i className='ri-external-link-line' />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        ) : null}
+                                                    </Box>
                                                 </Box>
-                                                <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
-                                                    {a?.leadTitle || ''}
-                                                </Typography>
+                                                {depth > 0 ? (
+                                                    <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
+                                                        {a?.leadTitle || ''}
+                                                    </Typography>
+                                                ) : null}
                                                 <Typography variant='body2' sx={{ mt: 0.75 }}>
                                                     {formatDateTime(a?.scheduledAt || null)}
                                                 </Typography>
@@ -434,18 +593,20 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                         </Box>
 
                                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                                            <Tooltip title='Add follow-up'>
-                                                <IconButton
-                                                    size='small'
-                                                    color='primary'
-                                                    onClick={e => {
-                                                        e.stopPropagation()
-                                                        openDetails(String(a.id), 'followup')
-                                                    }}
-                                                >
-                                                    <i className='ri-add-circle-line' />
-                                                </IconButton>
-                                            </Tooltip>
+                                            {canAddFollowUp(a) ? (
+                                                <Tooltip title='Add follow-up'>
+                                                    <IconButton
+                                                        size='small'
+                                                        color='primary'
+                                                        onClick={e => {
+                                                            e.stopPropagation()
+                                                            openDetails(String(a.id), 'followup')
+                                                        }}
+                                                    >
+                                                        <i className='ri-add-circle-line' />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            ) : null}
                                         </Box>
                                     </CardContent>
                                 </Card>
@@ -454,46 +615,7 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                         )
                     }
 
-                    return (
-                        <Box key={group.leadId} sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                            <Card
-                                sx={{
-                                    borderRadius: 2,
-                                    boxShadow: 'none',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    bgcolor: 'action.hover'
-                                }}
-                            >
-                                <CardContent sx={{ py: 1.25, px: 1.5 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                                            <IconButton size='small' onClick={() => toggleGroup(group.leadId)}>
-                                                <i className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} />
-                                            </IconButton>
-                                            <Typography variant='subtitle2' sx={{ fontWeight: 800 }} noWrap>
-                                                {group.leadLabel}
-                                            </Typography>
-                                            {group.leadId !== 'UNASSIGNED' ? (
-                                                <Tooltip title='Open lead details'>
-                                                    <IconButton
-                                                        size='small'
-                                                        component={Link}
-                                                        href={`/loan-cases/${group.leadId}`}
-                                                        onClick={e => e.stopPropagation()}
-                                                    >
-                                                        <i className='ri-external-link-line' />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            ) : null}
-                                        </Box>
-                                        <Chip size='small' label={group.count} variant='outlined' />
-                                    </Box>
-                                </CardContent>
-                            </Card>
-                            {!collapsed ? group.roots.map(node => renderNode(node, 0)) : null}
-                        </Box>
-                    )
+                    return group.roots.map(node => renderNode(node, 0))
                 })
             )}
         </Box>
@@ -529,8 +651,6 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                             </TableRow>
                         ) : (
                             leadTreeGroups.flatMap(group => {
-                                const collapsed = isGroupCollapsed(group.leadId)
-
                                 const rows = group.roots.flatMap(root => {
                                     const descendants = getSortedDescendants(root)
                                     const rootId = String(root.item.id)
@@ -539,83 +659,87 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                     return [{ node: root, depth: 0 }, ...(showChildren ? descendants.map(node => ({ node, depth: 1 })) : [])]
                                 })
 
-                                return [
-                                    <TableRow key={`lead-group-${group.leadId}`}>
-                                        <TableCell colSpan={5} sx={{ backgroundColor: 'action.hover' }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 }}>
-                                                    <IconButton size='small' onClick={() => toggleGroup(group.leadId)}>
-                                                        <i className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} />
-                                                    </IconButton>
-                                                    <Typography variant='subtitle2' sx={{ fontWeight: 800 }} noWrap>
-                                                        {group.leadLabel}
-                                                    </Typography>
-                                                    {group.leadId !== 'UNASSIGNED' ? (
-                                                        <Tooltip title='Open lead details'>
+                                return rows.map(({ node, depth }) => {
+                                    const a = node.item
+                                    const sc = statusChip(String(a?.status || 'PENDING'))
+                                    const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
+                                    const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
+                                    const hasChildren = depth === 0 && getSortedDescendants(node).length > 0
+                                    const nodeCollapsed = hasChildren && isNodeCollapsed(String(a.id))
+
+                                    return (
+                                        <TableRow
+                                            key={String(a?.id || '')}
+                                            hover
+                                            onClick={() => openDetails(String(a.id), 'details')}
+                                            sx={{
+                                                cursor: 'pointer',
+                                                backgroundColor: isHighlighted(String(a?.id || ''))
+                                                    ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                                    : 'transparent'
+                                            }}
+                                        >
+                                            <TableCell sx={{ maxWidth: 320 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 2, gap: 0.75 }}>
+                                                    <Box sx={{ width: 30, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                                                        {hasChildren ? (
                                                             <IconButton
                                                                 size='small'
-                                                                component={Link}
-                                                                href={`/loan-cases/${group.leadId}`}
-                                                                onClick={e => e.stopPropagation()}
+                                                                onClick={e => {
+                                                                    e.stopPropagation()
+                                                                    toggleNode(String(a.id))
+                                                                }}
                                                             >
-                                                                <i className='ri-external-link-line' />
+                                                                <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
                                                             </IconButton>
-                                                        </Tooltip>
-                                                    ) : null}
-                                                </Box>
-                                                <Chip size='small' label={group.count} variant='outlined' />
-                                            </Box>
-                                        </TableCell>
-                                    </TableRow>,
-                                    ...(!collapsed
-                                        ? rows.map(({ node, depth }) => {
-                                        const a = node.item
-                                        const sc = statusChip(String(a?.status || 'PENDING'))
-                                        const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
-                                        const hasChildren = depth === 0 && getSortedDescendants(node).length > 0
-                                        const nodeCollapsed = hasChildren && isNodeCollapsed(String(a.id))
-
-                                        return (
-                                            <TableRow key={String(a?.id || '')} hover onClick={() => openDetails(String(a.id), 'details')} sx={{ cursor: 'pointer' }}>
-                                                <TableCell sx={{ maxWidth: 320 }}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 2, gap: 0.75 }}>
-                                                        <Box sx={{ width: 30, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                                                            {hasChildren ? (
-                                                                <IconButton
-                                                                    size='small'
-                                                                    onClick={e => {
-                                                                        e.stopPropagation()
-                                                                        toggleNode(String(a.id))
-                                                                    }}
-                                                                >
-                                                                    <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
-                                                                </IconButton>
+                                                        ) : null}
+                                                    </Box>
+                                                    {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
+                                                    <Box sx={{ minWidth: 0 }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                                                            <Typography
+                                                                variant='body2'
+                                                                sx={{ fontWeight: 700, minWidth: 0 }}
+                                                                noWrap
+                                                                title={depth === 0 ? caseTitle : a?.customerName || ''}
+                                                            >
+                                                                {depth === 0 ? caseTitle : a?.customerName || '-'}
+                                                            </Typography>
+                                                            {depth === 0 && a?.leadId ? (
+                                                                <Tooltip title='View case'>
+                                                                    <IconButton
+                                                                        size='small'
+                                                                        component={Link}
+                                                                        href={`/loan-cases/${encodeURIComponent(String(a.leadId))}`}
+                                                                        onClick={e => e.stopPropagation()}
+                                                                    >
+                                                                        <i className='ri-external-link-line' />
+                                                                    </IconButton>
+                                                                </Tooltip>
                                                             ) : null}
                                                         </Box>
-                                                        {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
-                                                        <Box sx={{ minWidth: 0 }}>
-                                                            <Typography variant='body2' sx={{ fontWeight: 700 }} noWrap title={a?.customerName || ''}>
-                                                                {a?.customerName || '-'}
-                                                            </Typography>
+                                                        {depth > 0 ? (
                                                             <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
                                                                 {a?.leadTitle || 'Lead'}
                                                             </Typography>
-                                                        </Box>
+                                                        ) : null}
                                                     </Box>
-                                                </TableCell>
-                                                <TableCell>{formatDateTime(a?.scheduledAt || null)}</TableCell>
-                                                <TableCell>
-                                                    <Chip size='small' label={sc.label} color={sc.color} variant='outlined' />
-                                                </TableCell>
-                                                <TableCell sx={{ maxWidth: 220 }}>
-                                                    <Typography variant='body2' noWrap title={organizer}>
-                                                        {organizer}
-                                                    </Typography>
-                                                    <Typography variant='caption' color='text.secondary' noWrap title={a?.organizerEmail || ''}>
-                                                        {a?.organizerEmail || ''}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell align='right'>
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell>{formatDateTime(a?.scheduledAt || null)}</TableCell>
+                                            <TableCell>
+                                                <Chip size='small' label={sc.label} color={sc.color} variant='outlined' />
+                                            </TableCell>
+                                            <TableCell sx={{ maxWidth: 220 }}>
+                                                <Typography variant='body2' noWrap title={organizer}>
+                                                    {organizer}
+                                                </Typography>
+                                                <Typography variant='caption' color='text.secondary' noWrap title={a?.organizerEmail || ''}>
+                                                    {a?.organizerEmail || ''}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align='right'>
+                                                {canAddFollowUp(a) ? (
                                                     <Tooltip title='Add follow-up'>
                                                         <IconButton
                                                             size='small'
@@ -628,12 +752,11 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                                             <i className='ri-add-circle-line' />
                                                         </IconButton>
                                                     </Tooltip>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                          })
-                                        : [])
-                                ]
+                                                ) : null}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
                             })
                         )}
                     </TableBody>
@@ -701,18 +824,20 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                                             Organizer: {a?.organizerName || a?.organizerEmail || 'Unassigned'}
                                         </Typography>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 1 }}>
-                                            <Tooltip title='Add follow-up'>
-                                                <IconButton
-                                                    size='small'
-                                                    color='primary'
-                                                    onClick={e => {
-                                                        e.stopPropagation()
-                                                        openDetails(String(a.id), 'followup')
-                                                    }}
-                                                >
-                                                    <i className='ri-add-circle-line' />
-                                                </IconButton>
-                                            </Tooltip>
+                                            {canAddFollowUp(a) ? (
+                                                <Tooltip title='Add follow-up'>
+                                                    <IconButton
+                                                        size='small'
+                                                        color='primary'
+                                                        onClick={e => {
+                                                            e.stopPropagation()
+                                                            openDetails(String(a.id), 'followup')
+                                                        }}
+                                                    >
+                                                        <i className='ri-add-circle-line' />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            ) : null}
                                         </Box>
                                     </Box>
                                 ))
@@ -725,9 +850,9 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
     )
 
     return (
-        <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
-            {header}
-            {filters}
+        <Box className='flex flex-col gap-4' sx={{ mx: embedded ? 0 : { xs: -2, sm: 0 } }}>
+            {embedded ? null : header}
+            {embedded ? null : filters}
             {error ? (
                 <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
                     <CardContent sx={{ p: 2 }}>
@@ -743,9 +868,8 @@ export default function LeadAppointmentsDashboard({ leadId }: Props) {
                 appointmentId={selectedId}
                 initialTab={detailsTab}
                 onClose={closeDetails}
-                onUpdated={refresh}
+                onUpdated={handleUpdated}
             />
         </Box>
     )
 }
-

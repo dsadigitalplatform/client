@@ -2,13 +2,6 @@ export type AppointmentFollowUpType = 'CALL' | 'WHATSAPP' | 'VISIT' | 'EMAIL'
 
 export type AppointmentStatus = 'PENDING' | 'SCHEDULED' | 'COMPLETED' | 'RESCHEDULED' | 'CANCELLED' | 'NO_SHOW'
 
-export type AppointmentOutcomeHistoryEntry = {
-  status: string
-  outcomeComments: string | null
-  changedAt: string | null
-  changedBy: string | null
-}
-
 export type Appointment = {
   id: string
   leadId: string | null
@@ -19,7 +12,6 @@ export type Appointment = {
   followUpType: AppointmentFollowUpType | string | null
   status: AppointmentStatus | string
   outcomeComments: string | null
-  outcomeHistory: AppointmentOutcomeHistoryEntry[]
   createdBy: string | null
   parentAppointmentId: string | null
   createdAt: string | null
@@ -46,6 +38,7 @@ export type UpdateAppointmentInput = {
 
 export type GetAppointmentsParams = {
   leadId?: string
+  organizerId?: string
   status?: AppointmentStatus
   dateFrom?: string | Date
   dateTo?: string | Date

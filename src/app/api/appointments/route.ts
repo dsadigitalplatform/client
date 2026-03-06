@@ -168,6 +168,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const leadId = url.searchParams.get('leadId') || ''
   const customerId = url.searchParams.get('customerId') || ''
+  const organizerId = url.searchParams.get('organizerId') || ''
   const status = url.searchParams.get('status') || ''
   const dateFrom = url.searchParams.get('dateFrom') || ''
   const dateTo = url.searchParams.get('dateTo') || ''
@@ -208,8 +209,60 @@ export async function GET(request: Request) {
     if (to) baseFilter.scheduledAt.$lte = to
   }
 
-  if (role !== 'ADMIN' && role !== 'OWNER') {
-    baseFilter.createdBy = userId
+  let organizerIdObj: ObjectId | null = null
+
+  if (organizerId) {
+    if (!ObjectId.isValid(organizerId)) return NextResponse.json({ error: 'invalid_organizerId' }, { status: 400 })
+    organizerIdObj = new ObjectId(organizerId)
+  }
+
+  const isAdminOrOwner = role === 'ADMIN' || role === 'OWNER'
+
+  if (!isAdminOrOwner) {
+    if (organizerIdObj && !organizerIdObj.equals(userId)) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
+    if (baseFilter.leadId) {
+      const lead = await db
+        .collection('loanCases')
+        .findOne({ _id: baseFilter.leadId, tenantId: tenantIdObj }, { projection: { assignedAgentId: 1 } })
+
+      const isAssigned = (lead as any)?.assignedAgentId && ((lead as any).assignedAgentId as ObjectId).equals(userId)
+
+      if (!isAssigned) baseFilter.createdBy = userId
+    } else {
+      const leadIdsRaw = await db
+        .collection('loanCases')
+        .find({ tenantId: tenantIdObj, assignedAgentId: userId }, { projection: { _id: 1 } })
+        .limit(1500)
+        .toArray()
+
+      const leadIds = leadIdsRaw.map(l => l._id as ObjectId)
+
+      baseFilter.$or = [{ createdBy: userId }, ...(leadIds.length > 0 ? [{ leadId: { $in: leadIds } }] : [])]
+    }
+  } else if (organizerIdObj) {
+    if (baseFilter.leadId) {
+      const has = await db.collection('loanCases').findOne(
+        { _id: baseFilter.leadId, tenantId: tenantIdObj, assignedAgentId: organizerIdObj },
+        { projection: { _id: 1 } }
+      )
+
+      if (!has) return NextResponse.json({ appointments: [] })
+    } else {
+      const leadIdsRaw = await db
+        .collection('loanCases')
+        .find({ tenantId: tenantIdObj, assignedAgentId: organizerIdObj }, { projection: { _id: 1 } })
+        .limit(1500)
+        .toArray()
+
+      const leadIds = leadIdsRaw.map(l => l._id as ObjectId)
+
+      if (leadIds.length === 0) return NextResponse.json({ appointments: [] })
+
+      baseFilter.leadId = { $in: leadIds }
+    }
   }
 
   const rows = await db
@@ -284,7 +337,6 @@ export async function GET(request: Request) {
           followUpType: 1,
           status: 1,
           outcomeComments: 1,
-          outcomeHistory: 1,
           createdBy: 1,
           parentAppointmentId: 1,
           createdAt: 1,
@@ -292,6 +344,7 @@ export async function GET(request: Request) {
           customerName: '$customer.fullName',
           leadLoanTypeName: '$loanType.name',
           leadBankName: '$lead.bankName',
+          organizerId: '$lead.assignedAgentId',
           organizerName: '$assignedAgent.name',
           organizerEmail: '$assignedAgent.email'
         }
@@ -314,20 +367,13 @@ export async function GET(request: Request) {
       followUpType: (r as any).followUpType ? String((r as any).followUpType) : null,
       status: String((r as any).status || 'SCHEDULED') === 'SCHEDULED' ? 'PENDING' : String((r as any).status || 'PENDING'),
       outcomeComments: (r as any).outcomeComments ?? null,
-      outcomeHistory: Array.isArray((r as any).outcomeHistory)
-        ? (r as any).outcomeHistory.map((h: any) => ({
-            status: h?.status ? String(h.status) : '',
-            outcomeComments: h?.outcomeComments ?? null,
-            changedAt: h?.changedAt ? new Date(h.changedAt).toISOString() : null,
-            changedBy: h?.changedBy ? String(h.changedBy) : null
-          }))
-        : [],
       createdBy: (r as any).createdBy ? String((r as any).createdBy) : null,
       parentAppointmentId: (r as any).parentAppointmentId ? String((r as any).parentAppointmentId) : null,
       createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
       updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
       customerName: (r as any).customerName ? String((r as any).customerName) : null,
       leadTitle,
+      organizerId: (r as any).organizerId ? String((r as any).organizerId) : null,
       organizerName: (r as any).organizerName ? String((r as any).organizerName) : null,
       organizerEmail: (r as any).organizerEmail ? String((r as any).organizerEmail) : null
     }

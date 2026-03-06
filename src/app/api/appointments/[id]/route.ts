@@ -63,14 +63,6 @@ function mapAppointment(row: any) {
     followUpType: row?.followUpType ? String(row.followUpType) : null,
     status,
     outcomeComments: row?.outcomeComments ?? null,
-    outcomeHistory: Array.isArray(row?.outcomeHistory)
-      ? row.outcomeHistory.map((h: any) => ({
-          status: h?.status ? String(h.status) : '',
-          outcomeComments: h?.outcomeComments ?? null,
-          changedAt: h?.changedAt ? new Date(h.changedAt).toISOString() : null,
-          changedBy: h?.changedBy ? String(h.changedBy) : null
-        }))
-      : [],
     createdBy: row?.createdBy ? String(row.createdBy) : null,
     parentAppointmentId: row?.parentAppointmentId ? String(row.parentAppointmentId) : null,
     createdAt: row?.createdAt ? new Date(row.createdAt).toISOString() : null,
@@ -219,21 +211,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  const now = patch.updatedAt
-  const shouldAppendOutcomeHistory = body.status !== undefined || body.outcomeComments !== undefined
-
   const update: any = { $set: patch }
-
-  if (shouldAppendOutcomeHistory) {
-    update.$push = {
-      outcomeHistory: {
-        status: String((current as any).status || 'SCHEDULED'),
-        outcomeComments: (current as any).outcomeComments ?? null,
-        changedAt: now,
-        changedBy: userId
-      }
-    }
-  }
 
   await db.collection('appointments').updateOne(filter, update)
 

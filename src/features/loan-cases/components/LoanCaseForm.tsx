@@ -60,6 +60,7 @@ import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/serv
 import type { LoanType } from '@features/loan-types/loan-types.types'
 import type { AppointmentFollowUpType } from '@features/appointments/appointments.types'
 import { createAppointment } from '@features/appointments/services/appointments'
+import LeadAppointmentsDashboard from '@features/appointments/components/LeadAppointmentsDashboard'
 import {
   createLoanCase,
   getLoanCases,
@@ -158,6 +159,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [apptFollowUpType, setApptFollowUpType] = useState<DraftAppointment['followUpType']>('')
   const [apptOutcomeComments, setApptOutcomeComments] = useState('')
   const [apptErrors, setApptErrors] = useState<Record<string, string>>({})
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0)
+  const [hasExistingAppointments, setHasExistingAppointments] = useState(Boolean(caseId))
 
   const apptScheduledAtValue = useMemo(() => {
     if (!apptScheduledAt) return null
@@ -188,7 +191,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
   const customerOptions = useMemo(() => [...customers, CREATE_CUSTOMER_OPTION], [customers])
 
-  const canOpenAppointmentDialog = Boolean(customerId && assignedAgentId)
+  const canOpenAppointmentDialog = Boolean(customerId && (id ? true : assignedAgentId))
+  const appointmentUiLocked = !id && isLocked
   const sessionUserId = (session as any)?.userId as string | undefined
 
   useEffect(() => {
@@ -402,7 +406,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
     setAppointmentDialogOpen(true)
   }
 
-  const addAppointment = () => {
+  const addAppointment = async () => {
     const next: Record<string, string> = {}
 
     if (!customerId) next.customerId = 'Select a customer first'
@@ -416,6 +420,37 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     setApptErrors(next)
     if (Object.keys(next).length > 0) return
+
+    if (id) {
+      try {
+        await createAppointment({
+          leadId: id,
+          customerId,
+          caseId: id,
+          scheduledAt: apptScheduledAt,
+          followUpType: apptFollowUpType as AppointmentFollowUpType,
+          outcomeComments: apptOutcomeComments.trim().length === 0 ? null : apptOutcomeComments.trim(),
+          notes: apptOutcomeComments.trim().length === 0 ? null : apptOutcomeComments.trim()
+        })
+
+        setSuccessMsg('Appointment added')
+        setSuccessOpen(true)
+        setAppointmentsRefreshKey(v => v + 1)
+      } catch (e: any) {
+        setError(e?.message || 'Failed to add appointment')
+
+        return
+      } finally {
+        setEditingDraftAppointmentId(null)
+        setApptScheduledAt('')
+        setApptFollowUpType('')
+        setApptOutcomeComments('')
+        setApptErrors({})
+        setAppointmentDialogOpen(false)
+      }
+
+      return
+    }
 
     if (editingDraftAppointmentId) {
       setDraftAppointments(prev =>
@@ -586,18 +621,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
           }
         />
         <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '& .MuiFormHelperText-root': { mt: 0.75 } }}>
-          {id ? (
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-              <Button
-                variant='outlined'
-                startIcon={<i className='ri-calendar-event-line' />}
-                onClick={() => router.push(`/loan-cases/${id}/appointments`)}
-                fullWidth={isMobile}
-              >
-                Appointments
-              </Button>
-            </Box>
-          ) : null}
           {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
 
           {loading ? (
@@ -875,104 +898,106 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   </Typography>
                   {!isMobile ? (
                     <Typography variant='body2' color='text.secondary'>
-                      {id ? 'Manage appointments from the Appointments page' : 'Add at least one appointment before saving this lead'}
+                      {id ? 'Add appointments and follow-ups right here' : 'Add at least one appointment before saving this lead'}
                     </Typography>
                   ) : null}
                 </Box>
-                {!id ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {isMobile ? (
-                      <Badge
-                        badgeContent={draftAppointments.length}
-                        color='error'
-                        invisible={draftAppointments.length === 0}
-                        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                        sx={{
-                          '& .MuiBadge-badge': {
-                            fontWeight: 800,
-                            minWidth: 22,
-                            height: 22,
-                            borderRadius: 999,
-                            border: '2px solid',
-                            borderColor: 'background.paper',
-                            top: 4,
-                            right: 2
-                          }
-                        }}
-                      >
-                        <IconButton
-                          onClick={() => {
-                            setEditingDraftAppointmentId(null)
-                            setApptScheduledAt('')
-                            setApptFollowUpType('')
-                            setApptOutcomeComments('')
-                            setApptErrors({})
-                            setAppointmentDialogOpen(true)
-                          }}
-                          disabled={isLocked || !canOpenAppointmentDialog}
-                          aria-label='Add appointment'
+                    {!id || !hasExistingAppointments ? (
+                      isMobile ? (
+                        <Badge
+                          badgeContent={id ? 0 : draftAppointments.length}
+                          color='error'
+                          invisible={id ? true : draftAppointments.length === 0}
+                          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                           sx={{
-                            width: 46,
-                            height: 46,
-                            color: 'common.white',
-                            background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
-                            boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
-                            '&:hover': {
-                              background: 'linear-gradient(135deg, var(--mui-palette-primary-dark), var(--mui-palette-info-dark))',
-                              boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                            '& .MuiBadge-badge': {
+                              fontWeight: 800,
+                              minWidth: 22,
+                              height: 22,
+                              borderRadius: 999,
+                              border: '2px solid',
+                              borderColor: 'background.paper',
+                              top: 4,
+                              right: 2
                             }
                           }}
                         >
-                          <i className='ri-calendar-event-line' />
-                        </IconButton>
-                      </Badge>
-                    ) : (
-                      <Badge
-                        badgeContent={draftAppointments.length}
-                        color='error'
-                        invisible={draftAppointments.length === 0}
-                        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                        sx={{
-                          '& .MuiBadge-badge': {
-                            fontWeight: 800,
-                            minWidth: 22,
-                            height: 22,
-                            borderRadius: 999,
-                            border: '2px solid',
-                            borderColor: 'background.paper',
-                            top: 4,
-                            right: 6
-                          }
-                        }}
-                      >
-                        <Button
-                          variant='contained'
-                          startIcon={<i className='ri-calendar-event-line' />}
-                          onClick={() => {
-                            setEditingDraftAppointmentId(null)
-                            setApptScheduledAt('')
-                            setApptFollowUpType('')
-                            setApptOutcomeComments('')
-                            setApptErrors({})
-                            setAppointmentDialogOpen(true)
-                          }}
-                          disabled={isLocked || !canOpenAppointmentDialog}
+                          <IconButton
+                            onClick={() => {
+                              setEditingDraftAppointmentId(null)
+                              setApptScheduledAt('')
+                              setApptFollowUpType('')
+                              setApptOutcomeComments('')
+                              setApptErrors({})
+                              setAppointmentDialogOpen(true)
+                            }}
+                            disabled={appointmentUiLocked || !canOpenAppointmentDialog}
+                            aria-label='Add appointment'
+                            sx={{
+                              width: 46,
+                              height: 46,
+                              color: 'common.white',
+                              background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
+                              boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
+                              '&:hover': {
+                                background: 'linear-gradient(135deg, var(--mui-palette-primary-dark), var(--mui-palette-info-dark))',
+                                boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                              }
+                            }}
+                          >
+                            <i className='ri-calendar-event-line' />
+                          </IconButton>
+                        </Badge>
+                      ) : (
+                        <Badge
+                          badgeContent={id ? 0 : draftAppointments.length}
+                          color='error'
+                          invisible={id ? true : draftAppointments.length === 0}
+                          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                           sx={{
-                            borderRadius: 999,
-                            px: 2.25,
-                            background: 'linear-gradient(95deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
-                            boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
-                            '&:hover': {
-                              boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                            '& .MuiBadge-badge': {
+                              fontWeight: 800,
+                              minWidth: 22,
+                              height: 22,
+                              borderRadius: 999,
+                              border: '2px solid',
+                              borderColor: 'background.paper',
+                              top: 4,
+                              right: 6
                             }
                           }}
                         >
-                          Add Appointment
-                        </Button>
-                      </Badge>
-                    )}
+                          <Button
+                            variant='contained'
+                            startIcon={<i className='ri-calendar-event-line' />}
+                            onClick={() => {
+                              setEditingDraftAppointmentId(null)
+                              setApptScheduledAt('')
+                              setApptFollowUpType('')
+                              setApptOutcomeComments('')
+                              setApptErrors({})
+                              setAppointmentDialogOpen(true)
+                            }}
+                            disabled={appointmentUiLocked || !canOpenAppointmentDialog}
+                            sx={{
+                              borderRadius: 999,
+                              px: 2.25,
+                              background: 'linear-gradient(95deg, var(--mui-palette-primary-main), var(--mui-palette-info-main))',
+                              boxShadow: '0 10px 24px rgb(var(--mui-palette-primary-mainChannel) / 0.32)',
+                              '&:hover': {
+                                boxShadow: '0 14px 28px rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                              }
+                            }}
+                          >
+                            Add Appointment
+                          </Button>
+                        </Badge>
+                      )
+                    ) : null}
                   </Box>
-                ) : null}
+                </Box>
               </Box>
 
               {fieldErrors.appointments ? (
@@ -1100,7 +1125,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     )
                   ) : null}
                 </Paper>
-              ) : null}
+              ) : (
+                <Box sx={{ mt: 1.5 }}>
+                  <LeadAppointmentsDashboard
+                    leadId={id}
+                    embedded
+                    refreshKey={appointmentsRefreshKey}
+                    onLoaded={count => setHasExistingAppointments(count > 0)}
+                  />
+                </Box>
+              )}
 
               <Divider />
 
@@ -1340,7 +1374,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       fullWidth: true,
                       error: !!apptErrors.scheduledAt,
                       helperText: apptErrors.scheduledAt,
-                      disabled: isLocked,
+                      disabled: appointmentUiLocked,
                       sx: {
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 2,
@@ -1362,7 +1396,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   label='Follow-up Type'
                   value={apptFollowUpType}
                   onChange={e => setApptFollowUpType(String(e.target.value).toUpperCase() as any)}
-                  disabled={isLocked}
+                  disabled={appointmentUiLocked}
                   renderValue={value => {
                     const meta = followUpMeta(String(value).toUpperCase() as DraftAppointment['followUpType'])
 
@@ -1415,7 +1449,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 fullWidth
                 multiline
                 minRows={2}
-                disabled={isLocked}
+                disabled={appointmentUiLocked}
               />
             </Grid>
           </Grid>
@@ -1428,11 +1462,15 @@ const LoanCaseForm = ({ caseId }: Props) => {
               setEditingDraftAppointmentId(null)
               setApptErrors({})
             }}
-            disabled={isLocked}
+            disabled={appointmentUiLocked}
           >
             Cancel
           </Button>
-          <Button variant='contained' onClick={addAppointment} disabled={isLocked || !canOpenAppointmentDialog}>
+          <Button
+            variant='contained'
+            onClick={() => void addAppointment()}
+            disabled={appointmentUiLocked || !canOpenAppointmentDialog}
+          >
             {editingDraftAppointmentId ? 'Update Appointment' : 'Save Appointment'}
           </Button>
         </DialogActions>
