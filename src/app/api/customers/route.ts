@@ -16,6 +16,10 @@ function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
 
+function isValidCountryCode(v: unknown) {
+  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
+}
+
 function isValidMobile(v: unknown) {
   return typeof v === 'string' && /^[0-9]{10}$/.test(v)
 }
@@ -104,7 +108,9 @@ export async function GET(request: Request) {
     .find(baseFilter, {
       projection: {
         fullName: 1,
+        countryCode: 1,
         mobile: 1,
+        isNRI: 1,
         email: 1,
         remarks: 1,
         employmentType: 1,
@@ -121,7 +127,9 @@ export async function GET(request: Request) {
   const customers = rows.map(r => ({
     id: String((r as any)._id),
     fullName: String((r as any).fullName || ''),
+    countryCode: isValidCountryCode((r as any).countryCode) ? String((r as any).countryCode) : '+91',
     mobile: String((r as any).mobile || ''),
+    isNRI: Boolean((r as any).isNRI),
     email: (r as any).email ? String((r as any).email) : null,
     remarks: (r as any).remarks ? String((r as any).remarks) : null,
     employmentType: String((r as any).employmentType || '') as EmploymentType,
@@ -173,7 +181,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
 
   const fullName = String(body.fullName || '').trim()
+  const countryCode = body.countryCode == null ? '+91' : String(body.countryCode).trim()
   const mobile = String(body.mobile || '').trim()
+  const isNRI = Boolean(body.isNRI)
   const email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
   const dob = body.dob ? new Date(body.dob) : null
   const pan = body.pan ? String(body.pan).toUpperCase().trim() : null
@@ -192,6 +202,7 @@ export async function POST(request: Request) {
   const errors: Record<string, string> = {}
 
   if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
+  if (!isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
   if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
   if (!['SALARIED', 'SELF_EMPLOYED'].includes(employmentType)) errors.employmentType = 'Invalid employment type'
@@ -212,7 +223,9 @@ export async function POST(request: Request) {
   const doc: any = {
     tenantId: tenantIdObj,
     fullName,
+    countryCode,
     mobile,
+    isNRI,
     email,
     dob,
     pan,

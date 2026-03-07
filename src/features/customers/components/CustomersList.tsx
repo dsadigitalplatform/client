@@ -192,29 +192,47 @@ const CustomersList = () => {
                           .join('')}
                       </Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <MuiLink
-                          component={Link}
-                          href={`/customers/${c.id}`}
-                          underline='hover'
-                          color='text.primary'
-                          sx={{
-                            fontSize: '1rem',
-                            fontWeight: 600,
-                            display: 'block',
-                            textOverflow: 'ellipsis',
-                            overflow: 'hidden',
-                            whiteSpace: 'nowrap',
-                            transition: 'color .2s ease',
-                            '&:hover': {
-                              color: 'primary.main'
-                            }
-                          }}
-                        >
-                          {c.fullName}
-                        </MuiLink>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                          <MuiLink
+                            component={Link}
+                            href={`/customers/${c.id}`}
+                            underline='hover'
+                            color='text.primary'
+                            sx={{
+                              fontSize: '1rem',
+                              fontWeight: 600,
+                              display: 'block',
+                              textOverflow: 'ellipsis',
+                              overflow: 'hidden',
+                              whiteSpace: 'nowrap',
+                              transition: 'color .2s ease',
+                              '&:hover': {
+                                color: 'primary.main'
+                              }
+                            }}
+                          >
+                            {c.fullName}
+                          </MuiLink>
+                          {c.isNRI ? (
+                            <Chip
+                              label='NRI'
+                              size='small'
+                              variant='outlined'
+                              icon={<i className='ri-global-line' />}
+                              sx={{
+                                boxShadow: 'none',
+                                borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
+                                color: 'warning.main',
+                                backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                              }}
+                            />
+                          ) : null}
+                        </Box>
                         <Box className='flex items-center gap-1.5'>
                           <i className='ri-smartphone-line text-base' />
-                          <Typography variant='body2'>{c.mobile}</Typography>
+                          <Typography variant='body2'>
+                            {[c.countryCode, c.mobile].filter(Boolean).join(' ')}
+                          </Typography>
                         </Box>
                       </Box>
                     </Box>
@@ -284,28 +302,44 @@ const CustomersList = () => {
                           .map(s => s[0]?.toUpperCase())
                           .join('')}
                       </Avatar>
-                      <MuiLink
-                        component={Link}
-                        href={`/customers/${c.id}`}
-                        underline='hover'
-                        color='text.primary'
-                        sx={{
-                          fontSize: '0.95rem',
-                          fontWeight: 500,
-                          transition: 'color .2s ease',
-                          '&:hover': {
-                            color: 'primary.main'
-                          }
-                        }}
-                      >
-                        {c.fullName}
-                      </MuiLink>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <MuiLink
+                          component={Link}
+                          href={`/customers/${c.id}`}
+                          underline='hover'
+                          color='text.primary'
+                          sx={{
+                            fontSize: '0.95rem',
+                            fontWeight: 500,
+                            transition: 'color .2s ease',
+                            '&:hover': {
+                              color: 'primary.main'
+                            }
+                          }}
+                        >
+                          {c.fullName}
+                        </MuiLink>
+                        {c.isNRI ? (
+                          <Chip
+                            label='NRI'
+                            size='small'
+                            variant='outlined'
+                            icon={<i className='ri-global-line' />}
+                            sx={{
+                              boxShadow: 'none',
+                              borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
+                              color: 'warning.main',
+                              backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                            }}
+                          />
+                        ) : null}
+                      </Box>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Box className='flex items-center gap-1.5'>
                       <i className='ri-smartphone-line text-lg' />
-                      <span>{c.mobile}</span>
+                      <span>{[c.countryCode, c.mobile].filter(Boolean).join(' ')}</span>
                     </Box>
                   </TableCell>
                   <TableCell>

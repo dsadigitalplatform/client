@@ -12,6 +12,10 @@ function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
 
+function isValidCountryCode(v: unknown) {
+  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
+}
+
 function isValidMobile(v: unknown) {
   return typeof v === 'string' && /^[0-9]{10}$/.test(v)
 }
@@ -48,7 +52,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const data = {
     id: String((row as any)._id),
     fullName: (row as any).fullName || '',
+    countryCode: isValidCountryCode((row as any).countryCode) ? String((row as any).countryCode) : '+91',
     mobile: (row as any).mobile || '',
+    isNRI: Boolean((row as any).isNRI),
     email: (row as any).email ?? null,
     remarks: (row as any).remarks ?? null,
     dob: (row as any).dob ? new Date((row as any).dob).toISOString() : null,
@@ -86,7 +92,10 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const patch: any = {}
 
   if (body.fullName != null) patch.fullName = String(body.fullName).trim()
+  if (body.countryCode !== undefined)
+    patch.countryCode = body.countryCode == null || String(body.countryCode).trim().length === 0 ? null : String(body.countryCode).trim()
   if (body.mobile != null) patch.mobile = String(body.mobile).trim()
+  if (body.isNRI !== undefined) patch.isNRI = Boolean(body.isNRI)
   if (body.email !== undefined) patch.email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
   if (body.dob !== undefined) patch.dob = body.dob ? new Date(body.dob) : null
   if (body.pan !== undefined) patch.pan = body.pan ? String(body.pan).toUpperCase().trim() : null
@@ -103,6 +112,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const errors: Record<string, string> = {}
 
   if (patch.fullName != null && patch.fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
+  if (patch.countryCode != null && !isValidCountryCode(patch.countryCode)) errors.countryCode = 'Invalid country code'
   if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 10 digits'
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'

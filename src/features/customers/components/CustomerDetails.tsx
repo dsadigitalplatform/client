@@ -129,6 +129,20 @@ const CustomerDetails = ({ id }: Props) => {
                     <Typography component='span' fontWeight={600}>
                       {data.fullName}
                     </Typography>
+                    {data.isNRI ? (
+                      <Chip
+                        size='small'
+                        label='NRI'
+                        variant='outlined'
+                        icon={<i className='ri-global-line' />}
+                        sx={{
+                          boxShadow: 'none',
+                          borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
+                          color: 'warning.main',
+                          backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                        }}
+                      />
+                    ) : null}
                     <Chip
                       size='small'
                       label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
@@ -177,6 +191,21 @@ const CustomerDetails = ({ id }: Props) => {
                   <Typography variant='h6' sx={{ fontWeight: 600 }}>
                     {data.fullName}
                   </Typography>
+                  {data.isNRI ? (
+                    <Chip
+                      size='small'
+                      label='NRI'
+                      variant='outlined'
+                      icon={<i className='ri-global-line' />}
+                      sx={{
+                        mt: 0.75,
+                        boxShadow: 'none',
+                        borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
+                        color: 'warning.main',
+                        backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
+                      }}
+                    />
+                  ) : null}
                   <Chip
                     size='small'
                     label={data.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
@@ -196,7 +225,7 @@ const CustomerDetails = ({ id }: Props) => {
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
                   <Box className='flex items-center gap-1.5'>
                     <i className='ri-smartphone-line text-base' />
-                    <Typography color='text.secondary'>{data.mobile}</Typography>
+                    <Typography color='text.secondary'>{[data.countryCode, data.mobile].filter(Boolean).join(' ')}</Typography>
                   </Box>
                   <Box className='flex items-center gap-1.5'>
                     <i className='ri-mail-line text-base' />
@@ -241,7 +270,9 @@ const CustomerDetails = ({ id }: Props) => {
                 </Box>
               ) : (
                 <Box className='flex flex-col gap-1'>
-                  <Typography color='text.secondary'>Mobile: {data.mobile}</Typography>
+                  <Typography color='text.secondary'>
+                    Mobile: {[data.countryCode, data.mobile].filter(Boolean).join(' ')}
+                  </Typography>
                   <Typography color='text.secondary'>Email: {data.email || '-'}</Typography>
                   <Typography color='text.secondary'>PAN: {data.pan || '-'}</Typography>
                   <Typography color='text.secondary'>Aadhaar: {data.aadhaarMasked || '-'}</Typography>
@@ -290,7 +321,9 @@ const CustomerDetails = ({ id }: Props) => {
                 redirectOnSuccess
                 initialValues={{
                   fullName: data.fullName,
+                  countryCode: data.countryCode,
                   mobile: data.mobile,
+                  isNRI: data.isNRI,
                   email: data.email,
                   dob: data.dob,
                   pan: data.pan,

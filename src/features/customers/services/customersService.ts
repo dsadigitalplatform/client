@@ -2,7 +2,9 @@ export type GetCustomersParams = { q?: string }
 
 export type CreateCustomerInput = {
   fullName: string
+  countryCode: string
   mobile: string
+  isNRI: boolean
   email?: string | null
   dob?: string | null
   pan?: string | null

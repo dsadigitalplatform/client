@@ -12,6 +12,11 @@ import Typography from '@mui/material/Typography'
 import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
 import Slider from '@mui/material/Slider'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
+import Select from '@mui/material/Select'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
@@ -28,6 +33,15 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { createCustomer } from '@features/customers/services/customersService'
 
+const COUNTRY_CODE_OPTIONS = [
+  { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
+  { code: '+1', iso: 'US', name: 'United States', flag: '🇺🇸' },
+  { code: '+44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+971', iso: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
+  { code: '+65', iso: 'SG', name: 'Singapore', flag: '🇸🇬' },
+  { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
+] as const
+
 type Props = {
   onSuccess?: () => void
   onCancel?: () => void
@@ -36,6 +50,8 @@ type Props = {
   initialValues?: Partial<{
     fullName: string
     mobile: string
+    countryCode: string
+    isNRI: boolean
     email: string | null
     dob: string | null
     pan: string | null
@@ -70,7 +86,9 @@ const CustomersCreateForm = ({
   const useCard = variant === 'card'
 
   const [fullName, setFullName] = useState('')
+  const [countryCode, setCountryCode] = useState('+91')
   const [mobile, setMobile] = useState('')
+  const [isNRI, setIsNRI] = useState(false)
   const [email, setEmail] = useState('')
   const [dob, setDob] = useState('')
   const [pan, setPan] = useState('')
@@ -97,6 +115,8 @@ const CustomersCreateForm = ({
     if (!initialValues) return
     if (initialValues.fullName != null) setFullName(initialValues.fullName)
     if (initialValues.mobile != null) setMobile(initialValues.mobile)
+    if (initialValues.countryCode != null) setCountryCode(initialValues.countryCode)
+    if (initialValues.isNRI != null) setIsNRI(Boolean(initialValues.isNRI))
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.dob != null) setDob(initialValues.dob ? initialValues.dob.slice(0, 10) : '')
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
@@ -136,6 +156,7 @@ const CustomersCreateForm = ({
 
   // basic client-side validators
   const isValidMobile = (v: string) => /^[0-9]{10}$/.test(v)
+  const isValidCountryCode = (v: string) => /^\+[0-9]{1,4}$/.test(v)
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
   const isValidAadhaar = (digits: string) => digits.length === 0 || digits.length === 12
@@ -144,13 +165,14 @@ const CustomersCreateForm = ({
   const canSubmit = useMemo(() => {
     return (
       fullName.trim().length >= 2 &&
+      isValidCountryCode(countryCode) &&
       isValidMobile(mobile) &&
       isValidEmail(email) &&
       isValidPAN(pan) &&
       isValidAadhaar(aadhaarDigits) &&
       isValidCibil(cibilScore)
     )
-  }, [fullName, mobile, email, pan, aadhaarDigits, cibilScore])
+  }, [fullName, countryCode, mobile, email, pan, aadhaarDigits, cibilScore])
 
   // input normalizers
   const handleMobile = (v: string) => {
@@ -185,7 +207,9 @@ const CustomersCreateForm = ({
     try {
       const payload = {
         fullName: fullName.trim(),
+        countryCode,
         mobile,
+        isNRI,
         email: email ? email.trim() : null,
         dob: dob ? new Date(dob).toISOString() : null,
         pan: pan ? pan.toUpperCase() : null,
@@ -224,7 +248,9 @@ const CustomersCreateForm = ({
         setSuccessDialogOpen(true)
 
         setFullName('')
+        setCountryCode('+91')
         setMobile('')
+        setIsNRI(false)
         setEmail('')
         setDob('')
         setPan('')
@@ -344,6 +370,10 @@ const CustomersCreateForm = ({
 
   const mobileTitle = submitLabel || (initialValues ? 'Update Customer' : 'Add Customer')
 
+  const selectedCountry = useMemo(() => {
+    return COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0]
+  }, [countryCode])
+
   return useCard ? (
     <Card
       sx={{
@@ -405,29 +435,70 @@ const CustomersCreateForm = ({
                 <InputAdornment position='start'>
                   <i className='ri-user-line' />
                 </InputAdornment>
-              )
-            }}
-          />
-
-          <TextField
-            label='Mobile'
-            value={mobile}
-            onChange={e => handleMobile(e.target.value)}
-            error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
-            helperText={
-              fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
-            }
-            fullWidth
-            required
-            inputProps={{ inputMode: 'numeric', maxLength: 10 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position='start'>
-                  <i className='ri-smartphone-line' />
+              ),
+              endAdornment: (
+                <InputAdornment position='end' sx={{ mr: -0.5 }}>
+                  <FormControlLabel
+                    control={<Checkbox checked={isNRI} onChange={e => setIsNRI(e.target.checked)} size='small' />}
+                    label='NRI'
+                    sx={{ mr: 0 }}
+                  />
                 </InputAdornment>
               )
             }}
           />
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: { xs: 2, sm: 2 }
+            }}
+          >
+            <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
+              <InputLabel id='customer-country-code-label'>Country Code</InputLabel>
+              <Select
+                labelId='customer-country-code-label'
+                label='Country Code'
+                value={countryCode}
+                onChange={e => setCountryCode(String(e.target.value))}
+                renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
+              >
+                {COUNTRY_CODE_OPTIONS.map(o => (
+                  <MenuItem key={`${o.iso}-${o.code}`} value={o.code}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <span>{o.flag}</span>
+                        <Typography variant='body2'>{o.name}</Typography>
+                      </Box>
+                      <Typography variant='body2' color='text.secondary'>
+                        {o.code}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label='Mobile'
+              value={mobile}
+              onChange={e => handleMobile(e.target.value)}
+              error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
+              helperText={
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
+              }
+              fullWidth
+              required
+              inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position='start'>
+                    <i className='ri-smartphone-line' />
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Box>
 
           <TextField
             label='Email'
@@ -750,29 +821,70 @@ const CustomersCreateForm = ({
                 <InputAdornment position='start'>
                   <i className='ri-user-line' />
                 </InputAdornment>
-              )
-            }}
-          />
-
-          <TextField
-            label='Mobile'
-            value={mobile}
-            onChange={e => handleMobile(e.target.value)}
-            error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
-            helperText={
-              fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
-            }
-            fullWidth
-            required
-            inputProps={{ inputMode: 'numeric', maxLength: 10 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position='start'>
-                  <i className='ri-smartphone-line' />
+              ),
+              endAdornment: (
+                <InputAdornment position='end' sx={{ mr: -0.5 }}>
+                  <FormControlLabel
+                    control={<Checkbox checked={isNRI} onChange={e => setIsNRI(e.target.checked)} size='small' />}
+                    label='NRI'
+                    sx={{ mr: 0 }}
+                  />
                 </InputAdornment>
               )
             }}
           />
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: { xs: 2, sm: 2 }
+            }}
+          >
+            <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
+              <InputLabel id='customer-country-code-label-plain'>Country Code</InputLabel>
+              <Select
+                labelId='customer-country-code-label-plain'
+                label='Country Code'
+                value={countryCode}
+                onChange={e => setCountryCode(String(e.target.value))}
+                renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
+              >
+                {COUNTRY_CODE_OPTIONS.map(o => (
+                  <MenuItem key={`${o.iso}-${o.code}-plain`} value={o.code}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <span>{o.flag}</span>
+                        <Typography variant='body2'>{o.name}</Typography>
+                      </Box>
+                      <Typography variant='body2' color='text.secondary'>
+                        {o.code}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label='Mobile'
+              value={mobile}
+              onChange={e => handleMobile(e.target.value)}
+              error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
+              helperText={
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
+              }
+              fullWidth
+              required
+              inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position='start'>
+                    <i className='ri-smartphone-line' />
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Box>
 
           <TextField
             label='Email'

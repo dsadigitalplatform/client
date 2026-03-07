@@ -96,7 +96,9 @@ const CREATE_CUSTOMER_OPTION_ID = '__create_customer__'
 const CREATE_CUSTOMER_OPTION: Customer = {
   id: CREATE_CUSTOMER_OPTION_ID,
   fullName: 'Add New Customer',
+  countryCode: '+91',
   mobile: '',
+  isNRI: false,
   email: null,
   remarks: null,
   employmentType: 'SALARIED',
@@ -292,7 +294,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setCustomerValue({
           id: data.customerId,
           fullName: data.customerName || '',
+          countryCode: '+91',
           mobile: '',
+          isNRI: false,
           email: null,
           remarks: null,
           employmentType: 'SALARIED',

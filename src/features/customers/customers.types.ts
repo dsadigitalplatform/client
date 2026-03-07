@@ -4,7 +4,9 @@ export type SourceType = 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'O
 export type Customer = {
   id: string
   fullName: string
+  countryCode: string
   mobile: string
+  isNRI: boolean
   email: string | null
   remarks: string | null
   employmentType: EmploymentType

@@ -247,7 +247,9 @@ const customersValidator = {
     properties: {
       tenantId: { bsonType: 'objectId' },
       fullName: { bsonType: 'string', minLength: 2 },
+      countryCode: { bsonType: 'string' },
       mobile: { bsonType: 'string', pattern: '^[0-9]{10}$' },
+      isNRI: { bsonType: 'bool' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       dob: { bsonType: ['date', 'null'] },
       pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
