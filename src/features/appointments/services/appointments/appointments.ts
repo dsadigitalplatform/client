@@ -36,6 +36,7 @@ function toIsoOrString(v: string | Date) {
 
 export type AppointmentListItem = Appointment & {
   customerName?: string | null
+  customerIsNRI?: boolean | null
   leadTitle?: string | null
   organizerId?: string | null
   organizerName?: string | null

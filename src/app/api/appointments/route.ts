@@ -277,7 +277,7 @@ export async function GET(request: Request) {
           let: { customerId: '$customerId', tenantId: '$tenantId' },
           pipeline: [
             { $match: { $expr: { $and: [{ $eq: ['$_id', '$$customerId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
-            { $project: { fullName: 1, mobile: 1, email: 1 } }
+            { $project: { fullName: 1, mobile: 1, email: 1, isNRI: 1 } }
           ],
           as: 'customer'
         }
@@ -342,6 +342,7 @@ export async function GET(request: Request) {
           createdAt: 1,
           updatedAt: 1,
           customerName: '$customer.fullName',
+          customerIsNRI: '$customer.isNRI',
           leadLoanTypeName: '$loanType.name',
           leadBankName: '$lead.bankName',
           organizerId: '$lead.assignedAgentId',
@@ -372,6 +373,7 @@ export async function GET(request: Request) {
       createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
       updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
       customerName: (r as any).customerName ? String((r as any).customerName) : null,
+      customerIsNRI: Boolean((r as any).customerIsNRI),
       leadTitle,
       organizerId: (r as any).organizerId ? String((r as any).organizerId) : null,
       organizerName: (r as any).organizerName ? String((r as any).organizerName) : null,
