@@ -44,7 +44,7 @@ export type AppointmentListItem = Appointment & {
 }
 
 export type AppointmentDetails = AppointmentListItem & {
-  customer?: { id: string; fullName: string; mobile?: string | null; email?: string | null } | null
+  customer?: { id: string; fullName: string; mobile?: string | null; countryCode?: string | null; email?: string | null } | null
   lead?: { id: string; title?: string | null; loanTypeName?: string | null; bankName?: string | null } | null
 }
 

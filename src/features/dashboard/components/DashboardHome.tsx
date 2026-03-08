@@ -28,7 +28,7 @@ import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
 import { getReminders } from '@features/reminders/services/remindersService'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
-import { listAppointments } from '@features/appointments/services/appointments'
+import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
 
 const DONUT_SIZE = 64
@@ -131,6 +131,7 @@ const DashboardHome = () => {
     const [meetings, setMeetings] = useState<AppointmentListItem[]>([])
     const [meetingsLoading, setMeetingsLoading] = useState(false)
     const [meetingsError, setMeetingsError] = useState<string | null>(null)
+    const [actionToast, setActionToast] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
 
     useEffect(() => {
         let active = true
@@ -515,6 +516,44 @@ const DashboardHome = () => {
         return { label: 'Meeting', icon: 'ri-calendar-event-line', color: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.12)', text: 'var(--mui-palette-secondary-main)' }
     }
 
+    const normalizeDigits = (value: string | null | undefined) => String(value || '').replace(/\D/g, '')
+
+    const buildContactNumber = (countryCode?: string | null, mobile?: string | null) => {
+        const code = normalizeDigits(countryCode)
+        const phone = normalizeDigits(mobile)
+
+        if (!phone) return ''
+
+        return code ? `${code}${phone}` : phone
+    }
+
+    const openFollowUpContact = async (meeting: AppointmentListItem) => {
+        const type = String(meeting?.followUpType || '').toUpperCase()
+
+        if (type !== 'CALL' && type !== 'WHATSAPP') return
+
+        try {
+            const details = await getAppointmentById(String(meeting.id))
+            const contact = buildContactNumber(details?.customer?.countryCode, details?.customer?.mobile)
+
+            if (!contact) {
+                setActionToast({ open: true, message: 'No customer mobile number available' })
+
+                return
+            }
+
+            if (type === 'CALL') {
+                window.location.href = `tel:${contact}`
+
+                return
+            }
+
+            window.open(`https://wa.me/${contact}`, '_blank', 'noopener,noreferrer')
+        } catch (e: any) {
+            setActionToast({ open: true, message: e?.message || 'Unable to open contact action' })
+        }
+    }
+
     const formatMeetingTime = (m: AppointmentListItem) => {
         if (!m?.scheduledAt) return 'To be scheduled'
         const start = new Date(m.scheduledAt)
@@ -705,32 +744,48 @@ const DashboardHome = () => {
                                     const title = meetingTitle(m)
                                     const tag = meetingTypeMeta(m)
                                     const label = m.customerName || m.leadTitle || 'Meeting'
+                                    const followUpType = String(m?.followUpType || '').toUpperCase()
+                                    const canOpenContact = followUpType === 'CALL' || followUpType === 'WHATSAPP'
 
                                     return (
-                                        <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        <Box
+                                            key={m.id}
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 1.5,
+                                                px: 0.75,
+                                                py: 0.75,
+                                                borderRadius: 2,
+                                                backgroundColor: 'transparent',
+                                                transition: 'background-color 120ms ease',
+                                                '&:hover': { backgroundColor: 'action.hover' }
+                                            }}
+                                        >
                                             <Avatar
                                                 sx={{
-                                                    width: 40,
-                                                    height: 40,
+                                                    width: 36,
+                                                    height: 36,
                                                     bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                                                    color: 'var(--mui-palette-primary-main)'
+                                                    color: 'var(--mui-palette-primary-main)',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: 700
                                                 }}
                                             >
                                                 {initials(label)}
                                             </Avatar>
                                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                                                    <Typography variant='subtitle2' sx={{ fontWeight: 700 }} noWrap>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, minWidth: 0, flexWrap: 'wrap' }}>
+                                                    <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>
                                                         {title}
                                                     </Typography>
                                                     {m?.customerIsNRI ? (
                                                         <Chip
-                                                            label='NRI'
                                                             size='small'
+                                                            label='NRI'
                                                             variant='outlined'
                                                             icon={<i className='ri-global-line' />}
                                                             sx={{
-                                                                height: 24,
                                                                 boxShadow: 'none',
                                                                 borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
                                                                 color: 'warning.main',
@@ -739,24 +794,47 @@ const DashboardHome = () => {
                                                         />
                                                     ) : null}
                                                 </Box>
-                                                <Typography variant='caption' color='text.secondary' noWrap>
-                                                    <i className='ri-calendar-event-line' style={{ marginRight: 6 }} />
-                                                    {formatMeetingTime(m)}
-                                                </Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mt: 0.25 }}>
+                                                    <Box
+                                                        component='span'
+                                                        sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', '& i': { fontSize: '0.95rem' } }}
+                                                    >
+                                                        <i className='ri-calendar-event-line' />
+                                                    </Box>
+                                                    <Typography variant='caption' color='text.secondary' noWrap sx={{ lineHeight: 1.2 }}>
+                                                        {formatMeetingTime(m)}
+                                                    </Typography>
+                                                </Box>
                                             </Box>
                                             <Box
+                                                role={canOpenContact ? 'button' : undefined}
+                                                tabIndex={canOpenContact ? 0 : undefined}
+                                                onClick={canOpenContact ? () => void openFollowUpContact(m) : undefined}
+                                                onKeyDown={
+                                                    canOpenContact
+                                                        ? e => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault()
+                                                                void openFollowUpContact(m)
+                                                            }
+                                                        }
+                                                        : undefined
+                                                }
                                                 sx={{
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    gap: 0.75,
-                                                    px: 1.25,
-                                                    py: 0.5,
-                                                    borderRadius: 10,
+                                                    gap: 0.5,
+                                                    px: 1,
+                                                    height: 24,
+                                                    borderRadius: 999,
                                                     backgroundColor: tag.color,
                                                     color: tag.text,
-                                                    fontSize: '0.75rem',
+                                                    fontSize: '0.72rem',
                                                     fontWeight: 600,
-                                                    whiteSpace: 'nowrap'
+                                                    whiteSpace: 'nowrap',
+                                                    cursor: canOpenContact ? 'pointer' : 'default',
+                                                    border: 'none',
+                                                    '& i': { fontSize: '0.95rem' }
                                                 }}
                                             >
                                                 <i className={tag.icon} />
@@ -891,6 +969,26 @@ const DashboardHome = () => {
                             <i className='ri-close-line' />
                         </IconButton>
                     }
+                />
+            </Snackbar>
+            <Snackbar
+                open={actionToast.open}
+                autoHideDuration={3000}
+                onClose={() => setActionToast(v => ({ ...v, open: false }))}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <SnackbarContent
+                    sx={{
+                        backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.9)',
+                        color: 'text.primary',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        boxShadow: 'var(--mui-customShadows-sm, 0px 6px 18px rgba(0,0,0,0.16))',
+                        px: 2,
+                        py: 1.25
+                    }}
+                    message={actionToast.message}
                 />
             </Snackbar>
         </Box>

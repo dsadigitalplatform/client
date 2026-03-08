@@ -104,7 +104,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     customerIdObj
       ? db
           .collection('customers')
-          .findOne({ _id: customerIdObj, tenantId: tenantIdObj }, { projection: { fullName: 1, mobile: 1, email: 1 } })
+          .findOne(
+            { _id: customerIdObj, tenantId: tenantIdObj },
+            { projection: { fullName: 1, mobile: 1, countryCode: 1, email: 1 } }
+          )
       : null,
     leadIdObj
       ? db
@@ -132,6 +135,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
           id: base.customerId!,
           fullName: String((customer as any).fullName || ''),
           mobile: (customer as any).mobile ?? null,
+          countryCode: (customer as any).countryCode ?? null,
           email: (customer as any).email ?? null
         }
       : null,
