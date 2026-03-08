@@ -551,7 +551,9 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                             >
                                                                 <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
                                                             </IconButton>
-                                                        ) : null}
+                                                        ) : (
+                                                            <i className='ri-calendar-event-line' style={{ color: 'var(--mui-palette-text-secondary)' }} />
+                                                        )}
                                                     </Box>
                                                     {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
@@ -692,7 +694,9 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                             >
                                                                 <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
                                                             </IconButton>
-                                                        ) : null}
+                                                        ) : (
+                                                            <i className='ri-calendar-event-line' style={{ color: 'var(--mui-palette-text-secondary)' }} />
+                                                        )}
                                                     </Box>
                                                     {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
                                                     <Box sx={{ minWidth: 0 }}>
