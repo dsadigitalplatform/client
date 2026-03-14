@@ -10,9 +10,11 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
+import Switch from '@mui/material/Switch'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -36,15 +38,17 @@ const LoanCasesList = () => {
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
+  const [showInactive, setShowInactive] = useState<boolean>(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
 
   const filters = useMemo(
     () => ({
       stageId: stageId || undefined,
-      assignedAgentId: assignedAgentId || undefined
+      assignedAgentId: assignedAgentId || undefined,
+      showInactive: showInactive || undefined
     }),
-    [stageId, assignedAgentId]
+    [stageId, assignedAgentId, showInactive]
   )
 
   const { cases, loading } = useLoanCases(filters)
@@ -120,8 +124,9 @@ const LoanCasesList = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-          gap: 2
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' },
+          gap: 2,
+          alignItems: 'center'
         }}
       >
         <FormControl size='small' fullWidth>
@@ -161,6 +166,18 @@ const LoanCasesList = () => {
             ))}
           </Select>
         </FormControl>
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showInactive}
+              onChange={e => setShowInactive(e.target.checked)}
+              size='small'
+            />
+          }
+          label='Show inactive'
+          sx={{ mt: 0 }}
+        />
       </Box>
 
       {isMobile ? (
@@ -187,10 +204,28 @@ const LoanCasesList = () => {
                 key={c.id}
                 sx={{
                   borderRadius: 3,
-                  boxShadow: 'none',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  backgroundColor: 'background.paper'
+                  boxShadow: c.isActive === false ? '0 6px 20px rgba(244,67,54,0.18)' : 'var(--mui-customShadows-sm)',
+                  border: c.isActive === false ? '2px solid' : '1px solid',
+                  borderColor: c.isActive === false ? 'error.main' : 'divider',
+                  backgroundColor: c.isActive === false ? 'rgba(244,67,54,0.08)' : 'background.paper',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'all 0.3s ease',
+                  opacity: c.isActive === false ? 0.95 : 1,
+                  '&::before': c.isActive === false ? {
+                    content: '"INACTIVE"',
+                    position: 'absolute',
+                    top: 10,
+                    right: -34,
+                    backgroundColor: 'error.main',
+                    color: 'white',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '4px 32px',
+                    transform: 'rotate(45deg)',
+                    letterSpacing: '0.6px',
+                    zIndex: 1
+                  } : {}
                 }}
               >
                 <CardContent sx={{ p: 2 }}>
@@ -209,7 +244,8 @@ const LoanCasesList = () => {
                           overflow: 'hidden',
                           whiteSpace: 'nowrap',
                           transition: 'color .2s ease',
-                          '&:hover': { color: 'primary.main' }
+                          color: c.isActive === false ? 'text.secondary' : 'text.primary',
+                          '&:hover': { color: c.isActive === false ? 'text.secondary' : 'primary.main' }
                         }}
                       >
                         {c.customerName || 'Customer'}
@@ -274,7 +310,7 @@ const LoanCasesList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         Loading...
                       </Typography>
@@ -282,7 +318,7 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : cases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         No cases found
                       </Typography>
@@ -290,11 +326,38 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : (
                   cases.map(c => (
-                    <TableRow key={c.id} hover>
+                    <TableRow
+                      key={c.id}
+                      hover
+                      sx={{
+                        backgroundColor: c.isActive === false ? 'rgba(244,67,54,0.08)' : 'inherit',
+                        borderLeft: c.isActive === false ? '6px solid' : 'none',
+                        borderLeftColor: c.isActive === false ? 'error.main' : 'none',
+                        position: 'relative',
+                        '&:hover': {
+                          backgroundColor: c.isActive === false ? 'rgba(244,67,54,0.12)' : 'action.hover'
+                        },
+                        '& td': {
+                          color: c.isActive === false ? 'text.secondary' : 'inherit'
+                        }
+                      }}
+                    >
                       <TableCell>
-                        <MuiLink component={Link} href={`/loan-cases/${c.id}`} underline='hover' sx={{ fontWeight: 700 }}>
-                          {c.customerName || 'Customer'}
-                        </MuiLink>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <MuiLink
+                            component={Link}
+                            href={`/loan-cases/${c.id}`}
+                            underline='hover'
+                            sx={{
+                              fontWeight: 700,
+                              color: c.isActive === false ? 'error.main' : 'text.primary',
+                              textDecoration: c.isActive === false ? 'line-through' : 'none'
+                            }}
+                          >
+                            {c.customerName || 'Customer'}
+                          </MuiLink>
+
+                        </Box>
                       </TableCell>
                       <TableCell>{c.loanTypeName || '—'}</TableCell>
                       <TableCell>{c.bankName || '—'}</TableCell>

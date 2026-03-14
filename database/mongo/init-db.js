@@ -368,7 +368,7 @@ ensureIndex(
 const loanCasesValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['tenantId', 'customerId', 'loanTypeId', 'stageId', 'documents', 'createdBy', 'createdAt', 'updatedAt', 'isLocked'],
+    required: ['tenantId', 'customerId', 'loanTypeId', 'stageId', 'documents', 'createdBy', 'createdAt', 'updatedAt', 'isLocked', 'isActive'],
     properties: {
       tenantId: { bsonType: 'objectId' },
       customerId: { bsonType: 'objectId' },
@@ -397,7 +397,8 @@ const loanCasesValidator = {
       createdBy: { bsonType: 'objectId' },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
-      isLocked: { bsonType: 'bool' }
+      isLocked: { bsonType: 'bool' },
+      isActive: { bsonType: 'bool' }
     },
     additionalProperties: true
   }

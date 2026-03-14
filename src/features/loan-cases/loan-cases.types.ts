@@ -21,6 +21,7 @@ export type LoanCaseListItem = {
   assignedAgentEmail: string | null
   updatedAt: string | null
   isLocked?: boolean
+  isActive?: boolean
   totalDocuments?: number
   incompleteDocumentsCount?: number
   pendingDocumentsCount?: number
@@ -47,6 +48,7 @@ export type LoanCaseDetails = {
   stageName: string
   documents: LoanCaseDocument[]
   isLocked: boolean
+  isActive: boolean
   createdAt: string | null
   updatedAt: string | null
 }

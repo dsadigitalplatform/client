@@ -133,6 +133,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         }))
       : [],
     isLocked: Boolean((row as any).isLocked),
+    isActive: (row as any).isActive !== false,
     updatedAt: (row as any).updatedAt ? new Date((row as any).updatedAt).toISOString() : null,
     createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null
   }
@@ -367,4 +368,39 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   }
 
   return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const { id } = await ctx.params
+
+  if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
+
+  const tenantCtx = await getTenantContext(session as any)
+
+  if ('error' in tenantCtx) return tenantCtx.error
+
+  const { db, tenantIdObj, userId, role } = tenantCtx
+
+  // Check if user has permission to delete (admin/owner or creator/assigned agent)
+  const existing = await db.collection('loanCases').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
+
+  if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!canAccessCase(role, userId, existing)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  // Soft delete: set isActive to false instead of actually deleting
+  await db.collection('loanCases').updateOne(
+    { _id: new ObjectId(id), tenantId: tenantIdObj },
+    { 
+      $set: { 
+        isActive: false,
+        updatedAt: new Date()
+      } 
+    }
+  )
+
+  return NextResponse.json({ ok: true, message: 'Case deleted successfully' })
 }

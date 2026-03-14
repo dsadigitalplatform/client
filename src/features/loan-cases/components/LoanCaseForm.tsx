@@ -67,7 +67,8 @@ import {
   getChecklistByLoanType,
   getLoanCaseById,
   getTenantUsers,
-  updateLoanCase
+  updateLoanCase,
+  deleteLoanCase
 } from '@features/loan-cases/services/loanCasesService'
 import type { LoanCaseDetails, LoanCaseDocument, LoanCaseDocumentStatus, TenantUserOption } from '@features/loan-cases/loan-cases.types'
 
@@ -128,9 +129,12 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [redirectOpen, setRedirectOpen] = useState(false)
   const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
   const [redirectProgress, setRedirectProgress] = useState(0)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const [id, setId] = useState<string | null>(caseId ?? null)
   const [isLocked, setIsLocked] = useState(false)
+  const [isActive, setIsActive] = useState<boolean>(true)
 
   const { customers, loading: customersLoading, setSearch, refresh: refreshCustomers } = useCustomers()
 
@@ -317,6 +321,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setEmi(data.emi != null ? String(data.emi) : '')
         setDocuments(Array.isArray(data.documents) ? data.documents : [])
         setIsLocked(Boolean(data.isLocked))
+        setIsActive(Boolean(data.isActive))
       } catch (e: any) {
         setError(e?.message || 'Failed to load loan case')
       } finally {
@@ -523,6 +528,24 @@ const LoanCaseForm = ({ caseId }: Props) => {
     return { ok: Object.keys(next).length === 0, parsed: { requested, eligible, rate, tenure, emiN } }
   }
 
+  const handleDelete = async () => {
+    if (!id) return
+    setDeleting(true)
+
+    try {
+      await deleteLoanCase(id)
+      setSuccessMsg('Loan case deleted successfully')
+      setRedirectTarget('/loan-cases')
+      setRedirectOpen(true)
+      setConfirmDeleteOpen(false)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete loan case')
+      setConfirmDeleteOpen(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const handleSave = async () => {
     setError(null)
     const { ok, parsed } = validate()
@@ -592,8 +615,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
     }
   }
 
-  const headerTitle = id ? 'Lead manager' : 'Create Lead'
-  const headerSub = id ? 'Update lead' : 'Create & link a new lead '
+  const headerTitle = id ? (isActive ? 'Lead manager' : 'Lead manager (Inactive)') : 'Create Lead'
+  const headerSub = id ? (isActive ? 'Update lead' : 'This lead has been deleted and cannot be modified') : 'Create & link a new lead '
 
   const statusChip = (s: LoanCaseDocumentStatus) => {
     switch (s) {
@@ -614,8 +637,22 @@ const LoanCaseForm = ({ caseId }: Props) => {
     <Box sx={{ pb: isMobile ? 10 : 0 }}>
       <Card sx={{ borderRadius: 3, boxShadow: 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))' }}>
         <CardHeader
-          title={headerTitle}
-          subheader={headerSub}
+          title={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {headerTitle}
+
+            </Box>
+          }
+
+          sx={{
+            ...(id && !isActive && {
+              backgroundColor: 'error.light',
+              color: 'error.contrastText',
+              '& .MuiCardHeader-subheader': {
+                color: 'error.contrastText'
+              }
+            })
+          }}
           action={
             isMobile ? (
               <IconButton onClick={() => router.push('/loan-cases')} aria-label='Back to lead manager'>
@@ -631,6 +668,67 @@ const LoanCaseForm = ({ caseId }: Props) => {
             <Typography variant='body2' color='text.secondary'>
               Loading...
             </Typography>
+          ) : id && !isActive ? (
+            <>
+              <Alert
+                severity="warning"
+                icon={<i className="ri-error-warning-line" />}
+                sx={{ mb: 3 }}
+              >
+                <Typography variant="body2" fontWeight="bold">
+                  This lead has been deleted and is no longer active.
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  You can view the details but cannot make changes or delete this record.
+                </Typography>
+              </Alert>
+
+              {/* Read-only details summary */}
+              <Card variant="outlined" sx={{ mb: 3, backgroundColor: 'grey.50' }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className="ri-information-line" />
+                    Lead Details (Read Only)
+                  </Typography>
+
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Customer</Typography>
+                      <Typography variant="body1">{customerValue?.fullName || 'N/A'}</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Loan Type</Typography>
+                      <Typography variant="body1">{loanTypes.find(lt => lt.id === loanTypeId)?.name || 'N/A'}</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Bank/NBFC</Typography>
+                      <Typography variant="body1">{bankName || 'N/A'}</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Requested Amount</Typography>
+                      <Typography variant="body1">{requestedAmount ? `₹${Number(requestedAmount).toLocaleString('en-IN')}` : 'N/A'}</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Stage</Typography>
+                      <Typography variant="body1">{stages.find(s => s.id === stageId)?.name || 'N/A'}</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Assigned Agent</Typography>
+                      <Typography variant="body1">
+                        {users.find(u => u.id === assignedAgentId)?.name ||
+                          users.find(u => u.id === assignedAgentId)?.email ||
+                          'N/A'}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </>
           ) : (
             <Stack spacing={isMobile ? 3.5 : 3.5}>
 
@@ -665,7 +763,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       if (reason === 'input') setSearch(v)
                       if (reason === 'clear') setSearch('')
                     }}
-                    disabled={isLocked}
+                    disabled={isLocked || !isActive}
                     renderOption={(props, option) => (
                       <Box
                         component='li'
@@ -723,7 +821,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       label='Loan Type'
                       value={loanTypeId}
                       onChange={e => setLoanTypeId(String(e.target.value))}
-                      disabled={isLocked}
+                      disabled={isLocked || !isActive}
                       renderValue={v => loanTypes.find(x => x.id === v)?.name || 'Select'}
                     >
                       {loanTypes
@@ -750,7 +848,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     onChange={(_, v) => setBankName(typeof v === 'string' ? v : '')}
                     inputValue={bankName}
                     onInputChange={(_, v) => setBankName(v)}
-                    disabled={isLocked}
+                    disabled={isLocked || !isActive}
                     renderInput={params => (
                       <TextField
                         {...params}
@@ -1066,7 +1164,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                                     setDraftAppointments(prev => prev.filter(x => x.id !== a.id))
                                   }}
                                   aria-label='Remove appointment'
-                                  disabled={isLocked}
+                                  disabled={isLocked || !isActive}
                                 >
                                   <i className='ri-close-line' />
                                 </IconButton>
@@ -1116,7 +1214,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                                       setDraftAppointments(prev => prev.filter(x => x.id !== a.id))
                                     }}
                                     aria-label='Remove appointment'
-                                    disabled={isLocked}
+                                    disabled={isLocked || !isActive}
                                   >
                                     <i className='ri-close-line' />
                                   </IconButton>
@@ -1271,9 +1369,21 @@ const LoanCaseForm = ({ caseId }: Props) => {
         {!isMobile ? (
           <CardActions sx={{ px: { xs: 2.5, sm: 3 }, pb: { xs: 2.5, sm: 3 } }}>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: '100%' }}>
-              <Button variant='contained' disabled={submitting || loading} onClick={handleSave} fullWidth={isMobile}>
+              <Button variant='contained' disabled={submitting || loading || !isActive} onClick={handleSave} fullWidth={isMobile}>
                 {saveLabel}
               </Button>
+              {id && isActive && (
+                <Button
+                  variant='outlined'
+                  color='error'
+                  disabled={submitting || deleting}
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  fullWidth={isMobile}
+                  startIcon={<i className='ri-delete-bin-line' />}
+                >
+                  Delete
+                </Button>
+              )}
               <Button variant='outlined' disabled={submitting} onClick={() => router.push('/loan-cases')} fullWidth={isMobile}>
                 Cancel
               </Button>
@@ -1301,7 +1411,18 @@ const LoanCaseForm = ({ caseId }: Props) => {
             <Button variant='outlined' disabled={submitting} onClick={() => router.push('/loan-cases')} fullWidth>
               Cancel
             </Button>
-            <Button variant='contained' disabled={submitting || loading} onClick={handleSave} fullWidth>
+            {id && isActive && (
+              <Button
+                variant='outlined'
+                color='error'
+                disabled={submitting || deleting}
+                onClick={() => setConfirmDeleteOpen(true)}
+                fullWidth
+              >
+                <i className='ri-delete-bin-line' />
+              </Button>
+            )}
+            <Button variant='contained' disabled={submitting || loading || !isActive} onClick={handleSave} fullWidth>
               {saveLabel}
             </Button>
           </Box>
@@ -1541,6 +1662,21 @@ const LoanCaseForm = ({ caseId }: Props) => {
             </Box>
           </Stack>
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>
+        <DialogTitle>Delete Loan Case</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete this loan case? This action cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant='text' onClick={() => setConfirmDeleteOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button color='error' variant='contained' onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   )

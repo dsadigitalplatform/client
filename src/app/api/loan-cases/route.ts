@@ -98,8 +98,14 @@ export async function GET(request: Request) {
   const stageId = url.searchParams.get('stageId') || ''
   const assignedAgentId = url.searchParams.get('assignedAgentId') || ''
   const customerId = url.searchParams.get('customerId') || ''
+  const showInactive = url.searchParams.get('showInactive') === 'true'
 
   const baseFilter: any = { tenantId: tenantIdObj }
+  
+  // Filter by isActive - show only active cases by default, include inactive if explicitly requested
+  if (!showInactive) {
+    baseFilter.isActive = { $ne: false }
+  }
 
   if (stageId) {
     if (!ObjectId.isValid(stageId)) return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
@@ -207,6 +213,7 @@ export async function GET(request: Request) {
           updatedAt: 1,
           createdBy: 1,
           isLocked: 1,
+          isActive: 1,
           totalDocuments: 1,
           incompleteDocumentsCount: 1,
           pendingDocumentsCount: 1,
@@ -235,6 +242,7 @@ export async function GET(request: Request) {
     assignedAgentEmail: (r as any).assignedAgentEmail ?? null,
     updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
     isLocked: Boolean((r as any).isLocked),
+    isActive: (r as any).isActive !== false,
     totalDocuments: Number((r as any).totalDocuments || 0),
     incompleteDocumentsCount: Number((r as any).incompleteDocumentsCount || 0),
     pendingDocumentsCount: Number((r as any).pendingDocumentsCount || 0),
@@ -358,7 +366,8 @@ export async function POST(request: Request) {
     createdBy: userId,
     createdAt: now,
     updatedAt: now,
-    isLocked: true
+    isLocked: true,
+    isActive: true
   }
 
   if (nextFollowUpDate) doc.nextFollowUpDate = nextFollowUpDate
