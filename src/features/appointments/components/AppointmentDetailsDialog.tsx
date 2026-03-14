@@ -36,21 +36,6 @@ type Props = {
   onUpdated: (appointmentId?: string | null) => void
 }
 
-function formatDateTime(v: string | null) {
-  if (!v) return '-'
-  const d = new Date(v)
-
-  if (Number.isNaN(d.getTime())) return '-'
-
-  return new Intl.DateTimeFormat('en-IN', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(d)
-}
-
 function normalizeStatusKey(s: string) {
   return s === 'SCHEDULED' ? 'PENDING' : s
 }
@@ -79,6 +64,8 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
 
   const [status, setStatus] = useState<AppointmentStatus | ''>('')
   const [outcomeComments, setOutcomeComments] = useState<string>('')
+  const [scheduledAtLocal, setScheduledAtLocal] = useState<string>('')
+  const [initialScheduledAtLocal, setInitialScheduledAtLocal] = useState<string>('')
 
   const [followUpType, setFollowUpType] = useState<AppointmentFollowUpType>('CALL')
   const [followUpScheduledAtLocal, setFollowUpScheduledAtLocal] = useState<string>('')
@@ -104,6 +91,12 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
         setData(d)
         setStatus((d?.status as AppointmentStatus) || 'PENDING')
         setOutcomeComments(typeof d?.outcomeComments === 'string' ? d.outcomeComments : '')
+
+        const nextScheduledAt = d?.scheduledAt ? dayjs(d.scheduledAt) : null
+        const nextScheduledAtLocal = nextScheduledAt && nextScheduledAt.isValid() ? nextScheduledAt.format('YYYY-MM-DDTHH:mm') : ''
+
+        setScheduledAtLocal(nextScheduledAtLocal)
+        setInitialScheduledAtLocal(nextScheduledAtLocal)
       } catch (e: any) {
         if (!active) return
         setData(null)
@@ -129,11 +122,20 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
     return d.isValid() ? d : null
   }, [followUpScheduledAtLocal])
 
+  const scheduledAtValue = useMemo(() => {
+    if (!scheduledAtLocal) return null
+    const d = dayjs(scheduledAtLocal)
+
+    return d.isValid() ? d : null
+  }, [scheduledAtLocal])
+
   const close = (opts?: { keepToast?: boolean }) => {
     setData(null)
     setError(null)
     setStatus('')
     setOutcomeComments('')
+    setScheduledAtLocal('')
+    setInitialScheduledAtLocal('')
     setFollowUpScheduledAtLocal('')
     setFollowUpOutcomeComments('')
     setFollowUpType('CALL')
@@ -143,13 +145,35 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
 
   const saveOutcome = async () => {
     if (!appointmentId) return
+    const scheduledChanged = scheduledAtLocal !== initialScheduledAtLocal
+    const scheduledDate = scheduledAtLocal ? dayjs(scheduledAtLocal) : null
+
+    if (scheduledChanged) {
+      if (!scheduledDate || !scheduledDate.isValid()) {
+        setError('Please enter a valid appointment date & time')
+
+        return
+      }
+
+      if (scheduledDate.isBefore(dayjs(), 'minute')) {
+        setError('Appointment date & time must be today or later')
+
+        return
+      }
+    }
+
     setSavingOutcome(true)
     setError(null)
 
     try {
       await updateAppointment(appointmentId, {
         status: (status || 'PENDING') as AppointmentStatus,
-        outcomeComments: outcomeComments.length > 0 ? outcomeComments : null
+        outcomeComments: outcomeComments.length > 0 ? outcomeComments : null,
+        ...(scheduledChanged
+          ? {
+            scheduledAt: scheduledAtLocal
+          }
+          : {})
       })
       onUpdated(appointmentId)
 
@@ -290,7 +314,26 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                   <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
                     Appointment
                   </Typography>
-                  <Typography variant='body2'>{formatDateTime(data?.scheduledAt)}</Typography>
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DateTimePicker
+                      label='Appointment Date & Time'
+                      value={scheduledAtValue}
+                      onChange={(v: Dayjs | null) => setScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                      format='YYYY-MM-DD HH:mm'
+                      minutesStep={30}
+                      disablePast
+                      slotProps={{
+                        textField: {
+                          size: 'small',
+                          fullWidth: true,
+                          sx: {
+                            mt: 0.75,
+                            minWidth: 0
+                          }
+                        }
+                      }}
+                    />
+                  </LocalizationProvider>
                 </Box>
               </Box>
 
