@@ -71,12 +71,12 @@ function formatDateTime(v: string | null) {
 function statusChip(status: string) {
     const s = status === 'SCHEDULED' ? 'PENDING' : status
 
-    if (s === 'COMPLETED') return { label: 'Completed', color: 'success' as const }
-    if (s === 'CANCELLED') return { label: 'Cancelled', color: 'error' as const }
-    if (s === 'RESCHEDULED') return { label: 'Rescheduled', color: 'warning' as const }
-    if (s === 'NO_SHOW') return { label: 'No Show', color: 'default' as const }
+    if (s === 'COMPLETED') return { label: 'Completed', color: 'success' as const, icon: 'ri-checkbox-circle-line' }
+    if (s === 'CANCELLED') return { label: 'Cancelled', color: 'error' as const, icon: 'ri-close-circle-line' }
+    if (s === 'RESCHEDULED') return { label: 'Rescheduled', color: 'warning' as const, icon: 'ri-calendar-event-line' }
+    if (s === 'NO_SHOW') return { label: 'No Show', color: 'default' as const, icon: 'ri-user-unfollow-line' }
 
-    return { label: 'Pending', color: 'info' as const }
+    return { label: 'Pending', color: 'info' as const, icon: 'ri-time-line' }
 }
 
 function formatLeadGroupHeading(leadTitle: string | null | undefined, customerName: string | null | undefined) {
@@ -523,24 +523,45 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                 <Card
                                     onClick={() => openDetails(String(a.id), 'details')}
                                     sx={{
-                                        borderRadius: 3,
+                                        borderRadius: 2.5,
                                         border: '1px solid',
                                         borderColor: isHighlighted(String(a?.id || ''))
-                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.4)'
-                                            : 'divider',
+                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.6)'
+                                            : 'rgb(var(--mui-palette-dividerChannel) / 0.5)',
                                         backgroundColor: isHighlighted(String(a?.id || ''))
-                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
                                             : 'background.paper',
-                                        boxShadow: isHighlighted(String(a?.id || '')) ? '0 12px 30px rgb(0 0 0 / 0.12)' : 'none',
+                                        boxShadow: isHighlighted(String(a?.id || ''))
+                                            ? '0 8px 24px rgb(var(--mui-palette-success-mainChannel) / 0.2)'
+                                            : '0 2px 12px rgb(0 0 0 / 0.06)',
                                         cursor: 'pointer',
-                                        ml: depth * 1.25
+                                        ml: depth * 1.5,
+                                        transition: 'all 0.2s ease-in-out',
+                                        '&:hover': {
+                                            transform: 'translateY(-1px)',
+                                            boxShadow: '0 8px 20px rgb(0 0 0 / 0.12)',
+                                            borderColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.4)'
+                                        }
                                     }}
                                 >
-                                    <CardContent sx={{ p: 2 }}>
+                                    <CardContent sx={{ p: 2.5 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
                                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                                    <Box sx={{ width: 30, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                                    <Box sx={{
+                                                        width: 36,
+                                                        height: 36,
+                                                        display: 'grid',
+                                                        placeItems: 'center',
+                                                        flexShrink: 0,
+                                                        borderRadius: '50%',
+                                                        backgroundColor: depth === 0
+                                                            ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)'
+                                                            : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)',
+                                                        color: depth === 0
+                                                            ? 'primary.main'
+                                                            : 'text.secondary'
+                                                    }}>
                                                         {hasChildren ? (
                                                             <IconButton
                                                                 size='small'
@@ -548,53 +569,123 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                                     e.stopPropagation()
                                                                     toggleNode(String(a.id))
                                                                 }}
+                                                                sx={{
+                                                                    color: 'inherit',
+                                                                    '&:hover': { backgroundColor: 'rgb(0 0 0 / 0.08)' }
+                                                                }}
                                                             >
                                                                 <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
                                                             </IconButton>
                                                         ) : (
-                                                            <i className='ri-calendar-event-line' style={{ color: 'var(--mui-palette-text-secondary)' }} />
+                                                            <i className={sc.icon} style={{ fontSize: '18px' }} />
                                                         )}
                                                     </Box>
-                                                    {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
-                                                        <Typography
-                                                            variant='body2'
-                                                            sx={{ fontWeight: 800, minWidth: 0, flex: 1 }}
-                                                            noWrap
-                                                            title={depth === 0 ? caseTitle : a?.customerName || ''}
-                                                        >
-                                                            {depth === 0 ? caseTitle : a?.customerName || 'Customer'}
-                                                        </Typography>
-                                                        {depth === 0 && a?.leadId ? (
-                                                            <Tooltip title='View case'>
-                                                                <IconButton
-                                                                    size='small'
-                                                                    component={Link}
-                                                                    href={`/loan-cases/${encodeURIComponent(String(a.leadId))}`}
-                                                                    onClick={e => e.stopPropagation()}
-                                                                >
-                                                                    <i className='ri-external-link-line' />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        ) : null}
+
+                                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                                                            {depth > 0 && (
+                                                                <i className='ri-arrow-right-s-line' style={{
+                                                                    color: 'text.secondary',
+                                                                    fontSize: '16px'
+                                                                }} />
+                                                            )}
+                                                            <Typography
+                                                                variant='body2'
+                                                                sx={{
+                                                                    fontWeight: depth === 0 ? 700 : 600,
+                                                                    minWidth: 0,
+                                                                    flex: 1,
+                                                                    color: depth === 0 ? 'text.primary' : 'text.primary'
+                                                                }}
+                                                                noWrap
+                                                                title={depth === 0 ? caseTitle : a?.customerName || ''}
+                                                            >
+                                                                {depth === 0 ? caseTitle : a?.customerName || 'Customer'}
+                                                            </Typography>
+                                                            {depth === 0 && a?.leadId ? (
+                                                                <Tooltip title='View case'>
+                                                                    <IconButton
+                                                                        size='small'
+                                                                        component={Link}
+                                                                        href={`/loan-cases/${encodeURIComponent(String(a.leadId))}`}
+                                                                        onClick={e => e.stopPropagation()}
+                                                                        sx={{
+                                                                            color: 'primary.main',
+                                                                            '&:hover': {
+                                                                                backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)'
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <i className='ri-external-link-line' style={{ fontSize: '16px' }} />
+                                                                    </IconButton>
+                                                                </Tooltip>
+                                                            ) : null}
+                                                        </Box>
+
+                                                        {depth > 0 && (
+                                                            <Typography
+                                                                variant='caption'
+                                                                color='text.secondary'
+                                                                sx={{
+                                                                    display: 'block',
+                                                                    mb: 0.75,
+                                                                    fontStyle: 'italic'
+                                                                }}
+                                                                noWrap
+                                                                title={a?.leadTitle || ''}
+                                                            >
+                                                                {a?.leadTitle || ''}
+                                                            </Typography>
+                                                        )}
+
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                                <i className='ri-calendar-event-line' style={{
+                                                                    fontSize: '14px',
+                                                                    color: 'text.secondary'
+                                                                }} />
+                                                                <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                                                                    {formatDateTime(a?.scheduledAt || null)}
+                                                                </Typography>
+                                                            </Box>
+                                                        </Box>
+
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <i className='ri-user-line' style={{
+                                                                fontSize: '14px',
+                                                                color: 'text.secondary'
+                                                            }} />
+                                                            <Typography variant='caption' color='text.secondary'>
+                                                                {organizer}
+                                                            </Typography>
+                                                        </Box>
                                                     </Box>
                                                 </Box>
-                                                {depth > 0 ? (
-                                                    <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
-                                                        {a?.leadTitle || ''}
-                                                    </Typography>
-                                                ) : null}
-                                                <Typography variant='body2' sx={{ mt: 0.75 }}>
-                                                    {formatDateTime(a?.scheduledAt || null)}
-                                                </Typography>
-                                                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-                                                    Organizer: {organizer}
-                                                </Typography>
                                             </Box>
-                                            <Chip size='small' label={sc.label} color={sc.color} variant='outlined' />
+
+                                            <Chip
+                                                size='small'
+                                                label={sc.label}
+                                                color={sc.color}
+                                                variant='filled'
+                                                icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
+                                                sx={{
+                                                    fontWeight: 600,
+                                                    fontSize: '0.75rem',
+                                                    height: '24px',
+                                                    '& .MuiChip-icon': { ml: 0.5 }
+                                                }}
+                                            />
                                         </Box>
 
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                                        <Box sx={{
+                                            display: 'flex',
+                                            justifyContent: 'flex-end',
+                                            mt: 1.5,
+                                            pt: 1,
+                                            borderTop: '1px solid',
+                                            borderColor: 'divider'
+                                        }}>
                                             {canAddFollowUp(a) ? (
                                                 <Tooltip title='Add follow-up'>
                                                     <IconButton
@@ -604,8 +695,14 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                             e.stopPropagation()
                                                             openDetails(String(a.id), 'followup')
                                                         }}
+                                                        sx={{
+                                                            backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)',
+                                                            '&:hover': {
+                                                                backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.2)'
+                                                            }
+                                                        }}
                                                     >
-                                                        <i className='ri-add-circle-line' />
+                                                        <i className='ri-add-circle-line' style={{ fontSize: '18px' }} />
                                                     </IconButton>
                                                 </Tooltip>
                                             ) : null}
@@ -622,33 +719,53 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
             )}
         </Box>
     ) : (
-        <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+        <Card sx={{
+            borderRadius: 2.5,
+            boxShadow: '0 4px 20px rgb(0 0 0 / 0.08)',
+            border: '1px solid',
+            borderColor: 'rgb(var(--mui-palette-dividerChannel) / 0.5)'
+        }}>
             <CardContent sx={{ p: 0 }}>
                 <Table size='small'>
                     <TableHead>
-                        <TableRow>
+                        <TableRow sx={{
+                            backgroundColor: 'rgb(var(--mui-palette-background-defaultChannel) / 0.6)',
+                            '& th': {
+                                fontWeight: 600,
+                                fontSize: '0.875rem',
+                                color: 'text.secondary',
+                                borderBottom: '2px solid',
+                                borderColor: 'divider'
+                            }
+                        }}>
                             <TableCell>Appointment</TableCell>
                             <TableCell>Date/Time</TableCell>
                             <TableCell>Status</TableCell>
                             <TableCell>Organizer</TableCell>
-                            <TableCell align='right'>Follow-up</TableCell>
+                            <TableCell align='right'>Actions</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {loading && appointments.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5}>
-                                    <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
-                                        Loading...
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4, gap: 1.5 }}>
+                                        <i className='ri-loader-4-line' style={{ fontSize: '20px', color: 'text.secondary' }} />
+                                        <Typography variant='body2' color='text.secondary'>
+                                            Loading appointments...
+                                        </Typography>
+                                    </Box>
                                 </TableCell>
                             </TableRow>
                         ) : appointments.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5}>
-                                    <Typography variant='body2' color='text.secondary' sx={{ p: 2 }}>
-                                        No appointments found
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4, gap: 1.5 }}>
+                                        <i className='ri-calendar-blank-line' style={{ fontSize: '20px', color: 'text.secondary' }} />
+                                        <Typography variant='body2' color='text.secondary'>
+                                            No appointments found
+                                        </Typography>
+                                    </Box>
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -677,13 +794,32 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                             sx={{
                                                 cursor: 'pointer',
                                                 backgroundColor: isHighlighted(String(a?.id || ''))
-                                                    ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
-                                                    : 'transparent'
+                                                    ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
+                                                    : 'transparent',
+                                                transition: 'background-color 0.2s ease',
+                                                '&:hover': {
+                                                    backgroundColor: isHighlighted(String(a?.id || ''))
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.16)'
+                                                        : 'rgb(var(--mui-palette-action-hoverChannel) / 0.04)'
+                                                }
                                             }}
                                         >
                                             <TableCell sx={{ maxWidth: 320 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 2, gap: 0.75 }}>
-                                                    <Box sx={{ width: 30, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', pl: depth * 2.5, gap: 1 }}>
+                                                    <Box sx={{
+                                                        width: 32,
+                                                        height: 32,
+                                                        display: 'grid',
+                                                        placeItems: 'center',
+                                                        flexShrink: 0,
+                                                        borderRadius: '50%',
+                                                        backgroundColor: depth === 0
+                                                            ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)'
+                                                            : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)',
+                                                        color: depth === 0
+                                                            ? 'primary.main'
+                                                            : 'text.secondary'
+                                                    }}>
                                                         {hasChildren ? (
                                                             <IconButton
                                                                 size='small'
@@ -691,23 +827,37 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                                     e.stopPropagation()
                                                                     toggleNode(String(a.id))
                                                                 }}
+                                                                sx={{
+                                                                    color: 'inherit',
+                                                                    '&:hover': { backgroundColor: 'rgb(0 0 0 / 0.08)' }
+                                                                }}
                                                             >
                                                                 <i className={nodeCollapsed ? 'ri-add-line' : 'ri-subtract-line'} />
                                                             </IconButton>
                                                         ) : (
-                                                            <i className='ri-calendar-event-line' style={{ color: 'var(--mui-palette-text-secondary)' }} />
+                                                            <i className={sc.icon} style={{ fontSize: '16px' }} />
                                                         )}
                                                     </Box>
-                                                    {depth > 0 ? <i className='ri-corner-down-right-line' /> : null}
-                                                    <Box sx={{ minWidth: 0 }}>
+                                                    <Box sx={{ minWidth: 0, flex: 1 }}>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                                                            {depth > 0 && (
+                                                                <i className='ri-arrow-right-s-line' style={{
+                                                                    color: 'text.secondary',
+                                                                    fontSize: '16px'
+                                                                }} />
+                                                            )}
                                                             <Typography
                                                                 variant='body2'
-                                                                sx={{ fontWeight: 700, minWidth: 0 }}
+                                                                sx={{
+                                                                    fontWeight: depth === 0 ? 600 : 500,
+                                                                    minWidth: 0,
+                                                                    flex: 1,
+                                                                    color: depth === 0 ? 'text.primary' : 'text.primary'
+                                                                }}
                                                                 noWrap
                                                                 title={depth === 0 ? caseTitle : a?.customerName || ''}
                                                             >
-                                                                {depth === 0 ? caseTitle : a?.customerName || '-'}
+                                                                {depth === 0 ? caseTitle : a?.customerName || 'Customer'}
                                                             </Typography>
                                                             {depth === 0 && a?.leadId ? (
                                                                 <Tooltip title='View case'>
@@ -716,47 +866,119 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                                         component={Link}
                                                                         href={`/loan-cases/${encodeURIComponent(String(a.leadId))}`}
                                                                         onClick={e => e.stopPropagation()}
+                                                                        sx={{
+                                                                            color: 'primary.main',
+                                                                            '&:hover': {
+                                                                                backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)'
+                                                                            }
+                                                                        }}
                                                                     >
-                                                                        <i className='ri-external-link-line' />
+                                                                        <i className='ri-external-link-line' style={{ fontSize: '16px' }} />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                             ) : null}
                                                         </Box>
                                                         {depth > 0 ? (
-                                                            <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
-                                                                {a?.leadTitle || 'Lead'}
+                                                            <Typography
+                                                                variant='caption'
+                                                                color='text.secondary'
+                                                                sx={{
+                                                                    display: 'block',
+                                                                    mt: 0.25,
+                                                                    fontStyle: 'italic'
+                                                                }}
+                                                                noWrap
+                                                                title={a?.leadTitle || ''}
+                                                            >
+                                                                {a?.leadTitle || ''}
                                                             </Typography>
                                                         ) : null}
                                                     </Box>
                                                 </Box>
                                             </TableCell>
-                                            <TableCell>{formatDateTime(a?.scheduledAt || null)}</TableCell>
                                             <TableCell>
-                                                <Chip size='small' label={sc.label} color={sc.color} variant='outlined' />
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                                    <i className='ri-calendar-event-line' style={{
+                                                        fontSize: '14px',
+                                                        color: 'text.secondary'
+                                                    }} />
+                                                    <Typography variant='body2' sx={{ fontWeight: 500 }}>
+                                                        {formatDateTime(a?.scheduledAt || null)}
+                                                    </Typography>
+                                                </Box>
                                             </TableCell>
-                                            <TableCell sx={{ maxWidth: 220 }}>
-                                                <Typography variant='body2' noWrap title={organizer}>
-                                                    {organizer}
-                                                </Typography>
-                                                <Typography variant='caption' color='text.secondary' noWrap title={a?.organizerEmail || ''}>
-                                                    {a?.organizerEmail || ''}
-                                                </Typography>
+                                            <TableCell>
+                                                <Chip
+                                                    size='small'
+                                                    label={sc.label}
+                                                    color={sc.color}
+                                                    variant='filled'
+                                                    icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
+                                                    sx={{
+                                                        fontWeight: 600,
+                                                        fontSize: '0.75rem',
+                                                        height: '24px',
+                                                        '& .MuiChip-icon': { ml: 0.5 }
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                                    <i className='ri-user-line' style={{
+                                                        fontSize: '14px',
+                                                        color: 'text.secondary'
+                                                    }} />
+                                                    <Typography variant='body2' sx={{ fontWeight: 500 }}>
+                                                        {organizer}
+                                                    </Typography>
+                                                </Box>
+                                                {a?.organizerEmail && (
+                                                    <Typography variant='caption' color='text.secondary' noWrap title={a.organizerEmail}>
+                                                        {a.organizerEmail}
+                                                    </Typography>
+                                                )}
                                             </TableCell>
                                             <TableCell align='right'>
-                                                {canAddFollowUp(a) ? (
-                                                    <Tooltip title='Add follow-up'>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                                                    {canAddFollowUp(a) ? (
+                                                        <Tooltip title='Add follow-up'>
+                                                            <IconButton
+                                                                size='small'
+                                                                color='primary'
+                                                                onClick={e => {
+                                                                    e.stopPropagation()
+                                                                    openDetails(String(a.id), 'followup')
+                                                                }}
+                                                                sx={{
+                                                                    backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.1)',
+                                                                    '&:hover': {
+                                                                        backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.2)'
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <i className='ri-add-circle-line' style={{ fontSize: '18px' }} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    ) : null}
+                                                    <Tooltip title='View details'>
                                                         <IconButton
                                                             size='small'
-                                                            color='primary'
+                                                            color='default'
                                                             onClick={e => {
                                                                 e.stopPropagation()
-                                                                openDetails(String(a.id), 'followup')
+                                                                openDetails(String(a.id), 'details')
+                                                            }}
+                                                            sx={{
+                                                                backgroundColor: 'rgb(var(--mui-palette-action-hoverChannel) / 0.1)',
+                                                                '&:hover': {
+                                                                    backgroundColor: 'rgb(var(--mui-palette-action-hoverChannel) / 0.2)'
+                                                                }
                                                             }}
                                                         >
-                                                            <i className='ri-add-circle-line' />
+                                                            <i className='ri-eye-line' style={{ fontSize: '16px' }} />
                                                         </IconButton>
                                                     </Tooltip>
-                                                ) : null}
+                                                </Box>
                                             </TableCell>
                                         </TableRow>
                                     )
