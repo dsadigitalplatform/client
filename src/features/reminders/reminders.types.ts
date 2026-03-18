@@ -9,6 +9,7 @@ export type ReminderListItem = {
   reminderDateTime: string
   status: ReminderStatus
   source: ReminderSource
+  followUpType?: string | null
   userId: string
   caseId: string | null
   caseRef: string | null

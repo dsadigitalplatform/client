@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 import Link from 'next/link'
 
+import { useSession } from 'next-auth/react'
+
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
@@ -33,8 +35,10 @@ import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
 type StageOption = { id: string; name: string; order: number }
 
 const LoanCasesList = () => {
+  const { data: session } = useSession()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const sessionUserId = String((session as any)?.userId || '')
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
@@ -68,6 +72,14 @@ const LoanCasesList = () => {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (!sessionUserId) return
+    if (assignedAgentId) return
+    if (!userOptions.some(u => u.id === sessionUserId)) return
+
+    setAssignedAgentId(sessionUserId)
+  }, [assignedAgentId, sessionUserId, userOptions])
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 

@@ -616,7 +616,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
   }
 
   const headerTitle = id ? (isActive ? 'Lead manager' : 'Lead manager (Inactive)') : 'Create Lead'
-  const headerSub = id ? (isActive ? 'Update lead' : 'This lead has been deleted and cannot be modified') : 'Create & link a new lead '
 
   const statusChip = (s: LoanCaseDocumentStatus) => {
     switch (s) {

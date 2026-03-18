@@ -16,12 +16,12 @@ import InputAdornment from '@mui/material/InputAdornment'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
-import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import Avatar from '@mui/material/Avatar'
 import { useTheme } from '@mui/material/styles'
+import { useSession } from 'next-auth/react'
 
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 
@@ -73,8 +73,10 @@ const stagePalette = (palette: any) => [
 ]
 
 const LoanCasesPipelineDashboard = () => {
+  const { data: session } = useSession()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const sessionUserId = String((session as any)?.userId || '')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,6 +169,14 @@ const LoanCasesPipelineDashboard = () => {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [board.casesById])
+
+  useEffect(() => {
+    if (!sessionUserId) return
+    if (filters.assignedAgentId) return
+    if (!agentOptions.some(a => a.id === sessionUserId)) return
+
+    setFilters(f => ({ ...f, assignedAgentId: sessionUserId }))
+  }, [agentOptions, filters.assignedAgentId, sessionUserId])
 
   const filteredCaseIdsByStage = useMemo(() => {
     const search = filters.search.trim().toLowerCase()
@@ -329,10 +339,13 @@ const LoanCasesPipelineDashboard = () => {
       }}
     >
       <CardContent sx={{ p: 2 }}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1.25}
-          sx={{ alignItems: { sm: 'center' } }}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr 1fr' },
+            gap: 1.25,
+            alignItems: 'center'
+          }}
         >
           <TextField
             size='small'
@@ -340,8 +353,7 @@ const LoanCasesPipelineDashboard = () => {
             placeholder='Customer name'
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-            fullWidth={isMobile}
-            sx={{ minWidth: { sm: 280 } }}
+            fullWidth
             InputProps={{
               startAdornment: (
                 <InputAdornment position='start'>
@@ -351,7 +363,7 @@ const LoanCasesPipelineDashboard = () => {
             }}
           />
 
-          <FormControl size='small' fullWidth={isMobile} sx={{ minWidth: { sm: 180 } }}>
+          <FormControl size='small' fullWidth>
             <InputLabel id='loan-case-pipeline-agent'>Agent</InputLabel>
             <Select
               labelId='loan-case-pipeline-agent'
@@ -368,7 +380,7 @@ const LoanCasesPipelineDashboard = () => {
             </Select>
           </FormControl>
 
-          <FormControl size='small' fullWidth={isMobile} sx={{ minWidth: { sm: 180 } }}>
+          <FormControl size='small' fullWidth>
             <InputLabel id='loan-case-pipeline-loan-type'>Loan Type</InputLabel>
             <Select
               labelId='loan-case-pipeline-loan-type'
@@ -385,7 +397,7 @@ const LoanCasesPipelineDashboard = () => {
             </Select>
           </FormControl>
 
-          <FormControl size='small' fullWidth={isMobile} sx={{ minWidth: { sm: 180 } }}>
+          <FormControl size='small' fullWidth>
             <InputLabel id='loan-case-pipeline-stage'>Stage</InputLabel>
             <Select
               labelId='loan-case-pipeline-stage'
@@ -401,7 +413,7 @@ const LoanCasesPipelineDashboard = () => {
               ))}
             </Select>
           </FormControl>
-        </Stack>
+        </Box>
       </CardContent>
     </Card>
   )

@@ -39,69 +39,82 @@ const formatINR = (amount: number) => {
     return `₹ ${safe.toLocaleString('en-IN')}`
 }
 
-const Donut = ({
-    value,
-    total,
-    color,
-    axisLabel,
-    label
-}: {
+const FOLLOW_UP_COLORS = {
+    CALL: { main: 'var(--mui-palette-info-main)', bg: 'rgb(var(--mui-palette-info-mainChannel) / 0.12)' },
+    WHATSAPP: { main: 'var(--mui-palette-success-main)', bg: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)' },
+    VISIT: { main: 'var(--mui-palette-warning-main)', bg: 'rgb(var(--mui-palette-warning-mainChannel) / 0.12)' },
+    EMAIL: { main: 'var(--mui-palette-secondary-main)', bg: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.12)' },
+    OTHER: { main: 'var(--mui-palette-text-secondary)', bg: 'rgb(var(--mui-palette-dividerChannel) / 0.24)' }
+}
+
+type DonutSegment = {
+    label: string
     value: number
-    total: number
     color: string
+}
+
+const SegmentedDonut = ({
+    segments,
+    axisLabel
+}: {
+    segments: DonutSegment[]
     axisLabel?: string
-    label?: string
 }) => {
-    const safeTotal = Math.max(1, total)
-    const pct = Math.max(0, Math.min(1, value / safeTotal))
+    const total = segments.reduce((sum, s) => sum + s.value, 0)
     const r = 26
     const c = 2 * Math.PI * r
-    const dash = c * pct
-    const [pinned, setPinned] = useState(false)
-    const [hovered, setHovered] = useState(false)
-    const showDetail = Boolean(label) && (hovered || pinned)
+    let offset = 0
+    const [hovered, setHovered] = useState<DonutSegment | null>(null)
+    const hoverPct = hovered && total > 0 ? Math.round((hovered.value / total) * 100) : null
 
     return (
-        <svg
-            width={DONUT_SIZE}
-            height={DONUT_SIZE}
-            viewBox='0 0 64 64'
-            aria-hidden={axisLabel ? undefined : 'true'}
-            aria-label={axisLabel}
-            role={label ? 'button' : axisLabel ? 'img' : undefined}
-            tabIndex={label ? 0 : undefined}
-            onMouseEnter={label ? () => setHovered(true) : undefined}
-            onMouseLeave={label ? () => setHovered(false) : undefined}
-            onFocus={label ? () => setHovered(true) : undefined}
-            onBlur={label ? () => setHovered(false) : undefined}
-            onClick={label ? () => setPinned(prev => !prev) : undefined}
-        >
+        <svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox='0 0 64 64' aria-hidden={axisLabel ? undefined : 'true'} aria-label={axisLabel}>
             {axisLabel ? <title>{axisLabel}</title> : null}
             <circle cx='32' cy='32' r={r} fill='none' stroke='rgb(var(--mui-palette-dividerChannel) / 0.2)' strokeWidth='8' />
-            <circle
-                cx='32'
-                cy='32'
-                r={r}
-                fill='none'
-                stroke={color}
-                strokeWidth='8'
-                strokeDasharray={`${dash} ${c - dash}`}
-                strokeLinecap='round'
-                transform='rotate(-90 32 32)'
-            />
-            {showDetail ? (
+            {segments
+                .filter(s => s.value > 0)
+                .map((s, idx) => {
+                    const dash = total > 0 ? (s.value / total) * c : 0
+
+                    const circle = (
+                        <circle
+                            key={`${s.label}-${idx}`}
+                            cx='32'
+                            cy='32'
+                            r={r}
+                            fill='none'
+                            stroke={s.color}
+                            strokeWidth='8'
+                            strokeDasharray={`${dash} ${c - dash}`}
+                            strokeDashoffset={-offset}
+                            transform='rotate(-90 32 32)'
+                            onMouseEnter={() => setHovered(s)}
+                            onMouseLeave={() => setHovered(null)}
+                        />
+                    )
+
+                    offset += dash
+
+                    return circle
+                })}
+            {hovered && hoverPct != null ? (
                 <>
                     <text x='32' y='30' textAnchor='middle' fontSize='12' fontWeight='700' fill='var(--mui-palette-text-primary)'>
-                        {Math.round(pct * 100)}%
+                        {hoverPct}%
                     </text>
                     <text x='32' y='42' textAnchor='middle' fontSize='9' fill='var(--mui-palette-text-secondary)'>
-                        {label}
+                        {hovered.label}
                     </text>
                 </>
             ) : (
-                <text x='32' y='36' textAnchor='middle' fontSize='12' fontWeight='700' fill='var(--mui-palette-text-primary)'>
-                    {Math.round(pct * 100)}%
-                </text>
+                <>
+                    <text x='32' y='30' textAnchor='middle' fontSize='12' fontWeight='700' fill='var(--mui-palette-text-primary)'>
+                        {total}
+                    </text>
+                    <text x='32' y='42' textAnchor='middle' fontSize='9' fill='var(--mui-palette-text-secondary)'>
+                        Follow-ups
+                    </text>
+                </>
             )}
         </svg>
     )
@@ -122,9 +135,9 @@ const DashboardHome = () => {
     const [myLeads, setMyLeads] = useState<LoanCaseListItem[]>([])
     const [myLeadsLoading, setMyLeadsLoading] = useState(false)
     const [remindersNextTwoWeeks, setRemindersNextTwoWeeks] = useState(0)
-    const [remindersTotal, setRemindersTotal] = useState(0)
     const [remindersLoading, setRemindersLoading] = useState(false)
     const [remindersError, setRemindersError] = useState<string | null>(null)
+    const [reminderTypeCounts, setReminderTypeCounts] = useState<Record<string, number>>({})
     const [stages, setStages] = useState<Array<{ id: string; name: string; order: number }>>([])
     const [stagesLoading, setStagesLoading] = useState(false)
     const [stagesError, setStagesError] = useState<string | null>(null)
@@ -269,24 +282,29 @@ const DashboardHome = () => {
             setRemindersError(null)
 
             try {
-                const items = await getReminders({ status: 'pending', limit: 50 })
                 const now = new Date()
-                const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-                const endOfTwoWeeks = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000 - 1)
+                const endOfTwoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-                let nextTwoWeeksCount = 0
-
-                items.forEach(r => {
-                    const dt = new Date(r.reminderDateTime)
-                    const time = dt.getTime()
-
-                    if (!Number.isFinite(time)) return
-
-                    if (dt >= start && dt <= endOfTwoWeeks) nextTwoWeeksCount += 1
+                const items = await getReminders({
+                    status: 'pending',
+                    source: 'APPOINTMENT',
+                    limit: 50,
+                    dateFrom: now,
+                    dateTo: endOfTwoWeeks,
+                    userId: sessionUserId || undefined
                 })
 
-                if (active) setRemindersNextTwoWeeks(nextTwoWeeksCount)
-                if (active) setRemindersTotal(items.length)
+                const counts: Record<string, number> = { CALL: 0, WHATSAPP: 0, VISIT: 0, EMAIL: 0, OTHER: 0 }
+
+                items.forEach(r => {
+                    const raw = String(r?.followUpType || '').toUpperCase()
+
+                    if (raw === 'CALL' || raw === 'WHATSAPP' || raw === 'VISIT' || raw === 'EMAIL') counts[raw] += 1
+                    else counts.OTHER += 1
+                })
+
+                if (active) setRemindersNextTwoWeeks(items.length)
+                if (active) setReminderTypeCounts(counts)
             } catch (e: any) {
                 if (active) setRemindersError(e?.message || 'Failed to load reminders')
             } finally {
@@ -299,7 +317,19 @@ const DashboardHome = () => {
         return () => {
             active = false
         }
-    }, [currentTenantId])
+    }, [currentTenantId, sessionUserId])
+
+    const reminderTypeSegments = useMemo(() => {
+        const meta: Array<DonutSegment & { key: string }> = [
+            { key: 'CALL', label: 'Call', value: 0, color: FOLLOW_UP_COLORS.CALL.main },
+            { key: 'WHATSAPP', label: 'WhatsApp', value: 0, color: FOLLOW_UP_COLORS.WHATSAPP.main },
+            { key: 'VISIT', label: 'Visit', value: 0, color: FOLLOW_UP_COLORS.VISIT.main },
+            { key: 'EMAIL', label: 'Email', value: 0, color: FOLLOW_UP_COLORS.EMAIL.main },
+            { key: 'OTHER', label: 'Other', value: 0, color: FOLLOW_UP_COLORS.OTHER.main }
+        ]
+
+        return meta.map(m => ({ ...m, value: reminderTypeCounts[m.key] ?? 0 }))
+    }, [reminderTypeCounts])
 
     useEffect(() => {
         let active = true
@@ -508,12 +538,12 @@ const DashboardHome = () => {
     const meetingTypeMeta = (m: AppointmentListItem) => {
         const t = String(m?.followUpType || '').toUpperCase()
 
-        if (t === 'CALL') return { label: 'Call', icon: 'ri-phone-line', color: 'rgb(var(--mui-palette-info-mainChannel) / 0.12)', text: 'var(--mui-palette-info-main)' }
-        if (t === 'WHATSAPP') return { label: 'WhatsApp', icon: 'ri-whatsapp-line', color: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)', text: 'var(--mui-palette-success-main)' }
-        if (t === 'VISIT') return { label: 'Visit', icon: 'ri-map-pin-line', color: 'rgb(var(--mui-palette-warning-mainChannel) / 0.12)', text: 'var(--mui-palette-warning-main)' }
-        if (t === 'EMAIL') return { label: 'Email', icon: 'ri-mail-line', color: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)', text: 'var(--mui-palette-primary-main)' }
+        if (t === 'CALL') return { label: 'Call', icon: 'ri-phone-line', color: FOLLOW_UP_COLORS.CALL.bg, text: FOLLOW_UP_COLORS.CALL.main }
+        if (t === 'WHATSAPP') return { label: 'WhatsApp', icon: 'ri-whatsapp-line', color: FOLLOW_UP_COLORS.WHATSAPP.bg, text: FOLLOW_UP_COLORS.WHATSAPP.main }
+        if (t === 'VISIT') return { label: 'Visit', icon: 'ri-map-pin-line', color: FOLLOW_UP_COLORS.VISIT.bg, text: FOLLOW_UP_COLORS.VISIT.main }
+        if (t === 'EMAIL') return { label: 'Email', icon: 'ri-mail-line', color: FOLLOW_UP_COLORS.EMAIL.bg, text: FOLLOW_UP_COLORS.EMAIL.main }
 
-        return { label: 'Meeting', icon: 'ri-calendar-event-line', color: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.12)', text: 'var(--mui-palette-secondary-main)' }
+        return { label: 'Meeting', icon: 'ri-calendar-event-line', color: FOLLOW_UP_COLORS.OTHER.bg, text: FOLLOW_UP_COLORS.OTHER.main }
     }
 
     const normalizeDigits = (value: string | null | undefined) => String(value || '').replace(/\D/g, '')
@@ -623,13 +653,10 @@ const DashboardHome = () => {
                                             : 'In next 2 weeks'}
                                 </Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-                                <Donut
-                                    value={remindersNextTwoWeeks}
-                                    total={remindersTotal}
-                                    color='var(--mui-palette-warning-main)'
-                                    axisLabel='Share of pending follow-ups scheduled in the next 2 weeks'
-                                    label='Pending'
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <SegmentedDonut
+                                    segments={reminderTypeSegments}
+                                    axisLabel='Follow-ups by type in the next 2 weeks'
                                 />
                             </Box>
                         </Box>

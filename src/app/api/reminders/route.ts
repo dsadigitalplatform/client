@@ -9,15 +9,30 @@ import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
 const STATUS_VALUES = ['pending', 'done', 'skipped'] as const
+const SOURCE_VALUES = ['CASE_FOLLOW_UP', 'APPOINTMENT'] as const
 
 type ReminderStatus = (typeof STATUS_VALUES)[number]
+type ReminderSource = (typeof SOURCE_VALUES)[number]
 
 function isReminderStatus(v: unknown): v is ReminderStatus {
   return typeof v === 'string' && (STATUS_VALUES as readonly string[]).includes(v)
 }
 
+function isReminderSource(v: unknown): v is ReminderSource {
+  return typeof v === 'string' && (SOURCE_VALUES as readonly string[]).includes(v)
+}
+
 function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+}
+
+function parseDate(value: string | null) {
+  if (!value) return null
+  const d = new Date(value)
+
+  if (!Number.isFinite(d.getTime())) return null
+
+  return d
 }
 
 async function getTenantContext(session: any) {
@@ -69,14 +84,34 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const statusRaw = url.searchParams.get('status')
+  const sourceRaw = url.searchParams.get('source')
   const limitRaw = url.searchParams.get('limit')
+  const dateFromRaw = url.searchParams.get('dateFrom')
+  const dateToRaw = url.searchParams.get('dateTo')
+  const userIdRaw = url.searchParams.get('userId')
 
   const status = statusRaw && isReminderStatus(statusRaw) ? statusRaw : 'pending'
+  const source = sourceRaw && isReminderSource(sourceRaw) ? sourceRaw : null
   const limit = limitRaw && Number.isFinite(Number(limitRaw)) ? Math.max(1, Math.min(50, Math.floor(Number(limitRaw)))) : 20
 
   const match: any = { tenantId: tenantIdObj, status }
+  const dateFrom = parseDate(dateFromRaw)
+  const dateTo = parseDate(dateToRaw)
+  const userIdFilter = userIdRaw && ObjectId.isValid(userIdRaw) ? new ObjectId(userIdRaw) : null
 
-  if (role !== 'ADMIN' && role !== 'OWNER') match.userId = userId
+  if (dateFrom || dateTo) {
+    match.reminderDateTime = {}
+    if (dateFrom) match.reminderDateTime.$gte = dateFrom
+    if (dateTo) match.reminderDateTime.$lte = dateTo
+  }
+
+  if (source) match.source = source
+
+  if (role !== 'ADMIN' && role !== 'OWNER') {
+    match.userId = userId
+  } else if (userIdFilter) {
+    match.userId = userIdFilter
+  }
 
   const rows = await db
     .collection('reminders')
@@ -84,6 +119,18 @@ export async function GET(request: Request) {
       { $match: match },
       { $sort: { reminderDateTime: 1, updatedAt: -1 } },
       { $limit: limit },
+      {
+        $lookup: {
+          from: 'appointments',
+          let: { appointmentId: '$appointmentId', tenantId: '$tenantId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$appointmentId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
+            { $project: { followUpType: 1 } }
+          ],
+          as: 'appointment'
+        }
+      },
+      { $unwind: { path: '$appointment', preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: 'customers',
@@ -106,6 +153,7 @@ export async function GET(request: Request) {
     reminderDateTime: (r as any).reminderDateTime ? new Date((r as any).reminderDateTime).toISOString() : new Date().toISOString(),
     status: String((r as any).status || 'pending'),
     source: String((r as any).source || 'APPOINTMENT'),
+    followUpType: (r as any).appointment?.followUpType ? String((r as any).appointment.followUpType) : null,
     userId: String((r as any).userId || ''),
     caseId: (r as any).caseId ? String((r as any).caseId) : null,
     caseRef: (r as any).caseRef == null ? null : String((r as any).caseRef),
@@ -116,4 +164,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ items })
 }
-
