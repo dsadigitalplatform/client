@@ -13,6 +13,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Divider from '@mui/material/Divider'
 import LinearProgress from '@mui/material/LinearProgress'
+import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -56,6 +57,17 @@ function clamp01(v: number) {
 
   return v
 }
+
+const WidgetLoader = ({ label }: { label?: string }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 140 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+      <CircularProgress size={30} thickness={4} />
+      <Typography variant='caption' color='text.secondary'>
+        {label || 'Loading data'}
+      </Typography>
+    </Box>
+  </Box>
+)
 
 const COLS_BY_BP = { lg: 12, md: 12, sm: 2, xs: 1 } as const
 
@@ -512,6 +524,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
     void refreshReminders()
   }, [refreshReminders])
 
+
   const defaultLayouts = useMemo(() => {
     const base = canEdit ? ALL_WIDGET_IDS : ALL_WIDGET_IDS.filter(id => id !== 'agents')
 
@@ -670,6 +683,10 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
   const renderWidgetBody = useCallback(
     (id: DashboardWidgetId) => {
       if (!data) {
+        if (loading) {
+          return <WidgetLoader label='Loading overview' />
+        }
+
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant='body2' color='text.secondary'>
@@ -943,9 +960,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
             </Box>
             <Divider />
             {loading ? (
-              <Typography variant='body2' color='text.secondary'>
-                Loading appointments…
-              </Typography>
+              <WidgetLoader label='Loading appointments' />
             ) : error ? (
               <Typography variant='body2' color='error.main' sx={{ fontWeight: 700 }}>
                 {error}
@@ -983,9 +998,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
             {remindersLoading ? (
-              <Typography variant='body2' color='text.secondary'>
-                Loading reminders…
-              </Typography>
+              <WidgetLoader label='Loading reminders' />
             ) : remindersError ? (
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
                 <Typography variant='body2' color='error.main' sx={{ fontWeight: 700 }}>
