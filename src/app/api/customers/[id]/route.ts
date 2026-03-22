@@ -121,6 +121,24 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     errors.cibilScore = 'CIBIL must be 300–900'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
+
+  if (patch.fullName != null) {
+    const safeName = String(patch.fullName).replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+
+    const existing = await db.collection('customers').findOne(
+      { tenantId: tenantIdObj, fullName: { $regex: `^${safeName}$`, $options: 'i' }, _id: { $ne: new ObjectId(id) } },
+      { projection: { _id: 1 } }
+    )
+
+
+    if (existing) {
+      return NextResponse.json(
+        { error: 'duplicate_name', message: 'Customer name already exists for this tenant', details: { fullName: 'Customer name already exists' } },
+        { status: 409 }
+      )
+    }
+  }
+
   try {
     const res = await db
       .collection('customers')

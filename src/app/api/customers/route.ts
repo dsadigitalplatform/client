@@ -217,6 +217,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
   }
 
+
+  const safeName = fullName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+
+  const existing = await db.collection('customers').findOne(
+    { tenantId: tenantIdObj, fullName: { $regex: `^${safeName}$`, $options: 'i' } },
+    { projection: { _id: 1 } }
+  )
+
+
+  if (existing) {
+    return NextResponse.json(
+      { error: 'duplicate_name', message: 'Customer name already exists for this tenant', details: { fullName: 'Customer name already exists' } },
+      { status: 409 }
+    )
+  }
+
   // insert with tenant + creator attribution
   const now = new Date()
 
