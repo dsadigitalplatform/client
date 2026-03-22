@@ -69,6 +69,21 @@ const WidgetLoader = ({ label }: { label?: string }) => (
   </Box>
 )
 
+const widgetLoadingLabel = (id: DashboardWidgetId) => {
+  if (id === 'kpi-customers') return 'Loading customers'
+  if (id === 'kpi-cases') return 'Loading cases'
+  if (id === 'kpi-loan-volume') return 'Loading loan volume'
+  if (id === 'kpi-conversion') return 'Loading conversion'
+  if (id === 'trend-cases') return 'Loading case trend'
+  if (id === 'trend-loan-volume') return 'Loading volume trend'
+  if (id === 'stage-breakdown') return 'Loading case stages'
+  if (id === 'agents') return 'Loading agents'
+  if (id === 'appointments') return 'Loading appointments'
+  if (id === 'reminders') return 'Loading reminders'
+
+  return 'Loading data'
+}
+
 const COLS_BY_BP = { lg: 12, md: 12, sm: 2, xs: 1 } as const
 
 type Breakpoint = keyof typeof COLS_BY_BP
@@ -682,15 +697,15 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
 
   const renderWidgetBody = useCallback(
     (id: DashboardWidgetId) => {
-      if (!data) {
-        if (loading) {
-          return <WidgetLoader label='Loading overview' />
-        }
+      if (loading) {
+        return <WidgetLoader label={widgetLoadingLabel(id)} />
+      }
 
+      if (!data) {
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant='body2' color='text.secondary'>
-              {loading ? 'Loading…' : 'No data'}
+              No data
             </Typography>
             {error ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
