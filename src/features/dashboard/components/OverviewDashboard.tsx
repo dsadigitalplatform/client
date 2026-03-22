@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton'
 import Divider from '@mui/material/Divider'
 import LinearProgress from '@mui/material/LinearProgress'
 import CircularProgress from '@mui/material/CircularProgress'
+import Grow from '@mui/material/Grow'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -1126,6 +1127,8 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
     ]
   )
 
+  const isLayoutBusy = layoutSaving || layoutLoading
+
   const header = (
     <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
       <Box sx={{ minWidth: 0 }}>
@@ -1158,8 +1161,10 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                 fullWidth
                 variant='contained'
                 onClick={publish}
-                disabled={layoutSaving || layoutLoading}
-                startIcon={<i className='ri-check-line' />}
+                disabled={isLayoutBusy}
+                startIcon={
+                  isLayoutBusy ? <CircularProgress size={16} thickness={5} color='inherit' /> : <i className='ri-check-line' />
+                }
               >
                 Publish
               </Button>
@@ -1210,7 +1215,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
           resizeConfig={{ enabled: editMode }}
           onLayoutChange={onGridLayoutChange}
         >
-          {visibleWidgets.map(id => {
+          {visibleWidgets.map((id, index) => {
             const meta = widgetById.get(id)
 
             if (!meta) return null
@@ -1219,16 +1224,24 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
               id === 'kpi-customers' || id === 'kpi-cases' || id === 'kpi-loan-volume' || id === 'kpi-conversion'
 
             return (
-              <Box key={id} sx={{ height: '100%', minHeight: isKpi ? 156 : 260 }}>
-                <GridWidgetShell
-                  title={meta.title}
-                  icon={meta.icon}
-                  editMode={editMode}
-                  onRemove={editMode ? () => removeWidget(id) : undefined}
-                >
-                  {renderWidgetBody(id)}
-                </GridWidgetShell>
-              </Box>
+              <Grow
+                key={id}
+                in={mounted}
+                appear
+                timeout={350}
+                style={{ transformOrigin: '0 0 0', transitionDelay: `${Math.min(index * 45, 360)}ms` }}
+              >
+                <Box sx={{ height: '100%', minHeight: isKpi ? 156 : 260 }}>
+                  <GridWidgetShell
+                    title={meta.title}
+                    icon={meta.icon}
+                    editMode={editMode}
+                    onRemove={editMode ? () => removeWidget(id) : undefined}
+                  >
+                    {renderWidgetBody(id)}
+                  </GridWidgetShell>
+                </Box>
+              </Grow>
             )
           })}
         </Responsive>

@@ -93,6 +93,7 @@ const CustomersList = () => {
           }}
         >
           <TextField
+            sx={{ minWidth: 350 }}
             size='small'
             value={search}
             onChange={e => setSearch(e.target.value)}
