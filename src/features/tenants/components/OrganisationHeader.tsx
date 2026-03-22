@@ -69,7 +69,7 @@ export const OrganisationHeader = ({ title }: { title: string }) => {
           ) : null}
         </Box>
         {tenant ? (
-          <Chip size='small' variant='outlined' label={`Organisation: ${tenant.name}`} sx={{ width: 'fit-content' }} />
+          null
         ) : !loading ? (
           <Chip size='small' variant='outlined' label='Organisation: —' sx={{ width: 'fit-content' }} />
         ) : null}

@@ -142,6 +142,24 @@ const LoanCasesList = () => {
         }}
       >
         <FormControl size='small' fullWidth>
+          <InputLabel id='loan-cases-agent-filter'>Assigned Agent</InputLabel>
+          <Select
+            labelId='loan-cases-agent-filter'
+            label='Assigned Agent'
+            value={assignedAgentId}
+            onChange={e => {
+              setAssignedAgentId(String(e.target.value))
+            }}
+          >
+            <MenuItem value=''>All Agents</MenuItem>
+            {userOptions.map(u => (
+              <MenuItem key={u.id} value={u.id}>
+                {u.name || u.email || u.id}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size='small' fullWidth>
           <InputLabel id='loan-cases-stage-filter'>Stage</InputLabel>
           <Select
             labelId='loan-cases-stage-filter'
@@ -160,24 +178,6 @@ const LoanCasesList = () => {
           </Select>
         </FormControl>
 
-        <FormControl size='small' fullWidth>
-          <InputLabel id='loan-cases-agent-filter'>Assigned Agent</InputLabel>
-          <Select
-            labelId='loan-cases-agent-filter'
-            label='Assigned Agent'
-            value={assignedAgentId}
-            onChange={e => {
-              setAssignedAgentId(String(e.target.value))
-            }}
-          >
-            <MenuItem value=''>All Agents</MenuItem>
-            {userOptions.map(u => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.name || u.email || u.id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
 
         <FormControlLabel
           control={

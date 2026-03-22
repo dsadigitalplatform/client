@@ -342,26 +342,11 @@ const LoanCasesPipelineDashboard = () => {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr 1fr' },
-            gap: 1.25,
+            gridTemplateColumns: { md: '2fr 3fr 2fr 2fr' },
+            gap: 2.5,
             alignItems: 'center'
           }}
         >
-          <TextField
-            size='small'
-            label='Search'
-            placeholder='Customer name'
-            value={filters.search}
-            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-            fullWidth
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position='start'>
-                  <i className='ri-search-line' />
-                </InputAdornment>
-              )
-            }}
-          />
 
           <FormControl size='small' fullWidth>
             <InputLabel id='loan-case-pipeline-agent'>Agent</InputLabel>
@@ -379,7 +364,21 @@ const LoanCasesPipelineDashboard = () => {
               ))}
             </Select>
           </FormControl>
-
+          <TextField
+            size='small'
+            label='Search'
+            placeholder='Customer name'
+            value={filters.search}
+            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+            fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-search-line' />
+                </InputAdornment>
+              )
+            }}
+          />
           <FormControl size='small' fullWidth>
             <InputLabel id='loan-case-pipeline-loan-type'>Loan Type</InputLabel>
             <Select
