@@ -2,6 +2,8 @@ export type Associate = {
   id: string
   associateName: string
   companyName: string
+  associateTypeId: string
+  associateTypeName: string | null
   countryCode: string
   mobile: string
   email: string | null

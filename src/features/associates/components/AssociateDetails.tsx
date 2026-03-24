@@ -113,6 +113,9 @@ const AssociateDetails = ({ id }: Props) => {
                                     <Typography variant='body2' color='text.secondary'>
                                         {data.companyName || '-'}
                                     </Typography>
+                                    <Typography variant='body2' color='text.secondary'>
+                                        {data.associateTypeName || '-'}
+                                    </Typography>
                                     <Chip
                                         size='small'
                                         label={data.isActive ? 'Active' : 'Inactive'}
@@ -146,6 +149,10 @@ const AssociateDetails = ({ id }: Props) => {
                                         </Typography>
                                     </Box>
                                     <Box className='flex items-center gap-1.5'>
+                                        <i className='ri-team-line text-base' />
+                                        <Typography color='text.secondary'>{data.associateTypeName || '-'}</Typography>
+                                    </Box>
+                                    <Box className='flex items-center gap-1.5'>
                                         <i className='ri-percent-line text-base' />
                                         <Typography color='text.secondary'>{data.payout != null ? `${data.payout}%` : '-'}</Typography>
                                     </Box>
@@ -161,6 +168,7 @@ const AssociateDetails = ({ id }: Props) => {
                             ) : (
                                 <Box className='flex flex-col gap-1'>
                                     <Typography color='text.secondary'>Company: {data.companyName || '-'}</Typography>
+                                    <Typography color='text.secondary'>Associate Type: {data.associateTypeName || '-'}</Typography>
                                     <Typography color='text.secondary'>
                                         Mobile: {[data.countryCode, data.mobile].filter(Boolean).join(' ')}
                                     </Typography>
@@ -208,6 +216,7 @@ const AssociateDetails = ({ id }: Props) => {
                                 initialValues={{
                                     associateName: data.associateName,
                                     companyName: data.companyName,
+                                    associateTypeId: data.associateTypeId,
                                     countryCode: data.countryCode,
                                     mobile: data.mobile,
                                     email: data.email,

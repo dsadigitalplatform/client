@@ -97,10 +97,19 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
+  const associateTypeName =
+    (row as any).associateTypeId && ObjectId.isValid((row as any).associateTypeId)
+      ? await db
+          .collection('associateTypes')
+          .findOne({ _id: new ObjectId(String((row as any).associateTypeId)), tenantId: tenantIdObj }, { projection: { name: 1 } })
+      : null
+
   const data = {
     id: String((row as any)._id),
     associateName: (row as any).associateName || '',
     companyName: (row as any).companyName || '',
+    associateTypeId: (row as any).associateTypeId ? String((row as any).associateTypeId) : '',
+    associateTypeName: associateTypeName ? String((associateTypeName as any).name || '') : null,
     countryCode: isValidCountryCode((row as any).countryCode) ? String((row as any).countryCode) : '+91',
     mobile: (row as any).mobile || '',
     email: (row as any).email ?? null,
@@ -135,6 +144,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   if (body.associateName != null) patch.associateName = String(body.associateName).trim()
   if (body.companyName != null) patch.companyName = String(body.companyName).trim()
+  if (body.associateTypeId != null) patch.associateTypeId = String(body.associateTypeId).trim()
   if (body.countryCode !== undefined)
     patch.countryCode = body.countryCode == null || String(body.countryCode).trim().length === 0 ? '+91' : String(body.countryCode).trim()
   if (body.mobile != null) patch.mobile = String(body.mobile).trim()
@@ -151,6 +161,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     errors.associateName = 'Associate name must be at least 2 characters'
   if (patch.companyName != null && patch.companyName.length < 2)
     errors.companyName = 'Company name must be at least 2 characters'
+  if (patch.associateTypeId != null && !ObjectId.isValid(patch.associateTypeId))
+    errors.associateTypeId = 'Associate type is required'
   if (patch.countryCode != null && !isValidCountryCode(patch.countryCode)) errors.countryCode = 'Invalid country code'
   if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
@@ -158,6 +170,21 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (patch.payout != null && !isValidPayout(patch.payout)) errors.payout = 'Payout must be between 0 and 100'
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
+
+  if (patch.associateTypeId != null) {
+    const associateType = await db
+      .collection('associateTypes')
+      .findOne({ _id: new ObjectId(patch.associateTypeId), tenantId: tenantIdObj, isActive: true }, { projection: { _id: 1 } })
+
+    if (!associateType) {
+      return NextResponse.json(
+        { error: 'validation_error', details: { associateTypeId: 'Associate type is required' } },
+        { status: 400 }
+      )
+    }
+
+    patch.associateTypeId = new ObjectId(patch.associateTypeId)
+  }
 
   if (patch.associateName != null || patch.companyName != null || patch.mobile != null) {
     const existing = await db

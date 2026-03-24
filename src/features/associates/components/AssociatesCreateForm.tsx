@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -27,6 +27,7 @@ import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { createAssociate } from '@features/associates/services/associatesService'
+import { getAssociateTypes } from '@features/associate-types/services/associateTypesService'
 
 const COUNTRY_CODE_OPTIONS = [
   { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
@@ -60,6 +61,7 @@ type Props = {
   initialValues?: Partial<{
     associateName: string
     companyName: string
+    associateTypeId: string
     mobile: string
     countryCode: string
     email: string | null
@@ -92,12 +94,16 @@ const AssociatesCreateForm = ({
 
   const [associateName, setAssociateName] = useState('')
   const [companyName, setCompanyName] = useState('')
+  const [associateTypeId, setAssociateTypeId] = useState('')
   const [countryCode, setCountryCode] = useState('+91')
   const [mobile, setMobile] = useState('')
   const [email, setEmail] = useState('')
   const [payout, setPayout] = useState<string>('')
   const [pan, setPan] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [associateTypes, setAssociateTypes] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
+  const [associateTypesLoading, setAssociateTypesLoading] = useState(false)
+  const associateTypeIdRef = useRef('')
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -112,6 +118,7 @@ const AssociatesCreateForm = ({
     if (!initialValues) return
     if (initialValues.associateName != null) setAssociateName(initialValues.associateName)
     if (initialValues.companyName != null) setCompanyName(initialValues.companyName)
+    if (initialValues.associateTypeId != null) setAssociateTypeId(initialValues.associateTypeId)
     if (initialValues.mobile != null) setMobile(initialValues.mobile)
     if (initialValues.countryCode != null) setCountryCode(initialValues.countryCode)
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
@@ -119,6 +126,45 @@ const AssociatesCreateForm = ({
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
     if (initialValues.isActive !== undefined) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
+
+  useEffect(() => {
+    associateTypeIdRef.current = associateTypeId
+  }, [associateTypeId])
+
+  useEffect(() => {
+    let active = true
+
+    const loadAssociateTypes = async () => {
+      setAssociateTypesLoading(true)
+
+      try {
+        const rows = await getAssociateTypes()
+
+        if (!active) return
+        const activeRows = (rows || []).filter((r: any) => r?.isActive)
+
+        setAssociateTypes(activeRows)
+
+        if (initialValues?.associateTypeId) {
+          setAssociateTypeId(initialValues.associateTypeId)
+
+          return
+        }
+
+        if (!associateTypeIdRef.current && activeRows.length > 0) {
+          setAssociateTypeId(String(activeRows[0].id))
+        }
+      } finally {
+        if (active) setAssociateTypesLoading(false)
+      }
+    }
+
+    loadAssociateTypes()
+
+    return () => {
+      active = false
+    }
+  }, [initialValues?.associateTypeId])
 
   const isValidMobile = (v: string) => /^[0-9]{9,10}$/.test(v)
   const isValidCountryCode = (v: string) => /^\+[0-9]{1,4}$/.test(v)
@@ -129,6 +175,7 @@ const AssociatesCreateForm = ({
   const canSubmit =
     associateName.trim().length >= 2 &&
     companyName.trim().length >= 2 &&
+    associateTypeId.trim().length > 0 &&
     isValidCountryCode(countryCode) &&
     isValidMobile(mobile) &&
     isValidEmail(email) &&
@@ -165,6 +212,7 @@ const AssociatesCreateForm = ({
       const payload = {
         associateName: associateName.trim(),
         companyName: companyName.trim(),
+        associateTypeId,
         countryCode,
         mobile,
         email: email ? email.trim() : null,
@@ -191,6 +239,7 @@ const AssociatesCreateForm = ({
 
       setAssociateName('')
       setCompanyName('')
+      setAssociateTypeId('')
       setCountryCode('+91')
       setMobile('')
       setEmail('')
@@ -271,14 +320,42 @@ const AssociatesCreateForm = ({
             }}
           />
         </Box>
-        <TextField
-          label='Company Name'
-          value={companyName}
-          onChange={e => setCompanyName(e.target.value)}
-          error={Boolean(fieldErrors.companyName)}
-          helperText={fieldErrors.companyName}
-          fullWidth
-        />
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+          <TextField
+            label='Company Name'
+            value={companyName}
+            onChange={e => setCompanyName(e.target.value)}
+            error={Boolean(fieldErrors.companyName)}
+            helperText={fieldErrors.companyName}
+            fullWidth
+          />
+          <FormControl fullWidth>
+            <InputLabel id='associate-type-label'>Associate Type</InputLabel>
+            <Select
+              labelId='associate-type-label'
+              label='Associate Type'
+              value={associateTypeId}
+              onChange={e => setAssociateTypeId(String(e.target.value))}
+              disabled={associateTypesLoading}
+              error={Boolean(fieldErrors.associateTypeId)}
+            >
+              {associateTypes.map(t => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {fieldErrors.associateTypeId ? (
+              <Typography variant='caption' color='error' sx={{ mt: 0.5 }}>
+                {fieldErrors.associateTypeId}
+              </Typography>
+            ) : !associateTypesLoading && associateTypes.length === 0 ? (
+              <Typography variant='caption' color='text.secondary' sx={{ mt: 0.5 }}>
+                No active associate types available
+              </Typography>
+            ) : null}
+          </FormControl>
+        </Box>
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
           <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
             <InputLabel id='associate-country-code-label'>Country Code</InputLabel>

@@ -289,11 +289,12 @@ ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq
 const associatesValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['tenantId', 'associateName', 'companyName', 'mobile', 'code', 'isActive', 'createdAt'],
+    required: ['tenantId', 'associateName', 'companyName', 'associateTypeId', 'mobile', 'code', 'isActive', 'createdAt'],
     properties: {
       tenantId: { bsonType: 'objectId' },
       associateName: { bsonType: 'string', minLength: 2 },
       companyName: { bsonType: 'string', minLength: 2 },
+      associateTypeId: { bsonType: 'objectId' },
       countryCode: { bsonType: 'string' },
       mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
@@ -313,6 +314,7 @@ ensureCollection('associates', associatesValidator)
 ensureIndex('associates', { tenantId: 1 }, { name: 'idx_associates_tenantId' })
 ensureIndex('associates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_associate_mobile' })
 ensureIndex('associates', { tenantId: 1, code: 1 }, { unique: true, name: 'uniq_tenant_associate_code' })
+ensureIndex('associates', { tenantId: 1, associateTypeId: 1 }, { name: 'idx_associates_tenant_associateTypeId' })
 
 const loanTypesValidator = {
   $jsonSchema: {

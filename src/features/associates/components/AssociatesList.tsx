@@ -35,10 +35,11 @@ const AssociatesList = () => {
 
     const handleExport = () => {
         const rows = [
-            ['Associate Name', 'Company Name', 'Country Code', 'Mobile', 'Email', 'Payout (%)', 'Code', 'PAN Card No', 'IsActive'],
+            ['Associate Name', 'Company Name', 'Associate Type', 'Country Code', 'Mobile', 'Email', 'Payout (%)', 'Code', 'PAN Card No', 'IsActive'],
             ...associates.map(a => [
                 a.associateName,
                 a.companyName,
+                a.associateTypeName ?? '',
                 a.countryCode,
                 a.mobile,
                 a.email ?? '',
@@ -237,6 +238,9 @@ const AssociatesList = () => {
                                         <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
                                             {a.companyName}
                                         </Typography>
+                                        <Typography variant='caption' color='text.secondary'>
+                                            Type: {a.associateTypeName || '-'}
+                                        </Typography>
                                     </CardContent>
                                 </Card>
                             )
@@ -248,23 +252,22 @@ const AssociatesList = () => {
                     <TableHead>
                         <TableRow>
                             <TableCell>Associate Name</TableCell>
+                            <TableCell>Code</TableCell>
                             <TableCell>Company Name</TableCell>
                             <TableCell>Country Code - Mobile Number</TableCell>
                             <TableCell>Email</TableCell>
                             <TableCell>Payout (%)</TableCell>
-                            <TableCell>Code</TableCell>
-                            <TableCell>PAN Card No</TableCell>
                             <TableCell>IsActive</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={8}>Loading...</TableCell>
+                                <TableCell colSpan={9}>Loading...</TableCell>
                             </TableRow>
                         ) : associates.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8}>No associates found</TableCell>
+                                <TableCell colSpan={9}>No associates found</TableCell>
                             </TableRow>
                         ) : (
                             associates.map(a => (
@@ -309,6 +312,7 @@ const AssociatesList = () => {
                                             </Box>
                                         </Box>
                                     </TableCell>
+                                    <TableCell>{a.code || '-'}</TableCell>
                                     <TableCell>{a.companyName}</TableCell>
                                     <TableCell>
                                         <Box className='flex items-center gap-1.5'>
@@ -323,8 +327,6 @@ const AssociatesList = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell>{a.payout != null ? `${a.payout}%` : '-'}</TableCell>
-                                    <TableCell>{a.code || '-'}</TableCell>
-                                    <TableCell>{a.pan || '-'}</TableCell>
                                     <TableCell>
                                         <Chip
                                             label={a.isActive ? 'Active' : 'Inactive'}

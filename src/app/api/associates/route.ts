@@ -137,6 +137,7 @@ export async function GET(request: Request) {
       projection: {
         associateName: 1,
         companyName: 1,
+        associateTypeId: 1,
         countryCode: 1,
         mobile: 1,
         email: 1,
@@ -151,10 +152,28 @@ export async function GET(request: Request) {
     .limit(200)
     .toArray()
 
+  const typeIds = Array.from(
+    new Set(rows.map(r => (r as any).associateTypeId).filter((id: any) => id && ObjectId.isValid(id)))
+  ).map(id => new ObjectId(String(id)))
+
+  const typeRows =
+    typeIds.length > 0
+      ? await db
+          .collection('associateTypes')
+          .find({ tenantId: tenantIdObj, _id: { $in: typeIds } }, { projection: { name: 1 } })
+          .toArray()
+      : []
+
+  const typeNameById = new Map<string, string>()
+
+  typeRows.forEach(t => typeNameById.set(String((t as any)._id), String((t as any).name || '')))
+
   const associates = rows.map(r => ({
     id: String((r as any)._id),
     associateName: String((r as any).associateName || ''),
     companyName: String((r as any).companyName || ''),
+    associateTypeId: (r as any).associateTypeId ? String((r as any).associateTypeId) : '',
+    associateTypeName: (r as any).associateTypeId ? typeNameById.get(String((r as any).associateTypeId)) || null : null,
     countryCode: isValidCountryCode((r as any).countryCode) ? String((r as any).countryCode) : '+91',
     mobile: String((r as any).mobile || ''),
     email: (r as any).email ? String((r as any).email) : null,
@@ -205,6 +224,7 @@ export async function POST(request: Request) {
 
   const associateName = String(body.associateName || '').trim()
   const companyName = String(body.companyName || '').trim()
+  const associateTypeIdRaw = String(body.associateTypeId || '').trim()
   const countryCode = body.countryCode == null ? '+91' : String(body.countryCode).trim()
   const mobile = String(body.mobile || '').trim()
   const email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
@@ -216,6 +236,7 @@ export async function POST(request: Request) {
 
   if (associateName.length < 2) errors.associateName = 'Associate name must be at least 2 characters'
   if (companyName.length < 2) errors.companyName = 'Company name must be at least 2 characters'
+  if (!ObjectId.isValid(associateTypeIdRaw)) errors.associateTypeId = 'Associate type is required'
   if (!isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
   if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
@@ -226,6 +247,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
   }
 
+  const associateTypeId = new ObjectId(associateTypeIdRaw)
+
+  const associateType = await db
+    .collection('associateTypes')
+    .findOne({ _id: associateTypeId, tenantId: tenantIdObj, isActive: true }, { projection: { _id: 1 } })
+
+  if (!associateType) {
+    return NextResponse.json(
+      { error: 'validation_error', details: { associateTypeId: 'Associate type is required' } },
+      { status: 400 }
+    )
+  }
+
   const code = await generateUniqueCode(db, tenantIdObj, associateName, companyName, mobile)
   const now = new Date()
 
@@ -233,6 +267,7 @@ export async function POST(request: Request) {
     tenantId: tenantIdObj,
     associateName,
     companyName,
+    associateTypeId,
     countryCode,
     mobile,
     email,

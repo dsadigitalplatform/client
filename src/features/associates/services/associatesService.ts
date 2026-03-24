@@ -3,6 +3,7 @@ export type GetAssociatesParams = { q?: string }
 export type CreateAssociateInput = {
   associateName: string
   companyName: string
+  associateTypeId: string
   countryCode: string
   mobile: string
   email?: string | null
