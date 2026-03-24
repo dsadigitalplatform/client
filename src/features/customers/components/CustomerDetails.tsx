@@ -29,6 +29,7 @@ import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import TableContainer from '@mui/material/TableContainer'
 import MuiLink from '@mui/material/Link'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
@@ -72,11 +73,26 @@ const CustomerDetails = ({ id }: Props) => {
     return 'default' as const
   }
 
+  const contactTypeLabel = (value: string) => {
+    const map: Record<string, string> = {
+      ALTERNATE: 'Alternate',
+      SPOUSE: 'Spouse',
+      FRIEND: 'Friend',
+      RELATIVE: 'Relative',
+      OTHER: 'Other'
+    }
+
+    return map[String(value).toUpperCase()] || 'Other'
+  }
+
   const fetchData = async () => {
     setLoading(true)
     const d = await getCustomer(id)
 
-    setData(d)
+    setData({
+      ...d,
+      secondaryContacts: Array.isArray(d?.secondaryContacts) ? d.secondaryContacts : []
+    })
     setLoading(false)
   }
 
@@ -106,8 +122,16 @@ const CustomerDetails = ({ id }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  useEffect(() => {
+    if (!editMode) return
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode])
+
   if (loading) return <Typography>Loading...</Typography>
   if (!data) return <Typography>Not found</Typography>
+
+  const secondaryContacts = Array.isArray(data.secondaryContacts) ? data.secondaryContacts : []
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -267,6 +291,38 @@ const CustomerDetails = ({ id }: Props) => {
                     <Typography color='text.secondary'>Source</Typography>
                     <Typography color='text.primary'>{String(data.source).replace('_', ' ')}</Typography>
                   </Box>
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant='subtitle2' color='text.secondary' sx={{ mb: 1 }}>
+                      Secondary Contacts
+                    </Typography>
+                    {secondaryContacts.length === 0 ? (
+                      <Typography color='text.secondary'>No secondary contacts</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                        {secondaryContacts.map((contact: any, index: number) => (
+                          <Box
+                            key={`secondary-contact-mobile-${index}`}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 2,
+                              p: 1.5,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 0.75
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Chip size='small' label={contactTypeLabel(contact.type)} variant='outlined' />
+                              <Typography color='text.secondary'>
+                                {[contact.countryCode, contact.mobile].filter(Boolean).join(' ')}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
               ) : (
                 <Box className='flex flex-col gap-1'>
@@ -283,6 +339,44 @@ const CustomerDetails = ({ id }: Props) => {
                   </Typography>
                   <Typography color='text.secondary'>CIBIL: {data.cibilScore != null ? data.cibilScore : '-'}</Typography>
                   <Typography color='text.secondary'>Source: {String(data.source).replace('_', ' ')}</Typography>
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography variant='subtitle2' color='text.secondary' sx={{ mb: 1 }}>
+                      Secondary Contacts
+                    </Typography>
+                    <TableContainer
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        overflowX: 'auto'
+                      }}
+                    >
+                      <Table size='small' sx={{ minWidth: 420 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Type</TableCell>
+                            <TableCell>Contact</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {secondaryContacts.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={2}>
+                                <Typography color='text.secondary'>No secondary contacts</Typography>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            secondaryContacts.map((contact: any, index: number) => (
+                              <TableRow key={`secondary-contact-${index}`}>
+                                <TableCell>{contactTypeLabel(contact.type)}</TableCell>
+                                <TableCell>{[contact.countryCode, contact.mobile].filter(Boolean).join(' ')}</TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
                 </Box>
               )}
               <Divider sx={{ my: { xs: 2.5, sm: 3 } }} />
@@ -324,6 +418,7 @@ const CustomerDetails = ({ id }: Props) => {
                   countryCode: data.countryCode,
                   mobile: data.mobile,
                   isNRI: data.isNRI,
+                  secondaryContacts: data.secondaryContacts,
                   email: data.email,
                   dob: data.dob,
                   pan: data.pan,
@@ -337,6 +432,10 @@ const CustomerDetails = ({ id }: Props) => {
                 }}
                 onSubmitOverride={async payload => {
                   await updateCustomer(id, payload)
+                }}
+                onSuccess={() => {
+                  fetchData()
+                  setEditMode(false)
                 }}
                 onCancel={() => setEditMode(false)}
               />

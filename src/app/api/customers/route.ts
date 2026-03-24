@@ -10,6 +10,7 @@ import { getDb } from '@/lib/mongodb'
 
 type EmploymentType = 'SALARIED' | 'SELF_EMPLOYED'
 type SourceType = 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
+type SecondaryContactType = 'ALTERNATE' | 'SPOUSE' | 'FRIEND' | 'RELATIVE' | 'OTHER'
 
 // basic validators for payload fields
 function isValidEmail(v: unknown) {
@@ -22,6 +23,12 @@ function isValidCountryCode(v: unknown) {
 
 function isValidMobile(v: unknown) {
   return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
+}
+
+const SECONDARY_CONTACT_TYPES: SecondaryContactType[] = ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER']
+
+function isValidContactType(v: unknown): v is SecondaryContactType {
+  return typeof v === 'string' && SECONDARY_CONTACT_TYPES.includes(v as SecondaryContactType)
 }
 
 function isValidPAN(v: unknown) {
@@ -44,6 +51,33 @@ function maskAadhaar(input: unknown) {
 
   
 return `XXXX-XXXX-${last4}`
+}
+
+function parseSecondaryContacts(input: unknown) {
+  const errors: Record<string, string> = {}
+
+  if (input == null) return { contacts: [] as Array<{ countryCode: string; mobile: string; type: SecondaryContactType }>, errors }
+  if (!Array.isArray(input)) return { contacts: [], errors: { secondaryContacts: 'Secondary contacts must be an array' } }
+
+  if (input.length > 3) errors.secondaryContacts = 'Up to 3 secondary contacts allowed'
+
+  const contacts = input.slice(0, 3).map((row, index) => {
+    const countryCode = row?.countryCode == null ? '' : String(row.countryCode).trim()
+    const mobile = row?.mobile == null ? '' : String(row.mobile).trim()
+    const type = row?.type == null ? '' : String(row.type).trim().toUpperCase()
+
+    if (!isValidCountryCode(countryCode)) errors[`secondaryContacts.${index}.countryCode`] = 'Invalid country code'
+    if (!isValidMobile(mobile)) errors[`secondaryContacts.${index}.mobile`] = 'Mobile must be 9 or 10 digits'
+    if (!isValidContactType(type)) errors[`secondaryContacts.${index}.type`] = 'Invalid contact type'
+
+    return {
+      countryCode,
+      mobile,
+      type: isValidContactType(type) ? type : 'ALTERNATE'
+    }
+  })
+
+  return { contacts, errors }
 }
 
 export async function GET(request: Request) {
@@ -197,6 +231,8 @@ export async function POST(request: Request) {
   const monthlyIncome = body.monthlyIncome == null ? null : Number(body.monthlyIncome)
   const cibilScore = body.cibilScore == null ? null : Number(body.cibilScore)
   const source = String(body.source || '').toUpperCase() as SourceType
+  const secondaryContactsResult = parseSecondaryContacts(body.secondaryContacts)
+  const secondaryContacts = secondaryContactsResult.contacts
 
   // server-side validation
   const errors: Record<string, string> = {}
@@ -212,6 +248,8 @@ export async function POST(request: Request) {
   if (monthlyIncome != null && !(monthlyIncome >= 0)) errors.monthlyIncome = 'Monthly income must be ≥ 0'
   if (cibilScore != null && !(Number.isInteger(cibilScore) && cibilScore >= 300 && cibilScore <= 900))
     errors.cibilScore = 'CIBIL must be 300–900'
+
+  Object.assign(errors, secondaryContactsResult.errors)
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
@@ -252,6 +290,7 @@ export async function POST(request: Request) {
     monthlyIncome,
     cibilScore,
     source,
+    secondaryContacts,
     createdBy: userId,
     createdAt: now,
     updatedAt: now

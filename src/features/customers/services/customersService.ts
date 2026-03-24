@@ -5,6 +5,11 @@ export type CreateCustomerInput = {
   countryCode: string
   mobile: string
   isNRI: boolean
+  secondaryContacts?: Array<{
+    countryCode: string
+    mobile: string
+    type: 'ALTERNATE' | 'SPOUSE' | 'FRIEND' | 'RELATIVE' | 'OTHER'
+  }>
   email?: string | null
   dob?: string | null
   pan?: string | null

@@ -15,6 +15,7 @@ import Slider from '@mui/material/Slider'
 import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
+import FormHelperText from '@mui/material/FormHelperText'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Card from '@mui/material/Card'
@@ -28,6 +29,12 @@ import InputAdornment from '@mui/material/InputAdornment'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
 import LinearProgress from '@mui/material/LinearProgress'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
+import TableContainer from '@mui/material/TableContainer'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
@@ -42,6 +49,24 @@ const COUNTRY_CODE_OPTIONS = [
   { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
 ] as const
 
+const SECONDARY_CONTACT_TYPE_OPTIONS = [
+  { value: 'ALTERNATE', label: 'Alternate' },
+  { value: 'SPOUSE', label: 'Spouse' },
+  { value: 'FRIEND', label: 'Friend' },
+  { value: 'RELATIVE', label: 'Relative' },
+  { value: 'OTHER', label: 'Other' }
+] as const
+
+const SECONDARY_CONTACT_LIMIT = 3
+
+type SecondaryContactType = (typeof SECONDARY_CONTACT_TYPE_OPTIONS)[number]['value']
+
+type SecondaryContact = {
+  countryCode: string
+  mobile: string
+  type: SecondaryContactType
+}
+
 type Props = {
   onSuccess?: () => void
   onCancel?: () => void
@@ -52,6 +77,7 @@ type Props = {
     mobile: string
     countryCode: string
     isNRI: boolean
+    secondaryContacts: SecondaryContact[]
     email: string | null
     dob: string | null
     pan: string | null
@@ -89,6 +115,7 @@ const CustomersCreateForm = ({
   const [countryCode, setCountryCode] = useState('+91')
   const [mobile, setMobile] = useState('')
   const [isNRI, setIsNRI] = useState(false)
+  const [secondaryContacts, setSecondaryContacts] = useState<SecondaryContact[]>([])
   const [email, setEmail] = useState('')
   const [dob, setDob] = useState('')
   const [pan, setPan] = useState('')
@@ -117,6 +144,7 @@ const CustomersCreateForm = ({
     if (initialValues.mobile != null) setMobile(initialValues.mobile)
     if (initialValues.countryCode != null) setCountryCode(initialValues.countryCode)
     if (initialValues.isNRI != null) setIsNRI(Boolean(initialValues.isNRI))
+    if (initialValues.secondaryContacts !== undefined) setSecondaryContacts(initialValues.secondaryContacts || [])
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.dob != null) setDob(initialValues.dob ? initialValues.dob.slice(0, 10) : '')
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
@@ -161,18 +189,21 @@ const CustomersCreateForm = ({
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
   const isValidAadhaar = (digits: string) => digits.length === 0 || digits.length === 12
   const isValidCibil = (v: string) => !v || (/^\d+$/.test(v) && Number(v) >= 300 && Number(v) <= 900)
+  const isValidContactType = (v: string) => SECONDARY_CONTACT_TYPE_OPTIONS.some(option => option.value === v)
 
-  const canSubmit = useMemo(() => {
-    return (
-      fullName.trim().length >= 2 &&
-      isValidCountryCode(countryCode) &&
-      isValidMobile(mobile) &&
-      isValidEmail(email) &&
-      isValidPAN(pan) &&
-      isValidAadhaar(aadhaarDigits) &&
-      isValidCibil(cibilScore)
-    )
-  }, [fullName, countryCode, mobile, email, pan, aadhaarDigits, cibilScore])
+  const isSecondaryContactValid = (contact: SecondaryContact) =>
+    isValidCountryCode(contact.countryCode) && isValidMobile(contact.mobile) && isValidContactType(contact.type)
+
+  const canSubmit =
+    fullName.trim().length >= 2 &&
+    isValidCountryCode(countryCode) &&
+    isValidMobile(mobile) &&
+    isValidEmail(email) &&
+    isValidPAN(pan) &&
+    isValidAadhaar(aadhaarDigits) &&
+    isValidCibil(cibilScore) &&
+    secondaryContacts.length <= SECONDARY_CONTACT_LIMIT &&
+    secondaryContacts.every(isSecondaryContactValid)
 
   // input normalizers
   const handleMobile = (v: string) => {
@@ -199,6 +230,38 @@ const CustomersCreateForm = ({
     setAadhaarMasked(`XXXX-XXXX-${last4}`)
   }
 
+  const handleSecondaryContactType = (index: number, value: string) => {
+    setSecondaryContacts(prev =>
+      prev.map((contact, i) => (i === index ? { ...contact, type: value as SecondaryContactType } : contact))
+    )
+  }
+
+  const handleSecondaryContactCountryCode = (index: number, value: string) => {
+    setSecondaryContacts(prev =>
+      prev.map((contact, i) => (i === index ? { ...contact, countryCode: value } : contact))
+    )
+  }
+
+  const handleSecondaryContactMobile = (index: number, value: string) => {
+    const nextMobile = value.replace(/\D/g, '').slice(0, 10)
+
+    setSecondaryContacts(prev =>
+      prev.map((contact, i) => (i === index ? { ...contact, mobile: nextMobile } : contact))
+    )
+  }
+
+  const handleAddSecondaryContact = () => {
+    setSecondaryContacts(prev => {
+      if (prev.length >= SECONDARY_CONTACT_LIMIT) return prev
+
+      return [...prev, { countryCode, mobile: '', type: 'ALTERNATE' }]
+    })
+  }
+
+  const handleRemoveSecondaryContact = (index: number) => {
+    setSecondaryContacts(prev => prev.filter((_, i) => i !== index))
+  }
+
   const handleSubmit = async () => {
     setError(null)
     setFieldErrors({})
@@ -210,6 +273,11 @@ const CustomersCreateForm = ({
         countryCode,
         mobile,
         isNRI,
+        secondaryContacts: secondaryContacts.map(contact => ({
+          countryCode: contact.countryCode,
+          mobile: contact.mobile,
+          type: contact.type
+        })),
         email: email ? email.trim() : null,
         dob: dob ? new Date(dob).toISOString() : null,
         pan: pan ? pan.toUpperCase() : null,
@@ -251,6 +319,7 @@ const CustomersCreateForm = ({
         setCountryCode('+91')
         setMobile('')
         setIsNRI(false)
+        setSecondaryContacts([])
         setEmail('')
         setDob('')
         setPan('')
@@ -270,6 +339,7 @@ const CustomersCreateForm = ({
 
       setFullName('')
       setMobile('')
+      setSecondaryContacts([])
       setEmail('')
       setDob('')
       setPan('')
@@ -373,6 +443,8 @@ const CustomersCreateForm = ({
   const selectedCountry = useMemo(() => {
     return COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0]
   }, [countryCode])
+
+  const canAddSecondaryContact = secondaryContacts.length < SECONDARY_CONTACT_LIMIT
 
   return useCard ? (
     <Card
@@ -499,6 +571,151 @@ const CustomersCreateForm = ({
               }}
             />
           </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 1
+            }}
+          >
+            <Typography variant='subtitle2' color='text.secondary'>
+              Secondary Contacts
+            </Typography>
+            <Button
+              size='small'
+              variant='outlined'
+              onClick={handleAddSecondaryContact}
+              disabled={!canAddSecondaryContact}
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+            >
+              Add Contact
+            </Button>
+          </Box>
+          <TableContainer
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              overflowX: 'auto'
+            }}
+          >
+            <Table size='small' sx={{ minWidth: 520 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ width: 170 }}>Type</TableCell>
+                  <TableCell sx={{ width: 150 }}>Country Code</TableCell>
+                  <TableCell sx={{ width: 200 }}>Mobile</TableCell>
+                  <TableCell sx={{ width: 80 }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {secondaryContacts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Typography variant='body2' color='text.secondary'>
+                        No secondary contacts added
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  secondaryContacts.map((contact, index) => {
+                    const contactCountry =
+                      COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
+
+                    const typeError = fieldErrors[`secondaryContacts.${index}.type`]
+
+                    const countryError =
+                      fieldErrors[`secondaryContacts.${index}.countryCode`] ||
+                      (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+
+                    const mobileError =
+                      fieldErrors[`secondaryContacts.${index}.mobile`] ||
+                      (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+
+                    return (
+                      <TableRow key={`secondary-contact-${index}`}>
+                        <TableCell>
+                          <FormControl size='small' fullWidth error={Boolean(typeError)}>
+                            <Select
+                              value={contact.type}
+                              onChange={e => handleSecondaryContactType(index, String(e.target.value))}
+                            >
+                              {SECONDARY_CONTACT_TYPE_OPTIONS.map(option => (
+                                <MenuItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                            {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <FormControl size='small' fullWidth error={Boolean(countryError)}>
+                            <Select
+                              value={contact.countryCode}
+                              onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
+                              renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
+                            >
+                              {COUNTRY_CODE_OPTIONS.map(option => (
+                                <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      width: '100%'
+                                    }}
+                                  >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <span>{option.flag}</span>
+                                      <Typography variant='body2'>{option.name}</Typography>
+                                    </Box>
+                                    <Typography variant='body2' color='text.secondary'>
+                                      {option.code}
+                                    </Typography>
+                                  </Box>
+                                </MenuItem>
+                              ))}
+                            </Select>
+                            {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size='small'
+                            value={contact.mobile}
+                            onChange={e => handleSecondaryContactMobile(index, e.target.value)}
+                            error={Boolean(mobileError)}
+                            helperText={mobileError || ' '}
+                            fullWidth
+                            inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            color='error'
+                            size='small'
+                            onClick={() => handleRemoveSecondaryContact(index)}
+                            aria-label='Remove secondary contact'
+                          >
+                            <i className='ri-delete-bin-line' />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {fieldErrors.secondaryContacts ? <FormHelperText error>{fieldErrors.secondaryContacts}</FormHelperText> : null}
+          <Typography variant='caption' color='text.secondary'>
+            Up to {SECONDARY_CONTACT_LIMIT} secondary contacts
+          </Typography>
 
           <TextField
             label='Email'
@@ -885,6 +1102,274 @@ const CustomersCreateForm = ({
               }}
             />
           </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 1
+            }}
+          >
+            <Typography variant='subtitle2' color='text.secondary'>
+              Secondary Contacts
+            </Typography>
+            <Button
+              size='small'
+              variant='outlined'
+              onClick={handleAddSecondaryContact}
+              disabled={!canAddSecondaryContact}
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+            >
+              Add Contact
+            </Button>
+          </Box>
+          {isMobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {secondaryContacts.length === 0 ? (
+                <Box
+                  sx={{
+                    border: '1px dashed',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    p: 2,
+                    textAlign: 'center'
+                  }}
+                >
+                  <Typography variant='body2' color='text.secondary'>
+                    No secondary contacts added
+                  </Typography>
+                </Box>
+              ) : (
+                secondaryContacts.map((contact, index) => {
+                  const contactCountry =
+                    COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
+
+                  const typeError = fieldErrors[`secondaryContacts.${index}.type`]
+
+                  const countryError =
+                    fieldErrors[`secondaryContacts.${index}.countryCode`] ||
+                    (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+
+                  const mobileError =
+                    fieldErrors[`secondaryContacts.${index}.mobile`] ||
+                    (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+
+                  return (
+                    <Box
+                      key={`secondary-contact-card-${index}`}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.5,
+                        backgroundColor: 'background.paper'
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography variant='subtitle2' color='text.secondary'>
+                          Contact {index + 1}
+                        </Typography>
+                        <IconButton
+                          color='error'
+                          size='small'
+                          onClick={() => handleRemoveSecondaryContact(index)}
+                          aria-label='Remove secondary contact'
+                        >
+                          <i className='ri-delete-bin-line' />
+                        </IconButton>
+                      </Box>
+                      <FormControl size='small' fullWidth error={Boolean(typeError)}>
+                        <InputLabel id={`secondary-contact-type-${index}`}>Type</InputLabel>
+                        <Select
+                          labelId={`secondary-contact-type-${index}`}
+                          label='Type'
+                          value={contact.type}
+                          onChange={e => handleSecondaryContactType(index, String(e.target.value))}
+                        >
+                          {SECONDARY_CONTACT_TYPE_OPTIONS.map(option => (
+                            <MenuItem key={option.value} value={option.value}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
+                      </FormControl>
+                      <FormControl size='small' fullWidth error={Boolean(countryError)}>
+                        <InputLabel id={`secondary-contact-country-${index}`}>Country Code</InputLabel>
+                        <Select
+                          labelId={`secondary-contact-country-${index}`}
+                          label='Country Code'
+                          value={contact.countryCode}
+                          onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
+                          renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
+                        >
+                          {COUNTRY_CODE_OPTIONS.map(option => (
+                            <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  width: '100%'
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <span>{option.flag}</span>
+                                  <Typography variant='body2'>{option.name}</Typography>
+                                </Box>
+                                <Typography variant='body2' color='text.secondary'>
+                                  {option.code}
+                                </Typography>
+                              </Box>
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
+                      </FormControl>
+                      <TextField
+                        size='small'
+                        label='Mobile'
+                        value={contact.mobile}
+                        onChange={e => handleSecondaryContactMobile(index, e.target.value)}
+                        error={Boolean(mobileError)}
+                        helperText={mobileError || ' '}
+                        fullWidth
+                        inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+                      />
+                    </Box>
+                  )
+                })
+              )}
+            </Box>
+          ) : (
+            <TableContainer
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 2,
+                overflowX: 'auto'
+              }}
+            >
+              <Table size='small' sx={{ minWidth: 520 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 170 }}>Type</TableCell>
+                    <TableCell sx={{ width: 150 }}>Country Code</TableCell>
+                    <TableCell sx={{ width: 200 }}>Mobile</TableCell>
+                    <TableCell sx={{ width: 80 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {secondaryContacts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        <Typography variant='body2' color='text.secondary'>
+                          No secondary contacts added
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    secondaryContacts.map((contact, index) => {
+                      const contactCountry =
+                        COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
+
+                      const typeError = fieldErrors[`secondaryContacts.${index}.type`]
+
+                      const countryError =
+                        fieldErrors[`secondaryContacts.${index}.countryCode`] ||
+                        (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+
+                      const mobileError =
+                        fieldErrors[`secondaryContacts.${index}.mobile`] ||
+                        (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+
+                      return (
+                        <TableRow key={`secondary-contact-${index}`}>
+                          <TableCell>
+                            <FormControl size='small' fullWidth error={Boolean(typeError)}>
+                              <Select
+                                value={contact.type}
+                                onChange={e => handleSecondaryContactType(index, String(e.target.value))}
+                              >
+                                {SECONDARY_CONTACT_TYPE_OPTIONS.map(option => (
+                                  <MenuItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                              {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
+                            </FormControl>
+                          </TableCell>
+                          <TableCell>
+                            <FormControl size='small' fullWidth error={Boolean(countryError)}>
+                              <Select
+                                value={contact.countryCode}
+                                onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
+                                renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
+                              >
+                                {COUNTRY_CODE_OPTIONS.map(option => (
+                                  <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        width: '100%'
+                                      }}
+                                    >
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <span>{option.flag}</span>
+                                        <Typography variant='body2'>{option.name}</Typography>
+                                      </Box>
+                                      <Typography variant='body2' color='text.secondary'>
+                                        {option.code}
+                                      </Typography>
+                                    </Box>
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                              {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
+                            </FormControl>
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size='small'
+                              value={contact.mobile}
+                              onChange={e => handleSecondaryContactMobile(index, e.target.value)}
+                              error={Boolean(mobileError)}
+                              helperText={mobileError || ' '}
+                              fullWidth
+                              inputProps={{ inputMode: 'numeric', maxLength: 10 }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              color='error'
+                              size='small'
+                              onClick={() => handleRemoveSecondaryContact(index)}
+                              aria-label='Remove secondary contact'
+                            >
+                              <i className='ri-delete-bin-line' />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+          {fieldErrors.secondaryContacts ? <FormHelperText error>{fieldErrors.secondaryContacts}</FormHelperText> : null}
+          <Typography variant='caption' color='text.secondary'>
+            Up to {SECONDARY_CONTACT_LIMIT} secondary contacts
+          </Typography>
 
           <TextField
             label='Email'

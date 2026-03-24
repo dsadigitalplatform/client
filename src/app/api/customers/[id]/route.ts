@@ -20,6 +20,13 @@ function isValidMobile(v: unknown) {
   return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
 }
 
+type SecondaryContactType = 'ALTERNATE' | 'SPOUSE' | 'FRIEND' | 'RELATIVE' | 'OTHER'
+const SECONDARY_CONTACT_TYPES: SecondaryContactType[] = ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER']
+
+function isValidContactType(v: unknown): v is SecondaryContactType {
+  return typeof v === 'string' && SECONDARY_CONTACT_TYPES.includes(v as SecondaryContactType)
+}
+
 function isValidPAN(v: unknown) {
   if (v == null) return true
   const s = String(v)
@@ -27,6 +34,33 @@ function isValidPAN(v: unknown) {
   if (s.trim().length === 0) return true
   
 return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(s)
+}
+
+function parseSecondaryContacts(input: unknown) {
+  const errors: Record<string, string> = {}
+
+  if (input == null) return { contacts: [] as Array<{ countryCode: string; mobile: string; type: SecondaryContactType }>, errors }
+  if (!Array.isArray(input)) return { contacts: [], errors: { secondaryContacts: 'Secondary contacts must be an array' } }
+
+  if (input.length > 3) errors.secondaryContacts = 'Up to 3 secondary contacts allowed'
+
+  const contacts = input.slice(0, 3).map((row, index) => {
+    const countryCode = row?.countryCode == null ? '' : String(row.countryCode).trim()
+    const mobile = row?.mobile == null ? '' : String(row.mobile).trim()
+    const type = row?.type == null ? '' : String(row.type).trim().toUpperCase()
+
+    if (!isValidCountryCode(countryCode)) errors[`secondaryContacts.${index}.countryCode`] = 'Invalid country code'
+    if (!isValidMobile(mobile)) errors[`secondaryContacts.${index}.mobile`] = 'Mobile must be 9 or 10 digits'
+    if (!isValidContactType(type)) errors[`secondaryContacts.${index}.type`] = 'Invalid contact type'
+
+    return {
+      countryCode,
+      mobile,
+      type: isValidContactType(type) ? type : 'ALTERNATE'
+    }
+  })
+
+  return { contacts, errors }
 }
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -61,6 +95,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     pan: (row as any).pan ?? null,
     aadhaarMasked: (row as any).aadhaarMasked ?? null,
     address: (row as any).address ?? null,
+    secondaryContacts: Array.isArray((row as any).secondaryContacts) ? (row as any).secondaryContacts : [],
     employmentType: (row as any).employmentType,
     monthlyIncome: (row as any).monthlyIncome ?? null,
     cibilScore: (row as any).cibilScore ?? null,
@@ -107,6 +142,17 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.monthlyIncome !== undefined) patch.monthlyIncome = body.monthlyIncome == null ? null : Number(body.monthlyIncome)
   if (body.cibilScore !== undefined) patch.cibilScore = body.cibilScore == null ? null : Number(body.cibilScore)
   if (body.source != null) patch.source = String(body.source).toUpperCase()
+
+  if (body.secondaryContacts !== undefined) {
+    const secondaryContactsResult = parseSecondaryContacts(body.secondaryContacts)
+
+    if (Object.keys(secondaryContactsResult.errors).length > 0) {
+      return NextResponse.json({ error: 'validation_error', details: secondaryContactsResult.errors }, { status: 400 })
+    }
+
+    patch.secondaryContacts = secondaryContactsResult.contacts
+  }
+
   patch.updatedAt = new Date()
 
   const errors: Record<string, string> = {}

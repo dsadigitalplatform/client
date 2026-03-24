@@ -222,7 +222,7 @@ async function main() {
         tenantId: { bsonType: 'objectId' },
         fullName: { bsonType: 'string', minLength: 2 },
         countryCode: { bsonType: 'string' },
-        mobile: { bsonType: 'string', pattern: '^[0-9]{10}$' },
+        mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
         isNRI: { bsonType: 'bool' },
         email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
         dob: { bsonType: ['date', 'null'] },
@@ -230,6 +230,20 @@ async function main() {
         aadhaarMasked: { bsonType: ['string', 'null'] },
         address: { bsonType: ['string', 'null'] },
         remarks: { bsonType: ['string', 'null'], maxLength: 500 },
+        secondaryContacts: {
+          bsonType: ['array', 'null'],
+          maxItems: 3,
+          items: {
+            bsonType: 'object',
+            required: ['countryCode', 'mobile', 'type'],
+            properties: {
+              countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,4}$' },
+              mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+              type: { enum: ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER'] }
+            },
+            additionalProperties: true
+          }
+        },
         employmentType: { enum: ['SALARIED', 'SELF_EMPLOYED'] },
         monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
         cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },
