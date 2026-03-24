@@ -117,6 +117,9 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             <MenuItem href='/document-checklists' icon={<i className='ri-file-text-line' />}>
               Document Checklist
             </MenuItem>
+            <MenuItem href='/associate-types' icon={<i className='ri-team-line' />}>
+              Associate Type
+            </MenuItem>
             <MenuItem href='/loan-status-pipeline' icon={<i className='ri-flow-chart' />}>
               Loan Status Pipeline
             </MenuItem>

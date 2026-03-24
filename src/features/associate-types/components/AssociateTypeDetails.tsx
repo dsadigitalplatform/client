@@ -1,0 +1,225 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+
+import { useRouter } from 'next/navigation'
+
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Chip from '@mui/material/Chip'
+import Button from '@mui/material/Button'
+import Snackbar from '@mui/material/Snackbar'
+import Alert from '@mui/material/Alert'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import Card from '@mui/material/Card'
+import CardHeader from '@mui/material/CardHeader'
+import CardContent from '@mui/material/CardContent'
+import IconButton from '@mui/material/IconButton'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme } from '@mui/material/styles'
+
+import AssociateTypesCreateForm from '@features/associate-types/components/AssociateTypesCreateForm'
+import { deleteAssociateType, getAssociateType, updateAssociateType } from '@features/associate-types/services/associateTypesService'
+
+type Props = { id: string }
+
+const AssociateTypeDetails = ({ id }: Props) => {
+  const router = useRouter()
+  const [data, setData] = useState<any | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [editMode, setEditMode] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+  const [toast, setToast] = useState<{ open: boolean; msg: string; severity: 'success' | 'error' }>({
+    open: false,
+    msg: '',
+    severity: 'success'
+  })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+
+    try {
+      const res = await getAssociateType(id)
+
+      setData(res)
+    } catch {
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleDelete = async () => {
+    try {
+      await deleteAssociateType(id)
+
+      router.push('/associate-types')
+    } catch {
+      setToast({ open: true, msg: 'Failed to delete associate type', severity: 'error' })
+    }
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Typography>Associate type not found</Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Card>
+        {!isMobile ? (
+          <CardHeader
+            title='Associate Type Details'
+            action={
+              <Box className='flex gap-2'>
+                <Button size='small' variant='text' onClick={() => router.push('/associate-types')}>
+                  Back to List
+                </Button>
+                {!editMode ? (
+                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                    Edit
+                  </Button>
+                ) : null}
+                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                  Delete
+                </Button>
+              </Box>
+            }
+          />
+        ) : null}
+        <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+          {isMobile ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Button
+                variant='text'
+                onClick={() => router.push('/associate-types')}
+                startIcon={<i className='ri-arrow-left-line' />}
+                sx={{ minWidth: 'auto', px: 1 }}
+              >
+                Back
+              </Button>
+              <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+                Associate Type
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit associate type'>
+                  <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
+                </IconButton>
+                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete associate type'>
+                  <i className='ri-delete-bin-6-line' />
+                </IconButton>
+              </Box>
+            </Box>
+          ) : null}
+          {editMode ? (
+            <AssociateTypesCreateForm
+              showTitle={false}
+              redirectOnSuccess
+              onCancel={() => setEditMode(false)}
+              initialValues={{
+                name: data.name,
+                description: data.description,
+                isActive: data.isActive
+              }}
+              submitLabel='Update Associate Type'
+              onSubmitOverride={async payload => {
+                await updateAssociateType(id, payload)
+              }}
+            />
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 1.5, flexWrap: 'wrap' }}>
+                <Typography variant='h6' sx={{ wordBreak: 'break-word' }}>
+                  {data.name}
+                </Typography>
+                <Chip
+                  label={data.isActive ? 'Active' : 'Inactive'}
+                  color={data.isActive ? 'success' : 'default'}
+                  size='small'
+                  variant='outlined'
+                  sx={{
+                    boxShadow: 'none',
+                    backgroundColor: data.isActive
+                      ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                      : 'rgb(var(--mui-palette-text-primaryChannel) / 0.06)'
+                  }}
+                />
+              </Box>
+              <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
+                {data.description || 'No description'}
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3000}
+        onClose={() => setToast(v => ({ ...v, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setToast(v => ({ ...v, open: false }))}
+          severity={toast.severity}
+          variant='filled'
+          icon={toast.severity === 'success' ? <i className='ri-checkbox-circle-line' /> : <i className='ri-close-circle-line' />}
+          sx={{
+            width: '100%',
+            color: 'text.primary',
+            backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor:
+              toast.severity === 'success'
+                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.4)'
+                : 'rgb(var(--mui-palette-error-mainChannel) / 0.4)',
+            boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
+            '& .MuiAlert-icon': {
+              color: toast.severity === 'success' ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-error-main)'
+            }
+          }}
+        >
+          {toast.msg}
+        </Alert>
+      </Snackbar>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Delete Associate Type</DialogTitle>
+        <DialogContent>
+          <Typography variant='body2'>This will permanently delete the associate type.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button color='error' variant='contained' onClick={handleDelete}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  )
+}
+
+export default AssociateTypeDetails

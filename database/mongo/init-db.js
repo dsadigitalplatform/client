@@ -315,6 +315,27 @@ ensureCollection('documentChecklists', documentChecklistsValidator)
 ensureIndex('documentChecklists', { tenantId: 1 }, { name: 'idx_documentChecklists_tenantId' })
 ensureIndex('documentChecklists', { tenantId: 1, name: 1 }, { unique: true, name: 'uniq_tenant_documentChecklist_name' })
 
+const associateTypesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'name', 'isActive', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      name: { bsonType: 'string', minLength: 2 },
+      description: { bsonType: ['string', 'null'] },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('associateTypes', associateTypesValidator)
+ensureIndex('associateTypes', { tenantId: 1 }, { name: 'idx_associateTypes_tenantId' })
+ensureIndex('associateTypes', { tenantId: 1, name: 1 }, { unique: true, name: 'uniq_tenant_associateType_name' })
+
 const loanStatusPipelineStagesValidator = {
   $jsonSchema: {
     bsonType: 'object',
