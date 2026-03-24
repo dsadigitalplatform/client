@@ -47,6 +47,8 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import LinearProgress from '@mui/material/LinearProgress'
 import { useTheme } from '@mui/material/styles'
@@ -61,6 +63,8 @@ import type { LoanType } from '@features/loan-types/loan-types.types'
 import type { AppointmentFollowUpType } from '@features/appointments/appointments.types'
 import { createAppointment } from '@features/appointments/services/appointments'
 import LeadAppointmentsDashboard from '@features/appointments/components/LeadAppointmentsDashboard'
+import { getAssociates } from '@features/associates/services/associatesService'
+import type { Associate } from '@features/associates/associates.types'
 import {
   createLoanCase,
   getLoanCases,
@@ -70,7 +74,13 @@ import {
   updateLoanCase,
   deleteLoanCase
 } from '@features/loan-cases/services/loanCasesService'
-import type { LoanCaseDetails, LoanCaseDocument, LoanCaseDocumentStatus, TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import type {
+  LeadSource,
+  LoanCaseDetails,
+  LoanCaseDocument,
+  LoanCaseDocumentStatus,
+  TenantUserOption
+} from '@features/loan-cases/loan-cases.types'
 
 type StageOption = { id: string; name: string; order: number }
 type DraftAppointment = {
@@ -119,6 +129,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [loanTypes, setLoanTypes] = useState<LoanType[]>([])
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
+  const [associates, setAssociates] = useState<Associate[]>([])
 
   const [loading, setLoading] = useState(Boolean(caseId))
   const [submitting, setSubmitting] = useState(false)
@@ -144,6 +155,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [loanTypeId, setLoanTypeId] = useState<string>('')
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
+  const [leadSource, setLeadSource] = useState<LeadSource>('DIRECT')
+  const [associateId, setAssociateId] = useState<string>('')
+  const [associateFallbackLabel, setAssociateFallbackLabel] = useState<string>('')
 
   const [bankName, setBankName] = useState<string>('')
   const [bankNameOptions, setBankNameOptions] = useState<string[]>([])
@@ -179,6 +193,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
 
+  const associateOptions = useMemo(
+    () => associates.filter(a => a.isActive).sort((a, b) => a.associateName.localeCompare(b.associateName)),
+    [associates]
+  )
+
   const assignedAgentLabel = useMemo(() => {
     if (!assignedAgentId) return 'Unassigned'
 
@@ -186,6 +205,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     return agent?.name || agent?.email || 'Assigned Agent'
   }, [assignedAgentId, userOptions])
+
+  const selectedAssociateLabel = useMemo(() => {
+    if (!associateId) return ''
+
+    const match = associateOptions.find(a => a.id === associateId)
+
+    if (match) return `${match.associateName} (${match.code})`
+
+    return associateFallbackLabel
+  }, [associateFallbackLabel, associateId, associateOptions])
 
   const selectedCustomerLabel = useMemo(() => {
     if (customerValue?.fullName) return customerValue.fullName
@@ -269,15 +298,17 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     void (async () => {
       try {
-        const [loanTypesData, stagesData, usersData] = await Promise.all([
+        const [loanTypesData, stagesData, usersData, associatesData] = await Promise.all([
           getLoanTypes(),
           getLoanStatusPipelineStages(),
-          getTenantUsers()
+          getTenantUsers(),
+          getAssociates()
         ])
 
         setLoanTypes(loanTypesData as any)
         setStages(stagesData as any)
         setUsers(usersData as any)
+        setAssociates(associatesData as any)
       } catch (e: any) {
         setError(e?.message || 'Failed to load reference data')
       }
@@ -313,6 +344,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setLoanTypeId(data.loanTypeId)
         setStageId(data.stageId)
         setAssignedAgentId(data.assignedAgentId || '')
+        setLeadSource(data.leadSource || 'DIRECT')
+        setAssociateId(data.associateId || '')
+        setAssociateFallbackLabel(
+          data.associateName ? `${data.associateName}${data.associateCode ? ` (${data.associateCode})` : ''}` : ''
+        )
         setBankName(data.bankName || '')
         setRequestedAmount(data.requestedAmount != null ? String(data.requestedAmount) : '')
         setEligibleAmount(data.eligibleAmount != null ? String(data.eligibleAmount) : '')
@@ -521,6 +557,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
       if (!isValid) next.assignedAgentId = 'Assigned agent must belong to tenant'
     }
 
+    if (leadSource === 'ASSOCIATE') {
+      if (!associateId) next.associateId = 'Associate is required'
+      else if (!associateOptions.some(a => a.id === associateId)) next.associateId = 'Associate must be active'
+    }
+
     if (!id && draftAppointments.length === 0) next.appointments = 'At least one appointment is required'
 
     setFieldErrors(next)
@@ -554,11 +595,15 @@ const LoanCaseForm = ({ caseId }: Props) => {
     setSubmitting(true)
 
     try {
+      const resolvedAssociateId = leadSource === 'ASSOCIATE' ? (associateId || null) : null
+
       const payloadBase = {
         customerId,
         loanTypeId,
         stageId,
         assignedAgentId: assignedAgentId || null,
+        leadSource,
+        associateId: resolvedAssociateId,
         bankName: bankName.trim().length === 0 ? null : bankName.trim(),
         requestedAmount: parsed.requested as number,
         eligibleAmount: parsed.eligible,
@@ -722,6 +767,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
                         {users.find(u => u.id === assignedAgentId)?.name ||
                           users.find(u => u.id === assignedAgentId)?.email ||
                           'N/A'}
+                      </Typography>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Lead Source</Typography>
+                      <Typography variant="body1">{leadSource === 'ASSOCIATE' ? 'Associate' : 'Direct'}</Typography>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Associate</Typography>
+                      <Typography variant="body1">
+                        {leadSource === 'ASSOCIATE' ? (selectedAssociateLabel || associateFallbackLabel || 'N/A') : 'N/A'}
                       </Typography>
                     </Grid>
                   </Grid>
@@ -988,6 +1043,76 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     ) : null}
                   </FormControl>
                 </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <Typography variant='subtitle1' sx={{ fontWeight: 700, mb: 1 }}>
+                    Lead Source
+                  </Typography>
+                  <ToggleButtonGroup
+                    value={leadSource}
+                    exclusive
+                    onChange={(_, value) => {
+                      if (!value) return
+                      setLeadSource(value)
+
+                      if (value === 'DIRECT') {
+                        setAssociateId('')
+                        setFieldErrors(prev => {
+                          const next = { ...prev }
+
+                          delete next.associateId
+
+                          return next
+                        })
+                      }
+                    }}
+                    sx={{ width: '100%' }}
+                  >
+                    <ToggleButton value='DIRECT' sx={{ flex: 1 }}>
+                      Direct
+                    </ToggleButton>
+                    <ToggleButton value='ASSOCIATE' sx={{ flex: 1 }}>
+                      Associate
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                  {fieldErrors.leadSource ? (
+                    <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                      {fieldErrors.leadSource}
+                    </Typography>
+                  ) : null}
+                </Grid>
+
+                {leadSource === 'ASSOCIATE' ? (
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControl fullWidth size='small' error={!!fieldErrors.associateId}>
+                      <InputLabel id='loan-case-associate'>Associate</InputLabel>
+                      <Select
+                        labelId='loan-case-associate'
+                        label='Associate'
+                        value={associateId}
+                        onChange={e => setAssociateId(String(e.target.value))}
+                        renderValue={v => selectedAssociateLabel || associateOptions.find(a => a.id === v)?.associateName || 'Select'}
+                      >
+                        {associateOptions.length === 0 ? (
+                          <MenuItem value='' disabled>
+                            No active associates
+                          </MenuItem>
+                        ) : (
+                          associateOptions.map(a => (
+                            <MenuItem key={a.id} value={a.id}>
+                              {a.associateName} ({a.code})
+                            </MenuItem>
+                          ))
+                        )}
+                      </Select>
+                      {fieldErrors.associateId ? (
+                        <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                          {fieldErrors.associateId}
+                        </Typography>
+                      ) : null}
+                    </FormControl>
+                  </Grid>
+                ) : null}
               </Grid>
 
               <Divider />

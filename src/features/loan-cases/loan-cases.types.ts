@@ -1,4 +1,5 @@
 export type LoanCaseDocumentStatus = 'COLLECTED' | 'SUBMITTED_TO_BANK' | 'APPROVED' | 'PENDING'
+export type LeadSource = 'DIRECT' | 'ASSOCIATE'
 
 export type LoanCaseDocument = {
   documentId: string
@@ -44,6 +45,10 @@ export type LoanCaseDetails = {
   assignedAgentId: string | null
   assignedAgentName: string | null
   assignedAgentEmail: string | null
+  leadSource: LeadSource
+  associateId: string | null
+  associateName: string | null
+  associateCode: string | null
   stageId: string
   stageName: string
   documents: LoanCaseDocument[]
@@ -58,6 +63,8 @@ export type CreateLoanCaseInput = {
   loanTypeId: string
   stageId: string
   assignedAgentId?: string | null
+  leadSource?: LeadSource
+  associateId?: string | null
   bankName?: string | null
   requestedAmount: number
   eligibleAmount?: number | null

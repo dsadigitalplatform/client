@@ -446,6 +446,8 @@ const loanCasesValidator = {
       tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
       emi: { bsonType: ['number', 'null'], minimum: 0 },
       assignedAgentId: { bsonType: ['objectId', 'null'] },
+      leadSource: { enum: ['DIRECT', 'ASSOCIATE'] },
+      associateId: { bsonType: ['objectId', 'null'] },
       documents: {
         bsonType: 'array',
         items: {

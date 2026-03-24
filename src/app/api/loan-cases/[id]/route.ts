@@ -11,11 +11,17 @@ import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
+const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE'] as const
 
 type DocumentStatus = (typeof DOCUMENT_STATUS_VALUES)[number]
+type LeadSource = (typeof LEAD_SOURCE_VALUES)[number]
 
 function isDocumentStatus(v: unknown): v is DocumentStatus {
   return typeof v === 'string' && (DOCUMENT_STATUS_VALUES as readonly string[]).includes(v)
+}
+
+function isLeadSource(v: unknown): v is LeadSource {
+  return typeof v === 'string' && (LEAD_SOURCE_VALUES as readonly string[]).includes(v)
 }
 
 function escapeRegexLiteral(input: string) {
@@ -108,6 +114,14 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         .findOne({ _id: (row as any).assignedAgentId }, { projection: { name: 1, email: 1 } })
     : null
 
+  const associate = (row as any).associateId
+    ? await db
+        .collection('associates')
+        .findOne({ _id: (row as any).associateId, tenantId: tenantIdObj }, { projection: { associateName: 1, code: 1 } })
+    : null
+
+  const leadSource: LeadSource = isLeadSource((row as any).leadSource) ? (row as any).leadSource : 'DIRECT'
+
   const data = {
     id: String((row as any)._id),
     customerId: String((row as any).customerId),
@@ -123,6 +137,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     assignedAgentId: (row as any).assignedAgentId ? String((row as any).assignedAgentId) : null,
     assignedAgentName: assignedAgent ? String((assignedAgent as any).name || '') : null,
     assignedAgentEmail: assignedAgent ? ((assignedAgent as any).email ?? null) : null,
+    leadSource,
+    associateId: (row as any).associateId ? String((row as any).associateId) : null,
+    associateName: associate ? String((associate as any).associateName || '') : null,
+    associateCode: associate ? String((associate as any).code || '') : null,
     stageId: String((row as any).stageId),
     stageName: stage ? String((stage as any).name || '') : '',
     documents: Array.isArray((row as any).documents)
@@ -164,6 +182,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const body = await request.json().catch(() => ({}))
   const patch: any = {}
   const errors: Record<string, string> = {}
+  const incomingLeadSource = body.leadSource !== undefined ? String(body.leadSource) : undefined
+  const incomingAssociateId = body.associateId !== undefined ? (body.associateId == null ? null : String(body.associateId)) : undefined
 
   if (body.nextFollowUpDate !== undefined) {
     const d = body.nextFollowUpDate ? new Date(body.nextFollowUpDate) : null
@@ -234,6 +254,40 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
         if (!agentMembership) errors.assignedAgentId = 'Assigned agent must belong to tenant'
         else patch.assignedAgentId = agentIdObj
       }
+    }
+  }
+
+  if (incomingLeadSource !== undefined) {
+    if (!isLeadSource(incomingLeadSource)) errors.leadSource = 'Invalid lead source'
+    else patch.leadSource = incomingLeadSource
+  }
+
+  const nextLeadSource: LeadSource = isLeadSource(patch.leadSource)
+    ? (patch.leadSource as LeadSource)
+    : isLeadSource((existing as any).leadSource)
+      ? ((existing as any).leadSource as LeadSource)
+      : 'DIRECT'
+
+  if (incomingAssociateId !== undefined || incomingLeadSource !== undefined) {
+    if (nextLeadSource === 'ASSOCIATE') {
+      const nextAssociateId = incomingAssociateId ?? ((existing as any).associateId ? String((existing as any).associateId) : null)
+
+      if (!nextAssociateId) {
+        errors.associateId = 'Associate is required'
+      } else if (!ObjectId.isValid(nextAssociateId)) {
+        errors.associateId = 'Invalid associate'
+      } else {
+        const associateObjId = new ObjectId(nextAssociateId)
+
+        const associate = await db
+          .collection('associates')
+          .findOne({ _id: associateObjId, tenantId: tenantIdObj, isActive: true }, { projection: { _id: 1 } })
+
+        if (!associate) errors.associateId = 'Associate must be active'
+        else patch.associateId = associateObjId
+      }
+    } else {
+      patch.associateId = null
     }
   }
 

@@ -14,6 +14,14 @@ function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 }
 
+const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE'] as const
+
+type LeadSource = (typeof LEAD_SOURCE_VALUES)[number]
+
+function isLeadSource(v: unknown): v is LeadSource {
+  return typeof v === 'string' && (LEAD_SOURCE_VALUES as readonly string[]).includes(v)
+}
+
 async function getTenantContext(session: any) {
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
@@ -273,6 +281,8 @@ export async function POST(request: Request) {
   const loanTypeId = String(body?.loanTypeId || '')
   const stageId = String(body?.stageId || '')
   const assignedAgentId = body?.assignedAgentId == null ? null : String(body.assignedAgentId)
+  const leadSourceRaw = body?.leadSource
+  const associateIdRaw = body?.associateId == null ? null : String(body.associateId)
 
   const nextFollowUpDateRaw = body?.nextFollowUpDate
   const expectedActionDateRaw = body?.expectedActionDate
@@ -288,6 +298,7 @@ export async function POST(request: Request) {
   const emi = body?.emi == null ? null : Number(body.emi)
 
   const errors: Record<string, string> = {}
+  const leadSource = isLeadSource(leadSourceRaw) ? leadSourceRaw : leadSourceRaw == null ? 'DIRECT' : null
 
   if (!ObjectId.isValid(customerId)) errors.customerId = 'Customer is required'
   if (!ObjectId.isValid(loanTypeId)) errors.loanTypeId = 'Loan type is required'
@@ -308,6 +319,8 @@ export async function POST(request: Request) {
   if (expectedActionDateRaw != null && (!expectedActionDate || Number.isNaN(expectedActionDate.getTime()))) {
     errors.expectedActionDate = 'Invalid expectedActionDate'
   }
+
+  if (!leadSource) errors.leadSource = 'Invalid lead source'
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
@@ -347,6 +360,23 @@ export async function POST(request: Request) {
     if (!agentMembership) return NextResponse.json({ error: 'agent_not_in_tenant' }, { status: 400 })
   }
 
+  let associateObjId: ObjectId | null = null
+
+  if (leadSource === 'ASSOCIATE') {
+    if (!associateIdRaw) return NextResponse.json({ error: 'validation_error', details: { associateId: 'Associate is required' } }, { status: 400 })
+    if (!ObjectId.isValid(associateIdRaw))
+      return NextResponse.json({ error: 'validation_error', details: { associateId: 'Invalid associate' } }, { status: 400 })
+
+    associateObjId = new ObjectId(associateIdRaw)
+
+    const associate = await db
+      .collection('associates')
+      .findOne({ _id: associateObjId, tenantId: tenantIdObj, isActive: true }, { projection: { _id: 1 } })
+
+    if (!associate)
+      return NextResponse.json({ error: 'validation_error', details: { associateId: 'Associate must be active' } }, { status: 400 })
+  }
+
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))
   const now = new Date()
 
@@ -362,6 +392,8 @@ export async function POST(request: Request) {
     tenureMonths,
     emi,
     assignedAgentId: assignedAgentObjId,
+    leadSource,
+    associateId: associateObjId,
     documents,
     createdBy: userId,
     createdAt: now,
