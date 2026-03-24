@@ -17,7 +17,7 @@ function isValidCountryCode(v: unknown) {
 }
 
 function isValidMobile(v: unknown) {
-  return typeof v === 'string' && /^[0-9]{10}$/.test(v)
+  return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
 }
 
 function isValidPAN(v: unknown) {
@@ -113,7 +113,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   if (patch.fullName != null && patch.fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
   if (patch.countryCode != null && !isValidCountryCode(patch.countryCode)) errors.countryCode = 'Invalid country code'
-  if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 10 digits'
+  if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'
   if (patch.remarks != null && String(patch.remarks).length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'

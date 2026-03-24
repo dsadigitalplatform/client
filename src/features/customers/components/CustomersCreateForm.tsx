@@ -155,7 +155,7 @@ const CustomersCreateForm = ({
   }, [redirectOpen, redirectTarget, router])
 
   // basic client-side validators
-  const isValidMobile = (v: string) => /^[0-9]{10}$/.test(v)
+  const isValidMobile = (v: string) => /^[0-9]{9,10}$/.test(v)
   const isValidCountryCode = (v: string) => /^\+[0-9]{1,4}$/.test(v)
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
@@ -485,7 +485,7 @@ const CustomersCreateForm = ({
               onChange={e => handleMobile(e.target.value)}
               error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
               helperText={
-                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 9 or 10-digit mobile number' : ' ')
               }
               fullWidth
               required
@@ -871,7 +871,7 @@ const CustomersCreateForm = ({
               onChange={e => handleMobile(e.target.value)}
               error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
               helperText={
-                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 10-digit mobile number' : ' ')
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 9 or 10-digit mobile number' : ' ')
               }
               fullWidth
               required

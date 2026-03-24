@@ -21,7 +21,7 @@ function isValidCountryCode(v: unknown) {
 }
 
 function isValidMobile(v: unknown) {
-  return typeof v === 'string' && /^[0-9]{10}$/.test(v)
+  return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
 }
 
 function isValidPAN(v: unknown) {
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
 
   if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
   if (!isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
-  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 10 digits'
+  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
   if (!['SALARIED', 'SELF_EMPLOYED'].includes(employmentType)) errors.employmentType = 'Invalid employment type'
   if (!['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'].includes(source)) errors.source = 'Invalid source'
