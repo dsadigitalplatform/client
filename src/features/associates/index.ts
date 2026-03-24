@@ -1,0 +1,5 @@
+export { default as AssociatesList } from './components/AssociatesList'
+export { default as AssociatesCreateForm } from './components/AssociatesCreateForm'
+export * from './hooks/useAssociates'
+export * from './services/associatesService'
+export * from './associates.types'

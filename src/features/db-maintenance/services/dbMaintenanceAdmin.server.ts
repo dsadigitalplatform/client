@@ -20,6 +20,7 @@ export const DB_MAINTENANCE_COLLECTIONS = [
   'auditLogs',
   'subscriptionPlans',
   'customers',
+  'associates',
   'loanTypes',
   'documentChecklists',
   'loanStatusPipelineStages',
