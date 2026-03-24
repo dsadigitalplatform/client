@@ -43,6 +43,7 @@ const LoanCasesList = () => {
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
   const [showInactive, setShowInactive] = useState<boolean>(false)
+  const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
 
@@ -74,12 +75,13 @@ const LoanCasesList = () => {
   }, [])
 
   useEffect(() => {
+    if (hasAgentFilterOverride) return
     if (!sessionUserId) return
     if (assignedAgentId) return
     if (!userOptions.some(u => u.id === sessionUserId)) return
 
     setAssignedAgentId(sessionUserId)
-  }, [assignedAgentId, sessionUserId, userOptions])
+  }, [assignedAgentId, hasAgentFilterOverride, sessionUserId, userOptions])
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 
@@ -148,6 +150,7 @@ const LoanCasesList = () => {
             label='Assigned Agent'
             value={assignedAgentId}
             onChange={e => {
+              setHasAgentFilterOverride(true)
               setAssignedAgentId(String(e.target.value))
             }}
           >

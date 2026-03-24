@@ -91,6 +91,8 @@ const LoanCasesPipelineDashboard = () => {
     search: ''
   })
 
+  const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
+
   const prevBoardRef = useRef<BoardState | null>(null)
 
   useEffect(() => {
@@ -171,12 +173,13 @@ const LoanCasesPipelineDashboard = () => {
   }, [board.casesById])
 
   useEffect(() => {
+    if (hasAgentFilterOverride) return
     if (!sessionUserId) return
     if (filters.assignedAgentId) return
     if (!agentOptions.some(a => a.id === sessionUserId)) return
 
     setFilters(f => ({ ...f, assignedAgentId: sessionUserId }))
-  }, [agentOptions, filters.assignedAgentId, sessionUserId])
+  }, [agentOptions, filters.assignedAgentId, hasAgentFilterOverride, sessionUserId])
 
   const filteredCaseIdsByStage = useMemo(() => {
     const search = filters.search.trim().toLowerCase()
@@ -210,12 +213,17 @@ const LoanCasesPipelineDashboard = () => {
   }, [board.caseIdsByStage, board.casesById, board.stages, filters.assignedAgentId, filters.loanTypeId, filters.search, filters.stageId])
 
   const analytics = useMemo(() => {
-    const all = Object.values(board.casesById)
+    const filteredIds = Object.values(filteredCaseIdsByStage).flat()
+    const filteredCases = filteredIds.map(id => board.casesById[id]).filter(Boolean)
 
-    const totalCases = all.length
-    const totalLoanValue = all.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
+    const totalCases = filteredCases.length
 
-    const pendingDocuments = all.reduce(
+    const totalLoanValue = filteredCases.reduce(
+      (acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc),
+      0
+    )
+
+    const pendingDocuments = filteredCases.reduce(
       (acc, c) => (typeof c.pendingDocumentsCount === 'number' ? acc + c.pendingDocumentsCount : acc),
       0
     )
@@ -227,10 +235,10 @@ const LoanCasesPipelineDashboard = () => {
       return max
     }, null)
 
-    const inFinalStage = finalStage ? (board.caseIdsByStage[finalStage.id] || []).length : 0
+    const inFinalStage = finalStage ? (filteredCaseIdsByStage[finalStage.id] || []).length : 0
 
     return { totalCases, totalLoanValue, inFinalStage, pendingDocuments }
-  }, [board.caseIdsByStage, board.casesById, board.stages])
+  }, [board.casesById, board.stages, filteredCaseIdsByStage])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -354,7 +362,10 @@ const LoanCasesPipelineDashboard = () => {
               labelId='loan-case-pipeline-agent'
               label='Agent'
               value={filters.assignedAgentId}
-              onChange={e => setFilters(f => ({ ...f, assignedAgentId: String(e.target.value) }))}
+              onChange={e => {
+                setHasAgentFilterOverride(true)
+                setFilters(f => ({ ...f, assignedAgentId: String(e.target.value) }))
+              }}
             >
               <MenuItem value=''>All</MenuItem>
               {agentOptions.map(a => (
