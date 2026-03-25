@@ -149,6 +149,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
     const [collapsedFollowUpNodes, setCollapsedFollowUpNodes] = useState<Record<string, boolean>>({})
     const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null)
     const onLoadedRef = useRef<Props['onLoaded']>(onLoaded)
+    const refreshSeqRef = useRef(0)
 
     useEffect(() => {
         onLoadedRef.current = onLoaded
@@ -156,18 +157,22 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
 
     useEffect(() => {
         if (!sessionUserId) return
+        if (leadId) return
 
         setOrganizerId(v => (v ? v : sessionUserId))
-    }, [sessionUserId])
+    }, [leadId, sessionUserId])
 
     useEffect(() => {
         if (!sessionUserId) return
+        if (leadId) return
         if (isAdminOrOwner) return
 
         setOrganizerId(sessionUserId)
-    }, [isAdminOrOwner, sessionUserId])
+    }, [isAdminOrOwner, leadId, sessionUserId])
 
     const refresh = useCallback(async () => {
+        const seq = ++refreshSeqRef.current
+
         setLoading(true)
         setError(null)
 
@@ -181,16 +186,22 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
 
             const rows = leadId ? await listAppointmentsByLead(leadId, baseParams) : await listAppointments(baseParams)
 
+            if (seq !== refreshSeqRef.current) return
+
             setAppointments(rows)
 
             const cb = onLoadedRef.current
 
             if (cb) cb(rows.length)
         } catch (e: any) {
+            if (seq !== refreshSeqRef.current) return
+
             setAppointments([])
             setError(e?.message || 'Failed to load appointments')
         } finally {
-            setLoading(false)
+            if (seq === refreshSeqRef.current) {
+                setLoading(false)
+            }
         }
     }, [leadId, organizerId, status, dateFrom, dateTo])
 

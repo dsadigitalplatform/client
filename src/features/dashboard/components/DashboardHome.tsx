@@ -26,7 +26,6 @@ import { useSession } from 'next-auth/react'
 
 import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
-import { getReminders } from '@features/reminders/services/remindersService'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
@@ -285,25 +284,25 @@ const DashboardHome = () => {
                 const now = new Date()
                 const endOfTwoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-                const items = await getReminders({
-                    status: 'pending',
-                    source: 'APPOINTMENT',
-                    limit: 50,
-                    dateFrom: now,
-                    dateTo: endOfTwoWeeks,
-                    userId: sessionUserId || undefined
+                const items = await listAppointments({ organizerId: sessionUserId, dateFrom: now, dateTo: endOfTwoWeeks })
+
+                const filtered = items.filter(a => {
+                    if (!a?.scheduledAt) return false
+                    const dt = new Date(a.scheduledAt)
+
+                    return Number.isFinite(dt.getTime()) && dt.getTime() >= now.getTime() && dt.getTime() <= endOfTwoWeeks.getTime()
                 })
 
                 const counts: Record<string, number> = { CALL: 0, WHATSAPP: 0, VISIT: 0, EMAIL: 0, OTHER: 0 }
 
-                items.forEach(r => {
-                    const raw = String(r?.followUpType || '').toUpperCase()
+                filtered.forEach(a => {
+                    const raw = String(a?.followUpType || '').toUpperCase()
 
                     if (raw === 'CALL' || raw === 'WHATSAPP' || raw === 'VISIT' || raw === 'EMAIL') counts[raw] += 1
                     else counts.OTHER += 1
                 })
 
-                if (active) setRemindersNextTwoWeeks(items.length)
+                if (active) setRemindersNextTwoWeeks(filtered.length)
                 if (active) setReminderTypeCounts(counts)
             } catch (e: any) {
                 if (active) setRemindersError(e?.message || 'Failed to load reminders')
