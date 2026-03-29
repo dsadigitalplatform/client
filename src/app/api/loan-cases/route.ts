@@ -377,6 +377,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'validation_error', details: { associateId: 'Associate must be active' } }, { status: 400 })
   }
 
+  const duplicate = await db.collection('loanCases').findOne(
+    {
+      tenantId: tenantIdObj,
+      customerId: new ObjectId(customerId),
+      loanTypeId: new ObjectId(loanTypeId),
+      requestedAmount
+    },
+    { projection: { _id: 1 } }
+  )
+
+  if (duplicate) {
+    const msg = 'Lead already exists for this customer, loan type, and requested amount'
+
+    return NextResponse.json(
+      { error: 'duplicate_lead', message: msg, details: { requestedAmount: msg } },
+      { status: 409 }
+    )
+  }
+
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))
   const now = new Date()
 

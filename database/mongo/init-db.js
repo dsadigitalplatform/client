@@ -491,6 +491,15 @@ ensureIndex('loanCases', { tenantId: 1 }, { name: 'idx_loanCases_tenantId' })
 ensureIndex('loanCases', { tenantId: 1, updatedAt: -1 }, { name: 'idx_loanCases_tenantId_updatedAt' })
 ensureIndex('loanCases', { tenantId: 1, customerId: 1 }, { name: 'idx_loanCases_tenantId_customerId' })
 ensureIndex('loanCases', { tenantId: 1, loanTypeId: 1 }, { name: 'idx_loanCases_tenantId_loanTypeId' })
+ensureIndex(
+  'loanCases',
+  { tenantId: 1, customerId: 1, loanTypeId: 1, requestedAmount: 1 },
+  {
+    unique: true,
+    name: 'uniq_loanCases_tenant_customer_loanType_requestedAmount',
+    partialFilterExpression: { requestedAmount: { $type: 'number' } }
+  }
+)
 ensureIndex('loanCases', { tenantId: 1, stageId: 1 }, { name: 'idx_loanCases_tenantId_stageId' })
 ensureIndex('loanCases', { tenantId: 1, createdBy: 1 }, { name: 'idx_loanCases_tenantId_createdBy' })
 ensureIndex('loanCases', { tenantId: 1, assignedAgentId: 1 }, { name: 'idx_loanCases_tenantId_assignedAgentId' })
