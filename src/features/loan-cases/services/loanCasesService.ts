@@ -7,7 +7,13 @@ import type {
   UpdateLoanCaseInput
 } from '@features/loan-cases/loan-cases.types'
 
-export type GetLoanCasesParams = { stageId?: string; assignedAgentId?: string; customerId?: string; showInactive?: boolean }
+export type GetLoanCasesParams = {
+  stageId?: string
+  assignedAgentId?: string
+  customerId?: string
+  loanTypeId?: string
+  showInactive?: boolean
+}
 
 export async function getLoanCases(params: GetLoanCasesParams = {}) {
   const url = new URL('/api/loan-cases', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
@@ -15,6 +21,7 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.stageId) url.searchParams.set('stageId', params.stageId)
   if (params.assignedAgentId) url.searchParams.set('assignedAgentId', params.assignedAgentId)
   if (params.customerId) url.searchParams.set('customerId', params.customerId)
+  if (params.loanTypeId) url.searchParams.set('loanTypeId', params.loanTypeId)
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
 
   const res = await fetch(url.toString(), { cache: 'no-store' })

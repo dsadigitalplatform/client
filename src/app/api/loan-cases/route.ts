@@ -106,6 +106,7 @@ export async function GET(request: Request) {
   const stageId = url.searchParams.get('stageId') || ''
   const assignedAgentId = url.searchParams.get('assignedAgentId') || ''
   const customerId = url.searchParams.get('customerId') || ''
+  const loanTypeId = url.searchParams.get('loanTypeId') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
 
   const baseFilter: any = { tenantId: tenantIdObj }
@@ -128,6 +129,11 @@ export async function GET(request: Request) {
   if (customerId) {
     if (!ObjectId.isValid(customerId)) return NextResponse.json({ error: 'invalid_customerId' }, { status: 400 })
     baseFilter.customerId = new ObjectId(customerId)
+  }
+
+  if (loanTypeId) {
+    if (!ObjectId.isValid(loanTypeId)) return NextResponse.json({ error: 'invalid_loanTypeId' }, { status: 400 })
+    baseFilter.loanTypeId = new ObjectId(loanTypeId)
   }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
@@ -296,6 +302,7 @@ export async function POST(request: Request) {
   const interestRate = body?.interestRate == null ? null : Number(body.interestRate)
   const tenureMonths = body?.tenureMonths == null ? null : Number(body.tenureMonths)
   const emi = body?.emi == null ? null : Number(body.emi)
+  const allowDuplicate = Boolean(body?.allowDuplicate)
 
   const errors: Record<string, string> = {}
   const leadSource = isLeadSource(leadSourceRaw) ? leadSourceRaw : leadSourceRaw == null ? 'DIRECT' : null
@@ -382,18 +389,15 @@ export async function POST(request: Request) {
       tenantId: tenantIdObj,
       customerId: new ObjectId(customerId),
       loanTypeId: new ObjectId(loanTypeId),
-      requestedAmount
+      isActive: { $ne: false }
     },
     { projection: { _id: 1 } }
   )
 
-  if (duplicate) {
-    const msg = 'Lead already exists for this customer, loan type, and requested amount'
+  if (duplicate && !allowDuplicate) {
+    const msg = 'This customer already has similar lead created. Do you want to continue?'
 
-    return NextResponse.json(
-      { error: 'duplicate_lead', message: msg, details: { requestedAmount: msg } },
-      { status: 409 }
-    )
+    return NextResponse.json({ error: 'duplicate_lead', message: msg }, { status: 409 })
   }
 
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))

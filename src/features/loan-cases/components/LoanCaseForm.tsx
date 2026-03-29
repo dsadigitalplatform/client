@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -75,6 +75,7 @@ import {
   deleteLoanCase
 } from '@features/loan-cases/services/loanCasesService'
 import type {
+  CreateLoanCaseInput,
   LeadSource,
   LoanCaseDetails,
   LoanCaseDocument,
@@ -141,6 +142,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
   const [redirectProgress, setRedirectProgress] = useState(0)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const [id, setId] = useState<string | null>(caseId ?? null)
@@ -181,6 +183,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [apptErrors, setApptErrors] = useState<Record<string, string>>({})
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0)
   const [hasExistingAppointments, setHasExistingAppointments] = useState(Boolean(caseId))
+  const [duplicateFound, setDuplicateFound] = useState(false)
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false)
+  const [duplicateChecking, setDuplicateChecking] = useState(false)
+  const duplicateCheckSeqRef = useRef(0)
 
   const apptScheduledAtValue = useMemo(() => {
     if (!apptScheduledAt) return null
@@ -405,10 +411,57 @@ const LoanCaseForm = ({ caseId }: Props) => {
   }, [assignedAgentId, caseId, id, sessionUserId, userOptions])
 
   useEffect(() => {
+    if (id) return
+
+    const nextCustomerId = customerId.trim()
+    const nextLoanTypeId = loanTypeId.trim()
+
+    setDuplicateConfirmed(false)
+
+    if (!nextCustomerId || !nextLoanTypeId) {
+      setDuplicateFound(false)
+      setDuplicateChecking(false)
+      setDuplicateConfirmOpen(false)
+
+      return
+    }
+
+    const seq = ++duplicateCheckSeqRef.current
+
+    setDuplicateChecking(true)
 
     void (async () => {
       try {
-        const cases = await getLoanCases()
+        const cases = await getLoanCases({ customerId: nextCustomerId, loanTypeId: nextLoanTypeId })
+
+        if (seq !== duplicateCheckSeqRef.current) return
+
+        const found = cases.length > 0
+
+        setDuplicateFound(found)
+
+        if (found) {
+          setDuplicateConfirmOpen(true)
+        } else {
+          setDuplicateConfirmOpen(false)
+        }
+      } catch {
+        if (seq !== duplicateCheckSeqRef.current) return
+
+        setDuplicateFound(false)
+        setDuplicateConfirmOpen(false)
+      } finally {
+        if (seq === duplicateCheckSeqRef.current) {
+          setDuplicateChecking(false)
+        }
+      }
+    })()
+  }, [customerId, loanTypeId, id])
+
+  useEffect(() => {
+
+    void (async () => {
+      try {
         const byKey = new Map<string, string>()
 
         cases.forEach(c => {
@@ -587,7 +640,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
     }
   }
 
-  const handleSave = async () => {
+  const handleSave = async (allowDuplicate = false) => {
     setError(null)
     const { ok, parsed } = validate()
 
@@ -597,7 +650,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
     try {
       const resolvedAssociateId = leadSource === 'ASSOCIATE' ? (associateId || null) : null
 
-      const payloadBase = {
+      const payloadBase: CreateLoanCaseInput = {
         customerId,
         loanTypeId,
         stageId,
@@ -613,7 +666,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
       }
 
       if (!id) {
-        const res = await createLoanCase(payloadBase)
+        const shouldAllowDuplicate = allowDuplicate || duplicateConfirmed
+
+        if (duplicateFound && !shouldAllowDuplicate) {
+          setDuplicateConfirmOpen(true)
+          setSubmitting(false)
+
+          return
+        }
+
+        const res = await createLoanCase({ ...payloadBase, allowDuplicate: shouldAllowDuplicate })
 
         setId(res.id)
 
@@ -707,6 +769,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
         />
         <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '& .MuiFormHelperText-root': { mt: 0.75 } }}>
           {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+          {duplicateFound && !id ? (
+            <Alert severity='warning' sx={{ mb: 2 }}>
+              This customer already has similar lead created. Do you want to continue?
+            </Alert>
+          ) : null}
+          {duplicateChecking && !id ? (
+            <Alert severity='info' sx={{ mb: 2 }}>
+              Checking for similar leads...
+            </Alert>
+          ) : null}
 
           {loading ? (
             <Typography variant='body2' color='text.secondary'>
@@ -1493,7 +1565,12 @@ const LoanCaseForm = ({ caseId }: Props) => {
         {!isMobile ? (
           <CardActions sx={{ px: { xs: 2.5, sm: 3 }, pb: { xs: 2.5, sm: 3 } }}>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: '100%' }}>
-              <Button variant='contained' disabled={submitting || loading || !isActive} onClick={handleSave} fullWidth={isMobile}>
+              <Button
+                variant='contained'
+                disabled={submitting || loading || !isActive}
+                onClick={() => void handleSave()}
+                fullWidth={isMobile}
+              >
                 {saveLabel}
               </Button>
               {id && isActive && (
@@ -1546,7 +1623,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 <i className='ri-delete-bin-line' />
               </Button>
             )}
-            <Button variant='contained' disabled={submitting || loading || !isActive} onClick={handleSave} fullWidth>
+            <Button variant='contained' disabled={submitting || loading || !isActive} onClick={() => void handleSave()} fullWidth>
               {saveLabel}
             </Button>
           </Box>
@@ -1786,6 +1863,30 @@ const LoanCaseForm = ({ caseId }: Props) => {
             </Box>
           </Stack>
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={duplicateConfirmOpen} onClose={() => setDuplicateConfirmOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle>Similar lead found</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This customer already has similar lead created. Do you want to continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant='text' onClick={() => setDuplicateConfirmOpen(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            variant='contained'
+            onClick={() => {
+              setDuplicateConfirmOpen(false)
+              setDuplicateConfirmed(true)
+            }}
+            disabled={submitting}
+          >
+            Yes, continue
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>

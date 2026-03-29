@@ -71,6 +71,7 @@ export type CreateLoanCaseInput = {
   interestRate?: number | null
   tenureMonths?: number | null
   emi?: number | null
+  allowDuplicate?: boolean
 }
 
 export type UpdateLoanCaseInput = Partial<CreateLoanCaseInput> & {
