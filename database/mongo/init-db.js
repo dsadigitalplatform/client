@@ -56,6 +56,20 @@ function ensureIndex(collName, keys, opts = {}) {
   }
 }
 
+function dropUniqueIndexesOnFields(collName, fields) {
+  const idxs = db.getCollection(collName).getIndexes()
+
+  idxs.forEach(idx => {
+    const keys = Object.keys(idx.key || {})
+    const hasField = keys.some(k => fields.includes(k))
+
+    if (idx.unique && hasField) {
+      db.getCollection(collName).dropIndex(idx.name)
+      print(`Index dropped on '${collName}': ${idx.name}`)
+    }
+  })
+}
+
 /* =========================
    1) users
    Stores auth-independent user profile with email uniqueness.
@@ -283,6 +297,7 @@ const customersValidator = {
 }
 
 ensureCollection('customers', customersValidator)
+dropUniqueIndexesOnFields('customers', ['fullName'])
 ensureIndex('customers', { tenantId: 1 }, { name: 'idx_tenantId' })
 ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_mobile' })
 

@@ -291,6 +291,7 @@ export async function POST(request: Request) {
 
 
   // insert with tenant + creator attribution
+  const now = new Date()
 
   const doc: any = {
     tenantId: tenantIdObj,
@@ -321,8 +322,24 @@ export async function POST(request: Request) {
     
 return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
   } catch (err: any) {
+    if (err && err.code === 121) {
+      return NextResponse.json({ error: 'validation_error', message: 'Customer creation failed validation' }, { status: 400 })
+    }
+
     if (err && err.code === 11000) {
-      return NextResponse.json({ error: 'duplicate_mobile', message: 'Mobile already exists for this tenant' }, { status: 409 })
+      const key = err?.keyPattern ? Object.keys(err.keyPattern)[0] : null
+
+      const details =
+        key === 'mobile'
+          ? { mobile: 'Mobile already exists' }
+          : key === 'fullName'
+            ? { fullName: 'Customer name already exists' }
+            : undefined
+
+      return NextResponse.json(
+        { error: 'duplicate_key', message: 'Duplicate value', details },
+        { status: 409 }
+      )
     }
 
     
