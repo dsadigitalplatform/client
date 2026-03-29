@@ -79,6 +79,30 @@ function statusChip(status: string) {
     return { label: 'Pending', color: 'info' as const, icon: 'ri-time-line' }
 }
 
+function normalizeStatusKey(status: string) {
+    return status === 'SCHEDULED' ? 'PENDING' : status
+}
+
+function isOverdueAppointment(a: AppointmentListItem) {
+    const statusKey = normalizeStatusKey(String(a?.status || 'PENDING'))
+
+    if (statusKey !== 'PENDING') return false
+    const scheduledTime = a?.scheduledAt ? new Date(a.scheduledAt).getTime() : NaN
+
+    if (Number.isNaN(scheduledTime)) return false
+
+    return scheduledTime < Date.now()
+}
+
+function formatTodayInputValue() {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+
+    return `${y}-${m}-${day}`
+}
+
 function formatLeadGroupHeading(leadTitle: string | null | undefined, customerName: string | null | undefined) {
     const title = String(leadTitle || '').trim()
     const customer = String(customerName || '').trim()
@@ -140,7 +164,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
 
     const [organizerId, setOrganizerId] = useState<string>('')
     const [status, setStatus] = useState<string>('')
-    const [dateFrom, setDateFrom] = useState<string>('')
+    const [dateFrom, setDateFrom] = useState<string>(formatTodayInputValue())
     const [dateTo, setDateTo] = useState<string>('')
 
     const [detailsOpen, setDetailsOpen] = useState(false)
@@ -523,6 +547,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                     const renderNode = (node: AppointmentTreeNode, depth: number) => {
                         const a = node.item
                         const sc = statusChip(String(a?.status || 'PENDING'))
+                        const isOverdue = isOverdueAppointment(a)
                         const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
                         const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
                         const descendants = depth === 0 ? getSortedDescendants(node) : []
@@ -536,15 +561,21 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                     sx={{
                                         borderRadius: 2.5,
                                         border: '1px solid',
-                                        borderColor: isHighlighted(String(a?.id || ''))
-                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.6)'
-                                            : 'rgb(var(--mui-palette-dividerChannel) / 0.5)',
-                                        backgroundColor: isHighlighted(String(a?.id || ''))
-                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
-                                            : 'background.paper',
-                                        boxShadow: isHighlighted(String(a?.id || ''))
-                                            ? '0 8px 24px rgb(var(--mui-palette-success-mainChannel) / 0.2)'
-                                            : '0 2px 12px rgb(0 0 0 / 0.06)',
+                                        borderColor: isOverdue
+                                            ? 'rgb(var(--mui-palette-error-mainChannel) / 0.5)'
+                                            : isHighlighted(String(a?.id || ''))
+                                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.6)'
+                                                : 'rgb(var(--mui-palette-dividerChannel) / 0.5)',
+                                        backgroundColor: isOverdue
+                                            ? 'rgb(var(--mui-palette-error-mainChannel) / 0.08)'
+                                            : isHighlighted(String(a?.id || ''))
+                                                ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
+                                                : 'background.paper',
+                                        boxShadow: isOverdue
+                                            ? '0 8px 24px rgb(var(--mui-palette-error-mainChannel) / 0.18)'
+                                            : isHighlighted(String(a?.id || ''))
+                                                ? '0 8px 24px rgb(var(--mui-palette-success-mainChannel) / 0.2)'
+                                                : '0 2px 12px rgb(0 0 0 / 0.06)',
                                         cursor: 'pointer',
                                         ml: depth * 1.5,
                                         transition: 'all 0.2s ease-in-out',
@@ -655,7 +686,14 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                                     fontSize: '14px',
                                                                     color: 'text.secondary'
                                                                 }} />
-                                                                <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                                                                <Typography
+                                                                    variant='body2'
+                                                                    sx={{
+                                                                        fontWeight: 500,
+                                                                        fontSize: '0.875rem',
+                                                                        color: isOverdue ? 'error.main' : 'text.primary'
+                                                                    }}
+                                                                >
                                                                     {formatDateTime(a?.scheduledAt || null)}
                                                                 </Typography>
                                                             </Box>
@@ -674,19 +712,38 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                 </Box>
                                             </Box>
 
-                                            <Chip
-                                                size='small'
-                                                label={sc.label}
-                                                color={sc.color}
-                                                variant='filled'
-                                                icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
-                                                sx={{
-                                                    fontWeight: 600,
-                                                    fontSize: '0.75rem',
-                                                    height: '24px',
-                                                    '& .MuiChip-icon': { ml: 0.5 }
-                                                }}
-                                            />
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                                {isOverdue ? (
+                                                    <Chip
+                                                        size='small'
+                                                        label='Overdue'
+                                                        color='error'
+                                                        variant='outlined'
+                                                        icon={<i className='ri-alarm-warning-line' style={{ fontSize: '14px' }} />}
+                                                        sx={{
+                                                            fontWeight: 700,
+                                                            fontSize: '0.7rem',
+                                                            height: '24px',
+                                                            borderColor: 'rgb(var(--mui-palette-error-mainChannel) / 0.6)',
+                                                            backgroundColor: 'rgb(var(--mui-palette-error-mainChannel) / 0.08)',
+                                                            '& .MuiChip-icon': { ml: 0.5 }
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                <Chip
+                                                    size='small'
+                                                    label={sc.label}
+                                                    color={sc.color}
+                                                    variant='filled'
+                                                    icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
+                                                    sx={{
+                                                        fontWeight: 600,
+                                                        fontSize: '0.75rem',
+                                                        height: '24px',
+                                                        '& .MuiChip-icon': { ml: 0.5 }
+                                                    }}
+                                                />
+                                            </Box>
                                         </Box>
 
                                         <Box sx={{
@@ -792,6 +849,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                 return rows.map(({ node, depth }) => {
                                     const a = node.item
                                     const sc = statusChip(String(a?.status || 'PENDING'))
+                                    const isOverdue = isOverdueAppointment(a)
                                     const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
                                     const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
                                     const hasChildren = depth === 0 && getSortedDescendants(node).length > 0
@@ -804,14 +862,18 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                             onClick={() => openDetails(String(a.id), 'details')}
                                             sx={{
                                                 cursor: 'pointer',
-                                                backgroundColor: isHighlighted(String(a?.id || ''))
-                                                    ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
-                                                    : 'transparent',
+                                                backgroundColor: isOverdue
+                                                    ? 'rgb(var(--mui-palette-error-mainChannel) / 0.06)'
+                                                    : isHighlighted(String(a?.id || ''))
+                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
+                                                        : 'transparent',
                                                 transition: 'background-color 0.2s ease',
                                                 '&:hover': {
-                                                    backgroundColor: isHighlighted(String(a?.id || ''))
-                                                        ? 'rgb(var(--mui-palette-success-mainChannel) / 0.16)'
-                                                        : 'rgb(var(--mui-palette-action-hoverChannel) / 0.04)'
+                                                    backgroundColor: isOverdue
+                                                        ? 'rgb(var(--mui-palette-error-mainChannel) / 0.1)'
+                                                        : isHighlighted(String(a?.id || ''))
+                                                            ? 'rgb(var(--mui-palette-success-mainChannel) / 0.16)'
+                                                            : 'rgb(var(--mui-palette-action-hoverChannel) / 0.04)'
                                                 }
                                             }}
                                         >
@@ -913,10 +975,28 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                         fontSize: '14px',
                                                         color: 'text.secondary'
                                                     }} />
-                                                    <Typography variant='body2' sx={{ fontWeight: 500 }}>
+                                                    <Typography variant='body2' sx={{ fontWeight: 500, color: isOverdue ? 'error.main' : 'text.primary' }}>
                                                         {formatDateTime(a?.scheduledAt || null)}
                                                     </Typography>
                                                 </Box>
+                                                {isOverdue ? (
+                                                    <Chip
+                                                        size='small'
+                                                        label='Overdue'
+                                                        color='error'
+                                                        variant='outlined'
+                                                        icon={<i className='ri-alarm-warning-line' style={{ fontSize: '14px' }} />}
+                                                        sx={{
+                                                            mt: 0.75,
+                                                            fontWeight: 700,
+                                                            fontSize: '0.7rem',
+                                                            height: '22px',
+                                                            borderColor: 'rgb(var(--mui-palette-error-mainChannel) / 0.6)',
+                                                            backgroundColor: 'rgb(var(--mui-palette-error-mainChannel) / 0.08)',
+                                                            '& .MuiChip-icon': { ml: 0.5 }
+                                                        }}
+                                                    />
+                                                ) : null}
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
