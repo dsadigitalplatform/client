@@ -40,6 +40,23 @@ export async function getCustomers(params: GetCustomersParams = {}) {
 return (data?.customers ?? []) as any
 }
 
+export async function getCustomerByMobile(mobile: string) {
+  const url = new URL('/api/customers', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
+
+  url.searchParams.set('mobile', mobile)
+  const res = await fetch(url.toString(), { cache: 'no-store' })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+
+    throw new Error(errText || `Failed to fetch customer (${res.status})`)
+  }
+
+  const data = await res.json().catch(() => ({}))
+
+  return data?.customer ?? null
+}
+
 export async function createCustomer(body: CreateCustomerInput) {
   const res = await fetch('/api/customers', {
     method: 'POST',

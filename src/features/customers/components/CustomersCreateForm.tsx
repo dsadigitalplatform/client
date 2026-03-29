@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -38,7 +38,7 @@ import TableContainer from '@mui/material/TableContainer'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createCustomer } from '@features/customers/services/customersService'
+import { createCustomer, getCustomerByMobile, updateCustomer } from '@features/customers/services/customersService'
 
 const COUNTRY_CODE_OPTIONS = [
   { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
@@ -137,6 +137,8 @@ const CustomersCreateForm = ({
   const [successMsg, setSuccessMsg] = useState('')
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null)
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
+  const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null)
+  const lastLookupMobileRef = useRef('')
 
   useEffect(() => {
     if (!initialValues) return
@@ -161,6 +163,65 @@ const CustomersCreateForm = ({
   }, [initialValues])
 
   useEffect(() => {
+    if (initialValues) return
+
+    if (!/^[0-9]{9,10}$/.test(mobile)) {
+      setMatchedCustomerId(null)
+      lastLookupMobileRef.current = ''
+
+      return
+    }
+
+    if (mobile === lastLookupMobileRef.current) return
+    lastLookupMobileRef.current = mobile
+
+    let active = true
+
+    const run = async () => {
+      try {
+        const found = await getCustomerByMobile(mobile)
+
+        if (!active) return
+
+        if (!found?.id) {
+          setMatchedCustomerId(null)
+
+          return
+        }
+
+        setMatchedCustomerId(found.id)
+        if (found.fullName != null) setFullName(found.fullName)
+        if (found.countryCode != null) setCountryCode(found.countryCode)
+        if (found.mobile != null) setMobile(found.mobile)
+        setIsNRI(Boolean(found.isNRI))
+        setSecondaryContacts(Array.isArray(found.secondaryContacts) ? found.secondaryContacts : [])
+        setEmail(found.email || '')
+        setDob(found.dob ? String(found.dob).slice(0, 10) : '')
+        setPan(found.pan || '')
+        setAadhaarMasked(found.aadhaarMasked || '')
+        setAadhaarDigits('')
+        setAddress(found.address || '')
+        setRemarks(found.remarks || '')
+        if (found.employmentType) setEmploymentType(found.employmentType)
+        if (found.source) setSource(found.source)
+        if (found.monthlyIncome !== undefined && found.monthlyIncome !== null) setMonthlyIncome(String(found.monthlyIncome))
+        if (found.cibilScore !== undefined && found.cibilScore !== null) setCibilScore(String(found.cibilScore))
+        setFieldErrors({})
+        setError(null)
+      } catch {
+        if (!active) return
+        setMatchedCustomerId(null)
+      }
+    }
+
+    run()
+
+    return () => {
+      active = false
+    }
+  }, [initialValues, mobile])
+
+  useEffect(() => {
     if (!redirectOpen || !redirectTarget) return
 
     setRedirectProgress(0)
@@ -176,11 +237,13 @@ const CustomersCreateForm = ({
       if (current >= 100) {
         window.clearInterval(t)
         router.push(redirectTarget)
+        if (onSuccess) onSuccess()
+        setRedirectOpen(false)
       }
     }, tickMs)
 
     return () => window.clearInterval(t)
-  }, [redirectOpen, redirectTarget, router])
+  }, [onSuccess, redirectOpen, redirectTarget, router])
 
   // basic client-side validators
   const isValidMobile = (v: string) => /^[0-9]{9,10}$/.test(v)
@@ -292,21 +355,21 @@ const CustomersCreateForm = ({
 
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
+      } else if (matchedCustomerId) {
+        await updateCustomer(matchedCustomerId, payload)
       } else {
         const res = await createCustomer(payload)
 
         setCreatedCustomerId(res?.id ? String(res.id) : null)
       }
 
-      setSuccessMsg(initialValues ? 'Customer updated successfully' : 'Customer created successfully')
+      setSuccessMsg(isEditing ? 'Customer updated successfully' : 'Customer created successfully')
 
       if (redirectOnSuccess) {
-        if (initialValues) {
+        if (isEditing) {
           setSuccessDialogOpen(false)
           setRedirectTarget(redirectPath)
           setRedirectOpen(true)
-
-          if (onSuccess) onSuccess()
 
           return
         }
@@ -337,23 +400,25 @@ const CustomersCreateForm = ({
         return
       }
 
-      setFullName('')
-      setMobile('')
-      setSecondaryContacts([])
-      setEmail('')
-      setDob('')
-      setPan('')
-      setAadhaarMasked('')
-      setAadhaarDigits('')
-      setAddress('')
-      setRemarks('')
-      setEmploymentType('SALARIED')
-      setSource('WALK_IN')
-      setMonthlyIncome('')
-      setCibilScore('')
-      setCreatedCustomerId(null)
-      setFieldErrors({})
-      setError(null)
+      if (!isEditing) {
+        setFullName('')
+        setMobile('')
+        setSecondaryContacts([])
+        setEmail('')
+        setDob('')
+        setPan('')
+        setAadhaarMasked('')
+        setAadhaarDigits('')
+        setAddress('')
+        setRemarks('')
+        setEmploymentType('SALARIED')
+        setSource('WALK_IN')
+        setMonthlyIncome('')
+        setCibilScore('')
+        setCreatedCustomerId(null)
+        setFieldErrors({})
+        setError(null)
+      }
 
       if (onSuccess) onSuccess()
       else router.push('/customers')
@@ -438,7 +503,8 @@ const CustomersCreateForm = ({
     </Dialog>
   )
 
-  const mobileTitle = submitLabel || (initialValues ? 'Update Customer' : 'Add Customer')
+  const isEditing = Boolean(initialValues || matchedCustomerId)
+  const mobileTitle = submitLabel || (isEditing ? 'Update Customer' : 'Add Customer')
 
   const selectedCountry = useMemo(() => {
     return COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0]

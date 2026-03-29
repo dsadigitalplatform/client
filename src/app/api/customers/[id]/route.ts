@@ -167,19 +167,15 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     errors.cibilScore = 'CIBIL must be 300–900'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
-
-  if (patch.fullName != null) {
-    const safeName = String(patch.fullName).replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
-
+  if (patch.mobile != null) {
     const existing = await db.collection('customers').findOne(
-      { tenantId: tenantIdObj, fullName: { $regex: `^${safeName}$`, $options: 'i' }, _id: { $ne: new ObjectId(id) } },
+      { tenantId: tenantIdObj, mobile: patch.mobile, _id: { $ne: new ObjectId(id) } },
       { projection: { _id: 1 } }
     )
 
-
     if (existing) {
       return NextResponse.json(
-        { error: 'duplicate_name', message: 'Customer name already exists for this tenant', details: { fullName: 'Customer name already exists' } },
+        { error: 'duplicate_mobile', message: 'This mobile has alreeady been used', details: { mobile: 'Mobile already exists' } },
         { status: 409 }
       )
     }
@@ -194,12 +190,27 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     
 return NextResponse.json({ ok: true })
   } catch (err: any) {
-    if (err && err.code === 11000) {
-      return NextResponse.json({ error: 'duplicate_mobile', message: 'Mobile already exists for this tenant' }, { status: 409 })
+    if (err && err.code === 121) {
+      return NextResponse.json({ error: 'validation_error', message: 'Customer update failed validation' }, { status: 400 })
     }
 
-    
-return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
+    if (err && err.code === 11000) {
+      const key = err?.keyPattern ? Object.keys(err.keyPattern)[0] : null
+
+      const details =
+        key === 'mobile'
+          ? { mobile: 'Mobile already exists' }
+          : key === 'fullName'
+            ? { fullName: 'Customer name already exists' }
+            : undefined
+
+      return NextResponse.json(
+        { error: 'duplicate_key', message: 'Duplicate value', details },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
   }
 }
 

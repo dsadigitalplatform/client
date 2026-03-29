@@ -117,9 +117,47 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const q = url.searchParams.get('q') || ''
+  const mobileParam = url.searchParams.get('mobile') || ''
 
-  // tenant-scoped filter + optional search
   const baseFilter: any = { tenantId: tenantIdObj }
+
+  // normal users restricted to their own creations
+  if ((membership as any).role !== 'ADMIN' && (membership as any).role !== 'OWNER') {
+    baseFilter.createdBy = userId
+  }
+
+  if (mobileParam) {
+    const normalized = String(mobileParam).trim()
+
+    if (!isValidMobile(normalized)) {
+      return NextResponse.json({ error: 'invalid_mobile' }, { status: 400 })
+    }
+
+    const row = await db.collection('customers').findOne({ ...baseFilter, mobile: normalized })
+
+    if (!row) return NextResponse.json({ customer: null })
+
+    const data = {
+      id: String((row as any)._id),
+      fullName: (row as any).fullName || '',
+      countryCode: isValidCountryCode((row as any).countryCode) ? String((row as any).countryCode) : '+91',
+      mobile: (row as any).mobile || '',
+      isNRI: Boolean((row as any).isNRI),
+      email: (row as any).email ?? null,
+      remarks: (row as any).remarks ?? null,
+      dob: (row as any).dob ? new Date((row as any).dob).toISOString() : null,
+      pan: (row as any).pan ?? null,
+      aadhaarMasked: (row as any).aadhaarMasked ?? null,
+      address: (row as any).address ?? null,
+      secondaryContacts: Array.isArray((row as any).secondaryContacts) ? (row as any).secondaryContacts : [],
+      employmentType: (row as any).employmentType,
+      monthlyIncome: (row as any).monthlyIncome ?? null,
+      cibilScore: (row as any).cibilScore ?? null,
+      source: (row as any).source
+    }
+
+    return NextResponse.json({ customer: data })
+  }
 
   if (q && q.trim().length > 0) {
     const safe = q.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
@@ -129,11 +167,6 @@ export async function GET(request: Request) {
       { email: { $regex: safe, $options: 'i' } },
       { mobile: { $regex: safe } }
     ]
-  }
-
-  // normal users restricted to their own creations
-  if ((membership as any).role !== 'ADMIN' && (membership as any).role !== 'OWNER') {
-    baseFilter.createdBy = userId
   }
 
   // projection for table
@@ -256,23 +289,8 @@ export async function POST(request: Request) {
   }
 
 
-  const safeName = fullName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
-
-  const existing = await db.collection('customers').findOne(
-    { tenantId: tenantIdObj, fullName: { $regex: `^${safeName}$`, $options: 'i' } },
-    { projection: { _id: 1 } }
-  )
-
-
-  if (existing) {
-    return NextResponse.json(
-      { error: 'duplicate_name', message: 'Customer name already exists for this tenant', details: { fullName: 'Customer name already exists' } },
-      { status: 409 }
-    )
-  }
 
   // insert with tenant + creator attribution
-  const now = new Date()
 
   const doc: any = {
     tenantId: tenantIdObj,
