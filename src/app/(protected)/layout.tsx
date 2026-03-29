@@ -39,14 +39,20 @@ const Layout = async (props: ChildrenType) => {
   const tokenTenantIds = ((session as any)?.tenantIds as string[] | undefined) || []
 
   if (session?.userId) {
-    user = {
-      name: session.user?.name ?? null,
-      email: session.user?.email ?? null,
-      image: session.user?.image ?? null
-    }
     const db = await getDb()
 
     const userIdObj = new ObjectId(session.userId)
+
+    const userDoc = await db
+      .collection('users')
+      .findOne({ _id: userIdObj }, { projection: { name: 1, email: 1, image: 1 } })
+
+    user = {
+      name: (userDoc as any)?.name ?? session.user?.name ?? null,
+      email: (userDoc as any)?.email ?? session.user?.email ?? null,
+      image: (userDoc as any)?.image ?? session.user?.image ?? null
+    }
+
     const email = String(session.user?.email || '')
 
     const emailFilter =
