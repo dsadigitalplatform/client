@@ -1,5 +1,6 @@
 import type {
   CreateLoanCaseInput,
+  LeadAuditHistoryItem,
   LoanCaseDetails,
   LoanCaseDocument,
   LoanCaseListItem,
@@ -163,4 +164,17 @@ export async function deleteLoanCase(id: string) {
   }
 
   return data as { ok: true }
+}
+
+export async function getLeadAuditHistory(leadId: string) {
+  const res = await fetch(`/api/loan-cases/${leadId}/audit-history`, { cache: 'no-store' })
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to fetch lead audit history'
+
+    throw new Error(message)
+  }
+
+  return (data?.items ?? []) as LeadAuditHistoryItem[]
 }

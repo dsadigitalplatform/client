@@ -204,7 +204,19 @@ async function main() {
       required: ['actorUserId', 'action', 'targetTenantId', 'createdAt'],
       properties: {
         actorUserId: { bsonType: 'objectId' },
-        action: { enum: ['IMPERSONATE_START', 'IMPERSONATE_END', 'ADMIN_VIEW'] },
+        action: {
+          enum: [
+            'IMPERSONATE_START',
+            'IMPERSONATE_END',
+            'ADMIN_VIEW',
+            'LEAD_CREATED',
+            'LEAD_LOAN_TYPE_CHANGED',
+            'LEAD_ASSIGNED_AGENT_CHANGED',
+            'LEAD_STATUS_CHANGED',
+            'LEAD_REQUESTED_AMOUNT_CHANGED',
+            'LEAD_DELETED'
+          ]
+        },
         targetTenantId: { bsonType: 'objectId' },
         metadata: { bsonType: 'object' },
         createdAt: { bsonType: 'date' }

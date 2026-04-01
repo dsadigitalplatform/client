@@ -10,6 +10,63 @@ import { upsertCaseFollowUpReminder } from '@features/reminders/services/reminde
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
+const AUDIT_ACTIONS = {
+  leadCreated: 'LEAD_CREATED'
+} as const
+
+async function writeAuditLog(params: {
+  db: any
+  actorUserId: ObjectId
+  targetTenantId: ObjectId
+  action: string
+  metadata?: Record<string, any>
+}) {
+  const { db, actorUserId, targetTenantId, action, metadata } = params
+
+  try {
+    await db.collection('auditLogs').insertOne({
+      actorUserId,
+      targetTenantId,
+      action,
+      metadata: metadata ?? {},
+      createdAt: new Date()
+    })
+  } catch (e: any) {
+    const errMessage = e?.message || String(e)
+
+    if (errMessage.includes('Document failed validation') && action !== 'ADMIN_VIEW') {
+      try {
+        await db.collection('auditLogs').insertOne({
+          actorUserId,
+          targetTenantId,
+          action: 'ADMIN_VIEW',
+          metadata: { ...(metadata ?? {}), requestedAction: action },
+          createdAt: new Date()
+        })
+
+        return
+      } catch (fallbackErr: any) {
+        console.error('audit_log_write_failed', {
+          action,
+          fallbackAction: 'ADMIN_VIEW',
+          actorUserId: actorUserId.toHexString(),
+          tenantId: targetTenantId.toHexString(),
+          err: fallbackErr?.message || String(fallbackErr)
+        })
+
+        return
+      }
+    }
+
+    console.error('audit_log_write_failed', {
+      action,
+      actorUserId: actorUserId.toHexString(),
+      tenantId: targetTenantId.toHexString(),
+      err: errMessage
+    })
+  }
+}
+
 function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 }
@@ -333,19 +390,19 @@ export async function POST(request: Request) {
 
   const tenantCustomer = await db
     .collection('customers')
-    .findOne({ _id: new ObjectId(customerId), tenantId: tenantIdObj }, { projection: { _id: 1 } })
+    .findOne({ _id: new ObjectId(customerId), tenantId: tenantIdObj }, { projection: { _id: 1, fullName: 1 } })
 
   if (!tenantCustomer) return NextResponse.json({ error: 'invalid_customer' }, { status: 400 })
 
   const tenantLoanType = await db
     .collection('loanTypes')
-    .findOne({ _id: new ObjectId(loanTypeId), tenantId: tenantIdObj }, { projection: { _id: 1 } })
+    .findOne({ _id: new ObjectId(loanTypeId), tenantId: tenantIdObj }, { projection: { _id: 1, name: 1 } })
 
   if (!tenantLoanType) return NextResponse.json({ error: 'invalid_loanType' }, { status: 400 })
 
   const tenantStage = await db
     .collection('loanStatusPipelineStages')
-    .findOne({ _id: new ObjectId(stageId), tenantId: tenantIdObj }, { projection: { _id: 1 } })
+    .findOne({ _id: new ObjectId(stageId), tenantId: tenantIdObj }, { projection: { _id: 1, name: 1 } })
 
   if (!tenantStage) return NextResponse.json({ error: 'invalid_stage' }, { status: 400 })
 
@@ -452,6 +509,29 @@ export async function POST(request: Request) {
       })
     }
   }
+
+  const assignedAgentUser = assignedAgentObjId
+    ? await db.collection('users').findOne({ _id: assignedAgentObjId }, { projection: { _id: 1, name: 1, email: 1 } })
+    : null
+
+  await writeAuditLog({
+    db,
+    actorUserId: userId,
+    targetTenantId: tenantIdObj,
+    action: AUDIT_ACTIONS.leadCreated,
+    metadata: {
+      leadId: res.insertedId.toHexString(),
+      customerId,
+      customerName: String((tenantCustomer as any).fullName || ''),
+      loanTypeId,
+      loanTypeName: String((tenantLoanType as any).name || ''),
+      stageId,
+      stageName: String((tenantStage as any).name || ''),
+      assignedAgentId: assignedAgentObjId ? assignedAgentObjId.toHexString() : null,
+      assignedAgentName: assignedAgentUser ? String((assignedAgentUser as any).name || '') : null,
+      assignedAgentEmail: assignedAgentUser ? String((assignedAgentUser as any).email || '') : null
+    }
+  })
 
   return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
 }

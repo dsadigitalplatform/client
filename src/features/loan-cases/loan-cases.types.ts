@@ -83,3 +83,21 @@ export type TenantUserOption = {
   name: string
   email: string | null
 }
+
+export type LeadAuditHistoryChange = {
+  label: string
+  from: string | null
+  to: string | null
+  value: string | null
+}
+
+export type LeadAuditHistoryItem = {
+  id: string
+  action: string
+  actionLabel: string
+  actorUserId: string | null
+  actorName: string | null
+  actorEmail: string | null
+  createdAt: string | null
+  changes: LeadAuditHistoryChange[]
+}

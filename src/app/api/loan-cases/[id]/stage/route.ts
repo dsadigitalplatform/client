@@ -9,6 +9,63 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
+const AUDIT_ACTIONS = {
+  leadStatusChanged: 'LEAD_STATUS_CHANGED'
+} as const
+
+async function writeAuditLog(params: {
+  db: any
+  actorUserId: ObjectId
+  targetTenantId: ObjectId
+  action: string
+  metadata?: Record<string, any>
+}) {
+  const { db, actorUserId, targetTenantId, action, metadata } = params
+
+  try {
+    await db.collection('auditLogs').insertOne({
+      actorUserId,
+      targetTenantId,
+      action,
+      metadata: metadata ?? {},
+      createdAt: new Date()
+    })
+  } catch (e: any) {
+    const errMessage = e?.message || String(e)
+
+    if (errMessage.includes('Document failed validation') && action !== 'ADMIN_VIEW') {
+      try {
+        await db.collection('auditLogs').insertOne({
+          actorUserId,
+          targetTenantId,
+          action: 'ADMIN_VIEW',
+          metadata: { ...(metadata ?? {}), requestedAction: action },
+          createdAt: new Date()
+        })
+
+        return
+      } catch (fallbackErr: any) {
+        console.error('audit_log_write_failed', {
+          action,
+          fallbackAction: 'ADMIN_VIEW',
+          actorUserId: actorUserId.toHexString(),
+          tenantId: targetTenantId.toHexString(),
+          err: fallbackErr?.message || String(fallbackErr)
+        })
+
+        return
+      }
+    }
+
+    console.error('audit_log_write_failed', {
+      action,
+      actorUserId: actorUserId.toHexString(),
+      tenantId: targetTenantId.toHexString(),
+      err: errMessage
+    })
+  }
+}
+
 function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 }
@@ -104,6 +161,27 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   await db
     .collection('loanCases')
     .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { $set: { stageId: nextStageObjId, updatedAt: now } })
+
+  const [fromStage, toStage] = await Promise.all([
+    currentStageId
+      ? db.collection('loanStatusPipelineStages').findOne({ _id: currentStageId, tenantId: tenantIdObj }, { projection: { name: 1 } })
+      : null,
+    db.collection('loanStatusPipelineStages').findOne({ _id: nextStageObjId, tenantId: tenantIdObj }, { projection: { name: 1 } })
+  ])
+
+  await writeAuditLog({
+    db,
+    actorUserId: userId,
+    targetTenantId: tenantIdObj,
+    action: AUDIT_ACTIONS.leadStatusChanged,
+    metadata: {
+      leadId: id,
+      fromStageId: currentStageId ? currentStageId.toHexString() : null,
+      fromStageName: fromStage ? String((fromStage as any).name || '') : null,
+      toStageId: nextStageObjId.toHexString(),
+      toStageName: toStage ? String((toStage as any).name || '') : null
+    }
+  })
 
   return NextResponse.json({ ok: true, updatedAt: now.toISOString() })
 }

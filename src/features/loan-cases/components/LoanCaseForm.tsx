@@ -68,6 +68,7 @@ import type { Associate } from '@features/associates/associates.types'
 import {
   createLoanCase,
   getLoanCases,
+  getLeadAuditHistory,
   getChecklistByLoanType,
   getLoanCaseById,
   getTenantUsers,
@@ -76,6 +77,7 @@ import {
 } from '@features/loan-cases/services/loanCasesService'
 import type {
   CreateLoanCaseInput,
+  LeadAuditHistoryItem,
   LeadSource,
   LoanCaseDetails,
   LoanCaseDocument,
@@ -118,6 +120,60 @@ const CREATE_CUSTOMER_OPTION: Customer = {
   cibilScore: null,
   source: 'OTHER',
   createdAt: null
+}
+
+function getAuditVisualMeta(action: string) {
+  switch (action) {
+    case 'LEAD_CREATED':
+      return {
+        icon: 'ri-add-circle-line',
+        chipColor: 'success' as const,
+        accentColor: 'var(--mui-palette-success-main)',
+        bgColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
+      }
+    case 'LEAD_LOAN_TYPE_CHANGED':
+      return {
+        icon: 'ri-bank-card-line',
+        chipColor: 'info' as const,
+        accentColor: 'var(--mui-palette-info-main)',
+        bgColor: 'rgb(var(--mui-palette-info-mainChannel) / 0.12)'
+      }
+    case 'LEAD_ASSIGNED_AGENT_CHANGED':
+      return {
+        icon: 'ri-user-settings-line',
+        chipColor: 'warning' as const,
+        accentColor: 'var(--mui-palette-warning-main)',
+        bgColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.14)'
+      }
+    case 'LEAD_STATUS_CHANGED':
+      return {
+        icon: 'ri-git-merge-line',
+        chipColor: 'primary' as const,
+        accentColor: 'var(--mui-palette-primary-main)',
+        bgColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)'
+      }
+    case 'LEAD_REQUESTED_AMOUNT_CHANGED':
+      return {
+        icon: 'ri-money-rupee-circle-line',
+        chipColor: 'success' as const,
+        accentColor: 'var(--mui-palette-success-main)',
+        bgColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)'
+      }
+    case 'LEAD_DELETED':
+      return {
+        icon: 'ri-delete-bin-line',
+        chipColor: 'error' as const,
+        accentColor: 'var(--mui-palette-error-main)',
+        bgColor: 'rgb(var(--mui-palette-error-mainChannel) / 0.12)'
+      }
+    default:
+      return {
+        icon: 'ri-history-line',
+        chipColor: 'secondary' as const,
+        accentColor: 'var(--mui-palette-secondary-main)',
+        bgColor: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.12)'
+      }
+  }
 }
 
 const LoanCaseForm = ({ caseId }: Props) => {
@@ -188,6 +244,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [duplicateChecking, setDuplicateChecking] = useState(false)
   const [loanTypeChangeConfirmOpen, setLoanTypeChangeConfirmOpen] = useState(false)
   const [pendingLoanTypeId, setPendingLoanTypeId] = useState<string | null>(null)
+  const [auditHistoryOpen, setAuditHistoryOpen] = useState(false)
+  const [auditHistoryLoading, setAuditHistoryLoading] = useState(false)
+  const [auditHistoryLoaded, setAuditHistoryLoaded] = useState(false)
+  const [auditHistoryError, setAuditHistoryError] = useState<string | null>(null)
+  const [auditHistoryItems, setAuditHistoryItems] = useState<LeadAuditHistoryItem[]>([])
   const duplicateCheckSeqRef = useRef(0)
 
   const apptScheduledAtValue = useMemo(() => {
@@ -234,6 +295,25 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
   const customerOptions = useMemo(() => [...customers, CREATE_CUSTOMER_OPTION], [customers])
 
+  const groupedAuditHistory = useMemo(() => {
+    const groups: Array<{ key: string; label: string; items: LeadAuditHistoryItem[] }> = []
+
+    auditHistoryItems.forEach(item => {
+      const timestamp = item.createdAt ? dayjs(item.createdAt) : null
+      const key = timestamp?.isValid() ? timestamp.format('YYYY-MM-DD') : 'unknown'
+      const label = timestamp?.isValid() ? timestamp.format('DD MMM YYYY') : 'Unknown date'
+      const existingGroup = groups.find(group => group.key === key)
+
+      if (existingGroup) {
+        existingGroup.items.push(item)
+      } else {
+        groups.push({ key, label, items: [item] })
+      }
+    })
+
+    return groups
+  }, [auditHistoryItems])
+
   const canOpenAppointmentDialog = Boolean(customerId && (id ? true : assignedAgentId))
   const appointmentUiLocked = !id && isLocked
   const sessionUserId = (session as any)?.userId as string | undefined
@@ -257,6 +337,34 @@ const LoanCaseForm = ({ caseId }: Props) => {
     setSuccessMsg(msg)
     setSuccessOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (!auditHistoryOpen || !id || auditHistoryLoaded) return
+
+    let active = true
+
+    setAuditHistoryLoading(true)
+    setAuditHistoryError(null)
+
+    void getLeadAuditHistory(id)
+      .then(items => {
+        if (!active) return
+        setAuditHistoryItems(items)
+        setAuditHistoryLoaded(true)
+      })
+      .catch((e: any) => {
+        if (!active) return
+        setAuditHistoryError(e?.message || 'Failed to load audit history')
+      })
+      .finally(() => {
+        if (!active) return
+        setAuditHistoryLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [auditHistoryLoaded, auditHistoryOpen, id])
 
   useEffect(() => {
     if (!redirectOpen || !redirectTarget) return
@@ -890,6 +998,131 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   </Grid>
                 </CardContent>
               </Card>
+
+              <Divider sx={{ mb: 2 }} />
+              <Accordion
+                disableGutters
+                expanded={auditHistoryOpen}
+                onChange={(_, expanded) => setAuditHistoryOpen(expanded)}
+                sx={{ borderRadius: 2.5, overflow: 'hidden' }}
+              >
+                <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, width: '100%' }}>
+                    <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                      Audit History
+                    </Typography>
+                    {auditHistoryLoaded && !auditHistoryLoading ? (
+                      <Chip
+                        size='small'
+                        variant='outlined'
+                        label={`${auditHistoryItems.length} event${auditHistoryItems.length === 1 ? '' : 's'}`}
+                      />
+                    ) : null}
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  {auditHistoryLoading ? (
+                    <Box sx={{ py: 1 }}>
+                      <LinearProgress />
+                    </Box>
+                  ) : auditHistoryError ? (
+                    <Alert severity='error'>{auditHistoryError}</Alert>
+                  ) : auditHistoryItems.length === 0 ? (
+                    <Paper variant='outlined' sx={{ p: 2, borderRadius: 2.5, borderStyle: 'dashed' }}>
+                      <Typography variant='body2' color='text.secondary'>
+                        No audit activity found for this lead yet.
+                      </Typography>
+                    </Paper>
+                  ) : (
+                    <Stack spacing={2} sx={{ pt: 1 }}>
+                      {groupedAuditHistory.map(group => (
+                        <Box key={group.key}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <i className='ri-calendar-line' />
+                            <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
+                              {group.label}
+                            </Typography>
+                            <Chip size='small' variant='outlined' label={`${group.items.length} event${group.items.length === 1 ? '' : 's'}`} />
+                          </Box>
+
+                          <Stack spacing={1.25}>
+                            {group.items.map(item => {
+                              const visual = getAuditVisualMeta(item.action)
+
+                              return (
+                                <Paper
+                                  key={item.id}
+                                  variant='outlined'
+                                  sx={{
+                                    borderRadius: 2.5,
+                                    p: { xs: 1.5, sm: 2 },
+                                    borderLeft: `4px solid ${visual.accentColor}`,
+                                    background: `linear-gradient(95deg, ${visual.bgColor}, transparent 58%)`
+                                  }}
+                                >
+                                  <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 1.25, alignItems: 'start' }}>
+                                    <Avatar
+                                      sx={{
+                                        width: 30,
+                                        height: 30,
+                                        bgcolor: visual.bgColor,
+                                        color: visual.accentColor
+                                      }}
+                                    >
+                                      <i className={visual.icon} />
+                                    </Avatar>
+                                    <Box sx={{ minWidth: 0 }}>
+                                      <Typography variant='body2' sx={{ fontWeight: 800 }}>
+                                        {item.actionLabel}
+                                      </Typography>
+                                      <Typography variant='caption' color='text.secondary'>
+                                        {(item.actorName || item.actorEmail || 'Unknown user') +
+                                          ' • ' +
+                                          (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
+                                      </Typography>
+                                    </Box>
+                                    <Chip
+                                      size='small'
+                                      color={visual.chipColor}
+                                      variant='outlined'
+                                      label={item.action.replaceAll('_', ' ')}
+                                      sx={{ textTransform: 'capitalize' }}
+                                    />
+                                  </Box>
+
+                                  {item.changes.length > 0 ? (
+                                    <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+                                      {item.changes.map((change, idx) => (
+                                        <Box
+                                          key={`${item.id}-${change.label}-${idx}`}
+                                          sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+                                        >
+                                          <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 110 }}>
+                                            {change.label}
+                                          </Typography>
+                                          {change.value ? (
+                                            <Chip size='small' variant='outlined' label={change.value} />
+                                          ) : (
+                                            <>
+                                              <Chip size='small' variant='outlined' label={change.from || '—'} />
+                                              <i className='ri-arrow-right-line' />
+                                              <Chip size='small' variant='outlined' label={change.to || '—'} />
+                                            </>
+                                          )}
+                                        </Box>
+                                      ))}
+                                    </Stack>
+                                  ) : null}
+                                </Paper>
+                              )
+                            })}
+                          </Stack>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+                </AccordionDetails>
+              </Accordion>
             </>
           ) : (
             <Stack spacing={isMobile ? 3.5 : 3.5}>
@@ -1594,6 +1827,135 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   </Table>
                 </Paper>
               )}
+
+              {id ? (
+                <>
+                  <Divider />
+                  <Accordion
+                    disableGutters
+                    expanded={auditHistoryOpen}
+                    onChange={(_, expanded) => setAuditHistoryOpen(expanded)}
+                    sx={{ borderRadius: 2.5, overflow: 'hidden' }}
+                  >
+                    <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, width: '100%' }}>
+                        <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                          Audit History
+                        </Typography>
+                        {auditHistoryLoaded && !auditHistoryLoading ? (
+                          <Chip
+                            size='small'
+                            variant='outlined'
+                            label={`${auditHistoryItems.length} event${auditHistoryItems.length === 1 ? '' : 's'}`}
+                          />
+                        ) : null}
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0 }}>
+                      {auditHistoryLoading ? (
+                        <Box sx={{ py: 1 }}>
+                          <LinearProgress />
+                        </Box>
+                      ) : auditHistoryError ? (
+                        <Alert severity='error'>{auditHistoryError}</Alert>
+                      ) : auditHistoryItems.length === 0 ? (
+                        <Paper variant='outlined' sx={{ p: 2, borderRadius: 2.5, borderStyle: 'dashed' }}>
+                          <Typography variant='body2' color='text.secondary'>
+                            No audit activity found for this lead yet.
+                          </Typography>
+                        </Paper>
+                      ) : (
+                        <Stack spacing={2} sx={{ pt: 1 }}>
+                          {groupedAuditHistory.map(group => (
+                            <Box key={group.key}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <i className='ri-calendar-line' />
+                                <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
+                                  {group.label}
+                                </Typography>
+                                <Chip size='small' variant='outlined' label={`${group.items.length} event${group.items.length === 1 ? '' : 's'}`} />
+                              </Box>
+
+                              <Stack spacing={1.25}>
+                                {group.items.map(item => {
+                                  const visual = getAuditVisualMeta(item.action)
+
+                                  return (
+                                    <Paper
+                                      key={item.id}
+                                      variant='outlined'
+                                      sx={{
+                                        borderRadius: 2.5,
+                                        p: { xs: 1.5, sm: 2 },
+                                        borderLeft: `4px solid ${visual.accentColor}`,
+                                        background: `linear-gradient(95deg, ${visual.bgColor}, transparent 58%)`
+                                      }}
+                                    >
+                                      <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 1.25, alignItems: 'start' }}>
+                                        <Avatar
+                                          sx={{
+                                            width: 30,
+                                            height: 30,
+                                            bgcolor: visual.bgColor,
+                                            color: visual.accentColor
+                                          }}
+                                        >
+                                          <i className={visual.icon} />
+                                        </Avatar>
+                                        <Box sx={{ minWidth: 0 }}>
+                                          <Typography variant='body2' sx={{ fontWeight: 800 }}>
+                                            {item.actionLabel}
+                                          </Typography>
+                                          <Typography variant='caption' color='text.secondary'>
+                                            {(item.actorName || item.actorEmail || 'Unknown user') +
+                                              ' • ' +
+                                              (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
+                                          </Typography>
+                                        </Box>
+                                        <Chip
+                                          size='small'
+                                          color={visual.chipColor}
+                                          variant='outlined'
+                                          label={item.action.replaceAll('_', ' ')}
+                                          sx={{ textTransform: 'capitalize' }}
+                                        />
+                                      </Box>
+
+                                      {item.changes.length > 0 ? (
+                                        <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+                                          {item.changes.map((change, idx) => (
+                                            <Box
+                                              key={`${item.id}-${change.label}-${idx}`}
+                                              sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+                                            >
+                                              <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 110 }}>
+                                                {change.label}
+                                              </Typography>
+                                              {change.value ? (
+                                                <Chip size='small' variant='outlined' label={change.value} />
+                                              ) : (
+                                                <>
+                                                  <Chip size='small' variant='outlined' label={change.from || '—'} />
+                                                  <i className='ri-arrow-right-line' />
+                                                  <Chip size='small' variant='outlined' label={change.to || '—'} />
+                                                </>
+                                              )}
+                                            </Box>
+                                          ))}
+                                        </Stack>
+                                      ) : null}
+                                    </Paper>
+                                  )
+                                })}
+                              </Stack>
+                            </Box>
+                          ))}
+                        </Stack>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                </>
+              ) : null}
             </Stack>
           )}
         </CardContent>
