@@ -1060,54 +1060,70 @@ const LoanCaseForm = ({ caseId }: Props) => {
                                     background: `linear-gradient(95deg, ${visual.bgColor}, transparent 58%)`
                                   }}
                                 >
-                                  <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 1.25, alignItems: 'start' }}>
-                                    <Avatar
-                                      sx={{
-                                        width: 30,
-                                        height: 30,
-                                        bgcolor: visual.bgColor,
-                                        color: visual.accentColor
-                                      }}
-                                    >
-                                      <i className={visual.icon} />
-                                    </Avatar>
-                                    <Box sx={{ minWidth: 0 }}>
-                                      <Typography variant='body2' sx={{ fontWeight: 800 }}>
-                                        {item.actionLabel}
-                                      </Typography>
-                                      <Typography variant='caption' color='text.secondary'>
-                                        {(item.actorName || item.actorEmail || 'Unknown user') +
-                                          ' • ' +
-                                          (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
-                                      </Typography>
-                                    </Box>
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
                                     <Chip
                                       size='small'
                                       color={visual.chipColor}
                                       variant='outlined'
                                       label={item.action.replaceAll('_', ' ')}
-                                      sx={{ textTransform: 'capitalize' }}
+                                      sx={{
+                                        textTransform: 'capitalize',
+                                        alignSelf: 'flex-start',
+                                        maxWidth: '100%',
+                                        '& .MuiChip-label': {
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }
+                                      }}
                                     />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                      <Avatar
+                                        sx={{
+                                          width: 30,
+                                          height: 30,
+                                          bgcolor: visual.bgColor,
+                                          color: visual.accentColor
+                                        }}
+                                      >
+                                        <i className={visual.icon} />
+                                      </Avatar>
+                                      <Typography variant='caption' color='text.secondary' noWrap>
+                                        {(item.actorName || item.actorEmail || 'Unknown user') +
+                                          ' • ' +
+                                          (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
+                                      </Typography>
+                                    </Box>
                                   </Box>
 
                                   {item.changes.length > 0 ? (
                                     <Stack spacing={0.75} sx={{ mt: 1.5 }}>
                                       {item.changes.map((change, idx) => (
-                                        <Box
-                                          key={`${item.id}-${change.label}-${idx}`}
-                                          sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
-                                        >
-                                          <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 110 }}>
+                                        <Box key={`${item.id}-${change.label}-${idx}`} sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                                          <Typography variant='caption' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                                             {change.label}
                                           </Typography>
                                           {change.value ? (
-                                            <Chip size='small' variant='outlined' label={change.value} />
+                                            <Chip
+                                              size='small'
+                                              variant='outlined'
+                                              label={change.value}
+                                              sx={{
+                                                alignSelf: 'flex-start',
+                                                maxWidth: '100%',
+                                                '& .MuiChip-label': {
+                                                  overflow: 'hidden',
+                                                  textOverflow: 'ellipsis',
+                                                  whiteSpace: 'nowrap'
+                                                }
+                                              }}
+                                            />
                                           ) : (
-                                            <>
-                                              <Chip size='small' variant='outlined' label={change.from || '—'} />
-                                              <i className='ri-arrow-right-line' />
-                                              <Chip size='small' variant='outlined' label={change.to || '—'} />
-                                            </>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', overflowX: 'auto', pb: 0.25 }}>
+                                              <Chip size='small' variant='outlined' label={change.from || '—'} sx={{ flexShrink: 0 }} />
+                                              <Box component='i' className='ri-arrow-right-line' sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                                              <Chip size='small' variant='outlined' label={change.to || '—'} sx={{ flexShrink: 0 }} />
+                                            </Box>
                                           )}
                                         </Box>
                                       ))}
@@ -1891,54 +1907,70 @@ const LoanCaseForm = ({ caseId }: Props) => {
                                         background: `linear-gradient(95deg, ${visual.bgColor}, transparent 58%)`
                                       }}
                                     >
-                                      <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 1.25, alignItems: 'start' }}>
-                                        <Avatar
-                                          sx={{
-                                            width: 30,
-                                            height: 30,
-                                            bgcolor: visual.bgColor,
-                                            color: visual.accentColor
-                                          }}
-                                        >
-                                          <i className={visual.icon} />
-                                        </Avatar>
-                                        <Box sx={{ minWidth: 0 }}>
-                                          <Typography variant='body2' sx={{ fontWeight: 800 }}>
-                                            {item.actionLabel}
-                                          </Typography>
-                                          <Typography variant='caption' color='text.secondary'>
-                                            {(item.actorName || item.actorEmail || 'Unknown user') +
-                                              ' • ' +
-                                              (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
-                                          </Typography>
-                                        </Box>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
                                         <Chip
                                           size='small'
                                           color={visual.chipColor}
                                           variant='outlined'
                                           label={item.action.replaceAll('_', ' ')}
-                                          sx={{ textTransform: 'capitalize' }}
+                                          sx={{
+                                            textTransform: 'capitalize',
+                                            alignSelf: 'flex-end',
+                                            maxWidth: '100%',
+                                            '& .MuiChip-label': {
+                                              overflow: 'hidden',
+                                              textOverflow: 'ellipsis',
+                                              whiteSpace: 'nowrap'
+                                            }
+                                          }}
                                         />
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                          <Avatar
+                                            sx={{
+                                              width: 30,
+                                              height: 30,
+                                              bgcolor: visual.bgColor,
+                                              color: visual.accentColor
+                                            }}
+                                          >
+                                            <i className={visual.icon} />
+                                          </Avatar>
+                                          <Typography variant='caption' color='text.secondary' noWrap>
+                                            {(item.actorName || item.actorEmail || 'Unknown user') +
+                                              ' • ' +
+                                              (item.createdAt ? dayjs(item.createdAt).format('hh:mm A') : 'Unknown time')}
+                                          </Typography>
+                                        </Box>
                                       </Box>
 
                                       {item.changes.length > 0 ? (
                                         <Stack spacing={0.75} sx={{ mt: 1.5 }}>
                                           {item.changes.map((change, idx) => (
-                                            <Box
-                                              key={`${item.id}-${change.label}-${idx}`}
-                                              sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
-                                            >
-                                              <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 110 }}>
+                                            <Box key={`${item.id}-${change.label}-${idx}`} sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                                              <Typography variant='caption' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                                                 {change.label}
                                               </Typography>
                                               {change.value ? (
-                                                <Chip size='small' variant='outlined' label={change.value} />
+                                                <Chip
+                                                  size='small'
+                                                  variant='outlined'
+                                                  label={change.value}
+                                                  sx={{
+                                                    alignSelf: 'flex-start',
+                                                    maxWidth: '100%',
+                                                    '& .MuiChip-label': {
+                                                      overflow: 'hidden',
+                                                      textOverflow: 'ellipsis',
+                                                      whiteSpace: 'nowrap'
+                                                    }
+                                                  }}
+                                                />
                                               ) : (
-                                                <>
-                                                  <Chip size='small' variant='outlined' label={change.from || '—'} />
-                                                  <i className='ri-arrow-right-line' />
-                                                  <Chip size='small' variant='outlined' label={change.to || '—'} />
-                                                </>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', overflowX: 'auto', pb: 0.25 }}>
+                                                  <Chip size='small' variant='outlined' label={change.from || '—'} sx={{ flexShrink: 0 }} />
+                                                  <Box component='i' className='ri-arrow-right-line' sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                                                  <Chip size='small' variant='outlined' label={change.to || '—'} sx={{ flexShrink: 0 }} />
+                                                </Box>
                                               )}
                                             </Box>
                                           ))}
