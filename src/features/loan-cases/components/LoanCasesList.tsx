@@ -84,6 +84,7 @@ const LoanCasesList = () => {
   }, [assignedAgentId, hasAgentFilterOverride, sessionUserId, userOptions])
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
+  const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
 
   const stageChipColor = (name: string) => {
     const n = name.toLowerCase()
@@ -214,7 +215,7 @@ const LoanCasesList = () => {
               </CardContent>
             </Card>
           ) : (
-            cases.map(c => (
+            cases.map((c, index) => (
               <Card
                 key={c.id}
                 sx={{
@@ -244,6 +245,20 @@ const LoanCasesList = () => {
                 }}
               >
                 <CardContent sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
+                    <Chip
+                      size='small'
+                      label={`#${formatListNumber(index)}`}
+                      sx={{
+                        height: 24,
+                        borderRadius: 1.5,
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        color: 'primary.main',
+                        backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)'
+                      }}
+                    />
+                  </Box>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <MuiLink
@@ -313,6 +328,7 @@ const LoanCasesList = () => {
             <Table size='small'>
               <TableHead>
                 <TableRow>
+                  <TableCell sx={{ width: 60 }}>#</TableCell>
                   <TableCell>Customer</TableCell>
                   <TableCell>Loan Type</TableCell>
                   <TableCell>Bank</TableCell>
@@ -340,7 +356,7 @@ const LoanCasesList = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  cases.map(c => (
+                  cases.map((c, index) => (
                     <TableRow
                       key={c.id}
                       hover
@@ -357,6 +373,11 @@ const LoanCasesList = () => {
                         }
                       }}
                     >
+                      <TableCell>
+                        <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 600 }}>
+                          #{formatListNumber(index)}
+                        </Typography>
+                      </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <MuiLink

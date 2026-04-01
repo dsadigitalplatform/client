@@ -22,12 +22,15 @@ export type PipelineStage = {
 type Props = {
   stage: PipelineStage
   stageColor: string
+  stages: PipelineStage[]
   caseIds: string[]
   casesById: Record<string, LoanCaseListItem>
+  onMoveCaseStage: (caseId: string, toStageId: string) => void
+  dragDropEnabled: boolean
 }
 
-const PipelineStageColumn = ({ stage, stageColor, caseIds, casesById }: Props) => {
-  const droppable = useDroppable({ id: stage.id })
+const PipelineStageColumn = ({ stage, stageColor, stages, caseIds, casesById, onMoveCaseStage, dragDropEnabled }: Props) => {
+  const droppable = useDroppable({ id: stage.id, disabled: !dragDropEnabled })
 
   const metrics = useMemo(() => {
     let total = 0
@@ -125,7 +128,17 @@ const PipelineStageColumn = ({ stage, stageColor, caseIds, casesById }: Props) =
 
               if (!loanCase) return null
 
-              return <PipelineCaseCard key={loanCase.id} loanCase={loanCase} stageId={stage.id} stageColor={stageColor} />
+              return (
+                <PipelineCaseCard
+                  key={loanCase.id}
+                  loanCase={loanCase}
+                  stageId={stage.id}
+                  stageColor={stageColor}
+                  stages={stages}
+                  onMoveCaseStage={onMoveCaseStage}
+                  dragDropEnabled={dragDropEnabled}
+                />
+              )
             })
           )}
         </Box>

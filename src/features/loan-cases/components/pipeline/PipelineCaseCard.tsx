@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useMemo, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -8,6 +8,9 @@ import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 import MuiLink from '@mui/material/Link'
 
@@ -19,23 +22,38 @@ type Props = {
   loanCase: LoanCaseListItem
   stageId: string
   stageColor: string
+  stages?: { id: string; name: string }[]
+  onMoveCaseStage?: (caseId: string, toStageId: string) => void
+  dragDropEnabled: boolean
   dragging?: boolean
   canDrag?: boolean
   forOverlay?: boolean
 }
 
-const PipelineCaseCardView = ({ loanCase, stageColor, dragging, canDrag, forOverlay }: Omit<Props, 'stageId'>) => {
+const PipelineCaseCardView = ({
+  loanCase,
+  stageColor,
+  stages = [],
+  onMoveCaseStage,
+  dragging,
+  canDrag,
+  forOverlay
+}: Omit<Props, 'stageId' | 'dragDropEnabled'>) => {
   const pendingDocumentsCount = typeof loanCase.pendingDocumentsCount === 'number' ? loanCase.pendingDocumentsCount : 0
   const totalDocuments = typeof loanCase.totalDocuments === 'number' ? loanCase.totalDocuments : null
   const hasDocs = totalDocuments == null ? pendingDocumentsCount > 0 : totalDocuments > 0
   const showDocsChip = hasDocs
   const docsChipColor = pendingDocumentsCount > 0 ? 'warning' : 'success'
   const docsChipLabel = pendingDocumentsCount > 0 ? `Docs Pending (${pendingDocumentsCount})` : 'Docs OK'
+  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null)
+  const moveOptions = useMemo(() => stages.filter(stage => stage.id !== loanCase.stageId), [loanCase.stageId, stages])
+  const canMove = Boolean(loanCase.canMoveStage ?? true)
+  const showMoveMenu = !forOverlay && canMove && moveOptions.length > 0 && Boolean(onMoveCaseStage)
 
   return (
     <Box
       sx={{
-        touchAction: 'none',
+        touchAction: canDrag ? 'none' : 'auto',
         opacity: dragging ? 0.2 : 1,
         cursor: canDrag ? (dragging ? 'grabbing' : 'grab') : 'default',
         pointerEvents: forOverlay ? 'none' : 'auto',
@@ -79,17 +97,52 @@ const PipelineCaseCardView = ({ loanCase, stageColor, dragging, canDrag, forOver
                 {loanCase.loanTypeName || 'Loan Type'} {loanCase.bankName ? `• ${loanCase.bankName}` : ''}
               </Typography>
             </Box>
-            {showDocsChip && (
-              <Chip
-                size='small'
-                color={docsChipColor}
-                label={docsChipLabel}
-                sx={{
-                  fontWeight: 700,
-                  '& .MuiChip-label': { px: 1.1 }
-                }}
-              />
-            )}
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, flexShrink: 0 }}>
+              {showDocsChip && (
+                <Chip
+                  size='small'
+                  color={docsChipColor}
+                  label={docsChipLabel}
+                  sx={{
+                    fontWeight: 700,
+                    '& .MuiChip-label': { px: 1.1 }
+                  }}
+                />
+              )}
+              {showMoveMenu && (
+                <>
+                  <IconButton
+                    size='small'
+                    aria-label='Move case stage'
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => {
+                      e.stopPropagation()
+                      setMenuAnchorEl(e.currentTarget)
+                    }}
+                  >
+                    <i className='ri-more-2-fill' />
+                  </IconButton>
+                  <Menu
+                    anchorEl={menuAnchorEl}
+                    open={Boolean(menuAnchorEl)}
+                    onClose={() => setMenuAnchorEl(null)}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {moveOptions.map(stage => (
+                      <MenuItem
+                        key={stage.id}
+                        onClick={() => {
+                          setMenuAnchorEl(null)
+                          onMoveCaseStage?.(loanCase.id, stage.id)
+                        }}
+                      >
+                        {stage.name}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
+              )}
+            </Box>
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0.5, mt: 1.25 }}>
@@ -108,14 +161,24 @@ const PipelineCaseCardView = ({ loanCase, stageColor, dragging, canDrag, forOver
   )
 }
 
-const PipelineCaseCard = ({ loanCase, stageId, stageColor }: Omit<Props, 'dragging' | 'canDrag' | 'forOverlay'>) => {
+const PipelineCaseCard = ({
+  loanCase,
+  stageId,
+  stageColor,
+  stages,
+  onMoveCaseStage,
+  dragDropEnabled
+}: Omit<Props, 'dragging' | 'canDrag' | 'forOverlay'>) => {
+  const canMove = Boolean(loanCase.canMoveStage ?? true)
+  const canDrag = canMove && dragDropEnabled
+
   const draggable = useDraggable({
     id: loanCase.id,
-    data: { stageId }
+    data: { stageId },
+    disabled: !canDrag
   })
 
   const dragging = draggable.isDragging
-  const canDrag = Boolean(loanCase.canMoveStage ?? true)
 
   return (
     <Box
@@ -123,7 +186,14 @@ const PipelineCaseCard = ({ loanCase, stageId, stageColor }: Omit<Props, 'draggi
       {...(canDrag ? draggable.listeners : {})}
       {...(canDrag ? draggable.attributes : {})}
     >
-      <PipelineCaseCardView loanCase={loanCase} stageColor={stageColor} dragging={dragging} canDrag={canDrag} />
+      <PipelineCaseCardView
+        loanCase={loanCase}
+        stageColor={stageColor}
+        stages={stages}
+        onMoveCaseStage={onMoveCaseStage}
+        dragging={dragging}
+        canDrag={canDrag}
+      />
     </Box>
   )
 }

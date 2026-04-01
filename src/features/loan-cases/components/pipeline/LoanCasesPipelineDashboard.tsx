@@ -133,6 +133,8 @@ const LoanCasesPipelineDashboard = () => {
     return map
   }, [board.stages])
 
+  const dragDropEnabled = !isMobile
+
   const stageColorById = useMemo(() => {
     const colors = stagePalette(theme.palette)
     const map: Record<string, string> = {}
@@ -253,26 +255,19 @@ const LoanCasesPipelineDashboard = () => {
     setActiveFromStageId(fromStageId)
   }, [])
 
-  const onDragEnd = useCallback(
-    async (evt: any) => {
-      const activeId = String(evt?.active?.id || '')
-      const overId = String(evt?.over?.id || '')
-      const fromStageId = String(evt?.active?.data?.current?.stageId || '')
-
-      setActiveCaseId('')
-      setActiveFromStageId('')
-
-      if (!activeId || !overId || !fromStageId) return
-      if (fromStageId === overId) return
-
-      const c = board.casesById[activeId]
+  const moveCaseStage = useCallback(
+    async (caseId: string, toStageId: string, fromStageIdInput?: string) => {
+      const c = board.casesById[caseId]
+      const fromStageId = fromStageIdInput || c?.stageId || ''
       const canMove = Boolean(c?.canMoveStage ?? true)
 
+      if (!caseId || !toStageId || !fromStageId) return
+      if (fromStageId === toStageId) return
       if (!c || !canMove) return
 
       prevBoardRef.current = board
 
-      const nextStage = stageById.get(overId)
+      const nextStage = stageById.get(toStageId)
       const nextStageName = nextStage?.name || c.stageName
 
       setBoard(prev => {
@@ -282,25 +277,25 @@ const LoanCasesPipelineDashboard = () => {
           caseIdsByStage: { ...prev.caseIdsByStage }
         }
 
-        const from = (next.caseIdsByStage[fromStageId] || []).filter(id => id !== activeId)
-        const to = [activeId, ...(next.caseIdsByStage[overId] || []).filter(id => id !== activeId)]
+        const from = (next.caseIdsByStage[fromStageId] || []).filter(id => id !== caseId)
+        const to = [caseId, ...(next.caseIdsByStage[toStageId] || []).filter(id => id !== caseId)]
 
         next.caseIdsByStage[fromStageId] = from
-        next.caseIdsByStage[overId] = to
-        next.casesById[activeId] = { ...next.casesById[activeId], stageId: overId, stageName: nextStageName }
+        next.caseIdsByStage[toStageId] = to
+        next.casesById[caseId] = { ...next.casesById[caseId], stageId: toStageId, stageName: nextStageName }
 
         return next
       })
 
       try {
-        const res = await updateCaseStage(activeId, overId)
+        const res = await updateCaseStage(caseId, toStageId)
 
         if (res?.updatedAt) {
           setBoard(prev => ({
             ...prev,
             casesById: {
               ...prev.casesById,
-              [activeId]: { ...prev.casesById[activeId], updatedAt: String(res.updatedAt) }
+              [caseId]: { ...prev.casesById[caseId], updatedAt: String(res.updatedAt) }
             }
           }))
         }
@@ -312,6 +307,21 @@ const LoanCasesPipelineDashboard = () => {
       }
     },
     [board, stageById]
+  )
+
+  const onDragEnd = useCallback(
+    async (evt: any) => {
+      const activeId = String(evt?.active?.id || '')
+      const overId = String(evt?.over?.id || '')
+      const fromStageId = String(evt?.active?.data?.current?.stageId || '')
+
+      setActiveCaseId('')
+      setActiveFromStageId('')
+
+      if (!activeId || !overId || !fromStageId) return
+      await moveCaseStage(activeId, overId, fromStageId)
+    },
+    [moveCaseStage]
   )
 
   const onDragCancel = useCallback(() => {
@@ -329,7 +339,7 @@ const LoanCasesPipelineDashboard = () => {
     >
       <Typography variant='h5'>Lead & Loan Status Board</Typography>
       <Typography variant='body2' color='text.secondary'>
-        Track cases across stages and move them with drag-and-drop
+        Track cases across stages and move them quickly
       </Typography>
     </Box>
   )
@@ -591,8 +601,11 @@ const LoanCasesPipelineDashboard = () => {
                   <PipelineStageColumn
                     stage={stage}
                     stageColor={stageColorById[stage.id]}
+                    stages={board.stages}
                     caseIds={filteredCaseIdsByStage[stage.id] || []}
                     casesById={board.casesById}
+                    onMoveCaseStage={moveCaseStage}
+                    dragDropEnabled={dragDropEnabled}
                   />
                 </AccordionDetails>
               </Accordion>
@@ -636,8 +649,11 @@ const LoanCasesPipelineDashboard = () => {
                 key={stage.id}
                 stage={stage}
                 stageColor={stageColorById[stage.id]}
+                stages={board.stages}
                 caseIds={filteredCaseIdsByStage[stage.id] || []}
                 casesById={board.casesById}
+                onMoveCaseStage={moveCaseStage}
+                dragDropEnabled={dragDropEnabled}
               />
             ))}
           </Box>

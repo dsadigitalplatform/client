@@ -34,6 +34,7 @@ const CustomersList = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
+  const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
 
   const cibilMeta = (v: number) => {
     if (v >= 750) return { label: 'High', color: 'success' as const, icon: 'ri-arrow-up-s-line' }
@@ -160,7 +161,7 @@ const CustomersList = () => {
               </CardContent>
             </Card>
           ) : (
-            customers.map(c => {
+            customers.map((c, index) => {
               return (
                 <Card
                   key={c.id}
@@ -173,6 +174,20 @@ const CustomersList = () => {
                   }}
                 >
                   <CardContent sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                      <Chip
+                        size='small'
+                        label={`#${formatListNumber(index)}`}
+                        sx={{
+                          height: 24,
+                          borderRadius: 1.5,
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          color: 'primary.main',
+                          backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)'
+                        }}
+                      />
+                    </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
                       <Avatar
                         sx={{
@@ -263,6 +278,7 @@ const CustomersList = () => {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell sx={{ width: 60 }}>#</TableCell>
               <TableCell>Name</TableCell>
               <TableCell>Mobile</TableCell>
               <TableCell>Email</TableCell>
@@ -274,15 +290,20 @@ const CustomersList = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6}>Loading...</TableCell>
+                <TableCell colSpan={7}>Loading...</TableCell>
               </TableRow>
             ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6}>No customers found</TableCell>
+                <TableCell colSpan={7}>No customers found</TableCell>
               </TableRow>
             ) : (
-              customers.map(c => (
+              customers.map((c, index) => (
                 <TableRow key={c.id}>
+                  <TableCell>
+                    <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 600 }}>
+                      #{formatListNumber(index)}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Box className='flex items-center gap-2'>
                       <Avatar
