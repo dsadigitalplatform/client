@@ -186,6 +186,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [duplicateFound, setDuplicateFound] = useState(false)
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false)
   const [duplicateChecking, setDuplicateChecking] = useState(false)
+  const [loanTypeChangeConfirmOpen, setLoanTypeChangeConfirmOpen] = useState(false)
+  const [pendingLoanTypeId, setPendingLoanTypeId] = useState<string | null>(null)
   const duplicateCheckSeqRef = useRef(0)
 
   const apptScheduledAtValue = useMemo(() => {
@@ -298,6 +300,39 @@ const LoanCaseForm = ({ caseId }: Props) => {
     if (!Number.isFinite(n)) return null
 
     return n
+  }
+
+  const applyLoanTypeChange = (nextLoanTypeId: string) => {
+    setLoanTypeId(nextLoanTypeId)
+
+    if (!id) return
+
+    void (async () => {
+      setChecklistLoading(true)
+
+      try {
+        const checklist = await getChecklistByLoanType(nextLoanTypeId)
+
+        setDocuments(checklist)
+      } catch {
+        setDocuments([])
+      } finally {
+        setChecklistLoading(false)
+      }
+    })()
+  }
+
+  const handleLoanTypeSelect = (nextLoanTypeId: string) => {
+    if (nextLoanTypeId === loanTypeId) return
+
+    if (id) {
+      setPendingLoanTypeId(nextLoanTypeId)
+      setLoanTypeChangeConfirmOpen(true)
+
+      return
+    }
+
+    applyLoanTypeChange(nextLoanTypeId)
   }
 
   useEffect(() => {
@@ -462,6 +497,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     void (async () => {
       try {
+        const cases = await getLoanCases()
         const byKey = new Map<string, string>()
 
         cases.forEach(c => {
@@ -946,8 +982,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       labelId='loan-case-loan-type'
                       label='Loan Type'
                       value={loanTypeId}
-                      onChange={e => setLoanTypeId(String(e.target.value))}
-                      disabled={isLocked || !isActive}
+                      onChange={e => handleLoanTypeSelect(String(e.target.value))}
+                      disabled={!isActive}
                       renderValue={v => loanTypes.find(x => x.id === v)?.name || 'Select'}
                     >
                       {loanTypes
@@ -974,7 +1010,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     onChange={(_, v) => setBankName(typeof v === 'string' ? v : '')}
                     inputValue={bankName}
                     onInputChange={(_, v) => setBankName(v)}
-                    disabled={isLocked || !isActive}
+                    disabled={!isActive}
                     renderInput={params => (
                       <TextField
                         {...params}
@@ -1881,6 +1917,38 @@ const LoanCaseForm = ({ caseId }: Props) => {
             onClick={() => {
               setDuplicateConfirmOpen(false)
               setDuplicateConfirmed(true)
+            }}
+            disabled={submitting}
+          >
+            Yes, continue
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={loanTypeChangeConfirmOpen} onClose={() => setLoanTypeChangeConfirmOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>Change Loan Type</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Once you change the loan type, you need to re-validate the document checklist. Do you want to continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant='text'
+            onClick={() => {
+              setLoanTypeChangeConfirmOpen(false)
+              setPendingLoanTypeId(null)
+            }}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant='contained'
+            onClick={() => {
+              if (pendingLoanTypeId) applyLoanTypeChange(pendingLoanTypeId)
+              setLoanTypeChangeConfirmOpen(false)
+              setPendingLoanTypeId(null)
             }}
             disabled={submitting}
           >

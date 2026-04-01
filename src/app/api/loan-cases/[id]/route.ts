@@ -76,6 +76,39 @@ function canAccessCase(role: 'OWNER' | 'ADMIN' | 'USER', userId: ObjectId, row: 
   return false
 }
 
+async function buildChecklistForLoanType(db: any, tenantIdObj: ObjectId, loanTypeId: ObjectId) {
+  const mappings = await db
+    .collection('loanTypeDocuments')
+    .find(
+      { tenantId: tenantIdObj, loanTypeId, status: { $in: ['REQUIRED', 'OPTIONAL'] } },
+      { projection: { documentId: 1 } }
+    )
+    .toArray()
+
+  const docIds: ObjectId[] = mappings
+    .map((m: any) => (m as any).documentId as ObjectId | undefined)
+    .filter((id: ObjectId | undefined): id is ObjectId => Boolean(id))
+
+  if (docIds.length === 0) return [] as Array<{ documentId: ObjectId; documentName: string; status: 'PENDING' }>
+
+  const docs = await db
+    .collection('documentChecklists')
+    .find({ tenantId: tenantIdObj, _id: { $in: docIds } }, { projection: { name: 1 } })
+    .toArray()
+
+  const nameById = new Map<string, string>()
+
+  docs.forEach((d: any) => nameById.set(String((d as any)._id), String((d as any).name || '')))
+
+  const checklist = docIds
+    .map((id: ObjectId) => ({ documentId: id, documentName: nameById.get(String(id)) || '' }))
+    .filter((d: { documentId: ObjectId; documentName: string }) => d.documentName.length > 0)
+    .sort((a: { documentName: string }, b: { documentName: string }) => a.documentName.localeCompare(b.documentName))
+    .map((d: { documentId: ObjectId; documentName: string }) => ({ ...d, status: 'PENDING' as const }))
+
+  return checklist
+}
+
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
 
@@ -182,6 +215,10 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const body = await request.json().catch(() => ({}))
   const patch: any = {}
   const errors: Record<string, string> = {}
+  const existingLoanTypeId = (existing as any).loanTypeId as ObjectId
+  let loanTypeChecklist:
+    | Array<{ documentId: ObjectId; documentName: string; status: 'PENDING' }>
+    | null = null
   const incomingLeadSource = body.leadSource !== undefined ? String(body.leadSource) : undefined
   const incomingAssociateId = body.associateId !== undefined ? (body.associateId == null ? null : String(body.associateId)) : undefined
 
@@ -203,8 +240,30 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     errors.customerId = 'Customer cannot be changed after first save'
   }
 
-  if (body.loanTypeId != null && String(body.loanTypeId) !== String((existing as any).loanTypeId)) {
-    errors.loanTypeId = 'Loan type cannot be changed after first save'
+  if (body.loanTypeId != null) {
+    const loanTypeId = String(body.loanTypeId || '')
+
+    if (!ObjectId.isValid(loanTypeId)) {
+      errors.loanTypeId = 'Loan type is required'
+    } else {
+      const loanTypeObjId = new ObjectId(loanTypeId)
+
+      const tenantLoanType = await db
+        .collection('loanTypes')
+        .findOne({ _id: loanTypeObjId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+
+      if (!tenantLoanType) {
+        errors.loanTypeId = 'Invalid loan type'
+      } else {
+        patch.loanTypeId = loanTypeObjId
+
+        if (!loanTypeObjId.equals(existingLoanTypeId)) {
+          loanTypeChecklist = await buildChecklistForLoanType(db, tenantIdObj, loanTypeObjId)
+
+          if (body.documents === undefined) patch.documents = loanTypeChecklist
+        }
+      }
+    }
   }
 
   if (body.bankName !== undefined)
@@ -320,12 +379,19 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     if (!incoming) {
       errors.documents = 'Invalid documents payload'
     } else {
-      const existingDocs = Array.isArray((existing as any).documents) ? ((existing as any).documents as any[]) : []
-      const byId = new Map<string, any>()
+      const byId = new Map<string, string>()
 
-      existingDocs.forEach(d => {
-        if (d?.documentId) byId.set(String(d.documentId), d)
-      })
+      if (loanTypeChecklist) {
+        loanTypeChecklist.forEach(d => {
+          byId.set(String(d.documentId), d.documentName)
+        })
+      } else {
+        const existingDocs = Array.isArray((existing as any).documents) ? ((existing as any).documents as any[]) : []
+
+        existingDocs.forEach(d => {
+          if (d?.documentId) byId.set(String(d.documentId), String(d.documentName || ''))
+        })
+      }
 
       const nextDocs: any[] = []
 
@@ -345,9 +411,9 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
           return
         }
 
-        const existingDoc = byId.get(docId)
+        const documentName = byId.get(docId)
 
-        if (!existingDoc) {
+        if (!documentName) {
           errors[`documents.${idx}.documentId`] = 'Document not part of checklist'
 
           return
@@ -355,7 +421,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
         nextDocs.push({
           documentId: new ObjectId(docId),
-          documentName: String(existingDoc.documentName || ''),
+          documentName,
           status
         })
       })

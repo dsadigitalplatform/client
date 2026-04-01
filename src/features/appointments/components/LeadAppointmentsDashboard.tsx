@@ -164,7 +164,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
 
     const [organizerId, setOrganizerId] = useState<string>('')
     const [status, setStatus] = useState<string>('')
-    const [dateFrom, setDateFrom] = useState<string>(formatTodayInputValue())
+    const [dateFrom, setDateFrom] = useState<string>(() => (leadId ? '' : formatTodayInputValue()))
     const [dateTo, setDateTo] = useState<string>('')
 
     const [detailsOpen, setDetailsOpen] = useState(false)
@@ -193,6 +193,15 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
 
         setOrganizerId(sessionUserId)
     }, [isAdminOrOwner, leadId, sessionUserId])
+
+    useEffect(() => {
+        if (leadId) {
+            setDateFrom('')
+            setDateTo('')
+        } else {
+            setDateFrom(v => (v ? v : formatTodayInputValue()))
+        }
+    }, [leadId])
 
     const refresh = useCallback(async () => {
         const seq = ++refreshSeqRef.current
