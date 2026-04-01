@@ -700,7 +700,8 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                                     sx={{
                                                                         fontWeight: 500,
                                                                         fontSize: '0.875rem',
-                                                                        color: isOverdue ? 'error.main' : 'text.primary'
+                                                                        color: isOverdue ? 'error.main' : 'text.primary',
+                                                                        whiteSpace: 'nowrap'
                                                                     }}
                                                                 >
                                                                     {formatDateTime(a?.scheduledAt || null)}
@@ -721,7 +722,20 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                 </Box>
                                             </Box>
 
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                                                <Chip
+                                                    size='small'
+                                                    label={sc.label}
+                                                    color={sc.color}
+                                                    variant='filled'
+                                                    icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
+                                                    sx={{
+                                                        fontWeight: 600,
+                                                        fontSize: '0.75rem',
+                                                        height: '24px',
+                                                        '& .MuiChip-icon': { ml: 0.5 }
+                                                    }}
+                                                />
                                                 {isOverdue ? (
                                                     <Chip
                                                         size='small'
@@ -739,19 +753,6 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                                         }}
                                                     />
                                                 ) : null}
-                                                <Chip
-                                                    size='small'
-                                                    label={sc.label}
-                                                    color={sc.color}
-                                                    variant='filled'
-                                                    icon={<i className={sc.icon} style={{ fontSize: '14px' }} />}
-                                                    sx={{
-                                                        fontWeight: 600,
-                                                        fontSize: '0.75rem',
-                                                        height: '24px',
-                                                        '& .MuiChip-icon': { ml: 0.5 }
-                                                    }}
-                                                />
                                             </Box>
                                         </Box>
 
