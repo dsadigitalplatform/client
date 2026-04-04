@@ -13,6 +13,7 @@ export async function GET() {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId)
+  const userIdRaw = String(session.userId)
   const email = String((session as any)?.user?.email || '')
 
   const emailFilter =
@@ -20,17 +21,20 @@ export async function GET() {
       ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
       : undefined
 
-  const orFilters = [{ userId }] as any[]
+  const orFilters = [{ userId }, { userId: userIdRaw }] as any[]
 
   if (emailFilter) orFilters.push(emailFilter)
 
   const memberships = await db
     .collection('memberships')
-    .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1, role: 1 } })
+    .find({ status: { $regex: '^active$', $options: 'i' }, $or: orFilters }, { projection: { tenantId: 1, role: 1 } })
     .toArray()
 
-  const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
+  const tenantIds = memberships.map(m => {
+    const tenantId = (m as any)?.tenantId
 
-  
-return NextResponse.json({ count: memberships.length, tenantIds, memberships })
+    return typeof tenantId?.toHexString === 'function' ? tenantId.toHexString() : String(tenantId)
+  })
+
+  return NextResponse.json({ count: memberships.length, tenantIds, memberships })
 }

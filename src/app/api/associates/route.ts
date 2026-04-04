@@ -127,10 +127,6 @@ export async function GET(request: Request) {
     ]
   }
 
-  if ((membership as any).role !== 'ADMIN' && (membership as any).role !== 'OWNER') {
-    baseFilter.createdBy = userId
-  }
-
   const rows = await db
     .collection('associates')
     .find(baseFilter, {

@@ -16,6 +16,44 @@ function isStatus(v: unknown): v is StatusValue {
   return typeof v === 'string' && STATUS_VALUES.includes(v as StatusValue)
 }
 
+async function getRequestContext(session: any) {
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
+
+  if (!currentTenantId) return { error: NextResponse.json({ error: 'tenant_required' }, { status: 400 }) }
+  if (!ObjectId.isValid(currentTenantId)) return { error: NextResponse.json({ error: 'invalid_tenant' }, { status: 400 }) }
+
+  const db = await getDb()
+  const tenantIdObj = new ObjectId(currentTenantId)
+  const userId = new ObjectId(session.userId)
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
+  let role: 'OWNER' | 'ADMIN' | 'USER' = 'USER'
+
+  if (!isSuperAdmin) {
+    const email = String((session as any)?.user?.email || '')
+
+    const emailFilter =
+      email && email.length > 0
+        ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+        : undefined
+
+    const orFilters = [{ userId }] as any[]
+
+    if (emailFilter) orFilters.push(emailFilter)
+
+    const membership = await db
+      .collection('memberships')
+      .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+
+    if (!membership) return { error: NextResponse.json({ error: 'not_member' }, { status: 403 }) }
+    role = String((membership as any).role || 'USER') as 'OWNER' | 'ADMIN' | 'USER'
+  }
+
+  return { db, tenantIdObj, userId, role, isSuperAdmin }
+}
+
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
 
@@ -23,33 +61,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const store = await cookies()
-  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
+  const context = await getRequestContext(session as any)
 
-  if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
-  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
-  const db = await getDb()
-  const userId = new ObjectId(session.userId)
-  const email = String((session as any)?.user?.email || '')
+  if ('error' in context) return context.error
 
-  const emailFilter =
-    email && email.length > 0
-      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
-      : undefined
-
-  const orFilters = [{ userId }] as any[]
-
-  if (emailFilter) orFilters.push(emailFilter)
-  const tenantIdObj = new ObjectId(currentTenantId)
+  const { db, tenantIdObj, userId, role, isSuperAdmin } = context
   const loanTypeId = new ObjectId(id)
-
-  const membership = await db
-    .collection('memberships')
-    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
-
-  if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
   const loanType = await db
     .collection('loanTypes')
@@ -68,6 +85,15 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     .find({ tenantId: tenantIdObj, loanTypeId }, { projection: { documentId: 1, status: 1 } })
     .toArray()
 
+  const createdByRaw = (loanType as any).createdBy
+
+  const createdById =
+    createdByRaw && typeof createdByRaw === 'object' && typeof createdByRaw.toHexString === 'function'
+      ? createdByRaw.toHexString()
+      : String(createdByRaw || '')
+
+  const canManage = isSuperAdmin || role === 'ADMIN' || role === 'OWNER' || createdById === userId.toHexString()
+
   const documents = documentsRaw.map(d => ({
     id: String((d as any)._id),
     name: String((d as any).name || ''),
@@ -85,7 +111,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       id: String((loanType as any)._id),
       name: String((loanType as any).name || ''),
       description: (loanType as any).description ?? null,
-      isActive: Boolean((loanType as any).isActive)
+      isActive: Boolean((loanType as any).isActive),
+      canManage
     },
     documents,
     mappings
@@ -99,37 +126,21 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const store = await cookies()
-  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
+  const context = await getRequestContext(session as any)
 
-  if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
-  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
-  const db = await getDb()
-  const userId = new ObjectId(session.userId)
-  const email = String((session as any)?.user?.email || '')
+  if ('error' in context) return context.error
 
-  const emailFilter =
-    email && email.length > 0
-      ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
-      : undefined
-
-  const orFilters = [{ userId }] as any[]
-
-  if (emailFilter) orFilters.push(emailFilter)
-  const tenantIdObj = new ObjectId(currentTenantId)
+  const { db, tenantIdObj, userId, role, isSuperAdmin } = context
   const loanTypeId = new ObjectId(id)
 
-  const membership = await db
-    .collection('memberships')
-    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
-
-  if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+  const userScopedFilter =
+    isSuperAdmin || role === 'ADMIN' || role === 'OWNER'
+      ? {}
+      : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
 
   const loanType = await db
     .collection('loanTypes')
-    .findOne({ _id: loanTypeId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+    .findOne({ _id: loanTypeId, tenantId: tenantIdObj, ...userScopedFilter }, { projection: { _id: 1 } })
 
   if (!loanType) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 

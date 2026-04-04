@@ -4,4 +4,5 @@ export type AssociateType = {
   description: string | null
   isActive: boolean
   createdAt: string | null
+  canManage?: boolean
 }

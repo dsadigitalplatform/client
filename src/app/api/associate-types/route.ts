@@ -27,6 +27,7 @@ export async function GET(request: Request) {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId)
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
   const email = String((session as any)?.user?.email || '')
 
   const emailFilter =
@@ -39,11 +40,16 @@ export async function GET(request: Request) {
   if (emailFilter) orFilters.push(emailFilter)
   const tenantIdObj = new ObjectId(currentTenantId)
 
-  const membership = await db
-    .collection('memberships')
-    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+  let role: 'OWNER' | 'ADMIN' | 'USER' = 'USER'
 
-  if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+  if (!isSuperAdmin) {
+    const membership = await db
+      .collection('memberships')
+      .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+
+    if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+    role = String((membership as any).role || 'USER') as 'OWNER' | 'ADMIN' | 'USER'
+  }
 
   const url = new URL(request.url)
   const q = url.searchParams.get('q') || ''
@@ -63,6 +69,7 @@ export async function GET(request: Request) {
         name: 1,
         description: 1,
         isActive: 1,
+        createdBy: 1,
         createdAt: 1
       }
     })
@@ -75,7 +82,13 @@ export async function GET(request: Request) {
     name: String((r as any).name || ''),
     description: (r as any).description ?? null,
     isActive: Boolean((r as any).isActive),
-    createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null
+    createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
+    canManage:
+      isSuperAdmin ||
+      role === 'ADMIN' ||
+      role === 'OWNER' ||
+      String((r as any).createdBy && typeof (r as any).createdBy.toHexString === 'function' ? (r as any).createdBy.toHexString() : (r as any).createdBy || '') ===
+        userId.toHexString()
   }))
 
   return NextResponse.json({ associateTypes })
@@ -96,6 +109,7 @@ export async function POST(request: Request) {
 
   const db = await getDb()
   const userId = new ObjectId(session.userId)
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
   const email = String((session as any)?.user?.email || '')
 
   const emailFilter =
@@ -108,11 +122,13 @@ export async function POST(request: Request) {
   if (emailFilter) orFilters.push(emailFilter)
   const tenantIdObj = new ObjectId(currentTenantId)
 
-  const membership = await db
-    .collection('memberships')
-    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+  if (!isSuperAdmin) {
+    const membership = await db
+      .collection('memberships')
+      .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
-  if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+    if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+  }
 
   const body = await request.json().catch(() => ({}))
 

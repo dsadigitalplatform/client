@@ -44,37 +44,89 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Cr
     throw Object.assign(new Error('admin_cannot_invite_admin'), { status: 403 })
   }
 
-  const existingMembership = await db.collection('memberships').findOne(
-    {
-      tenantId,
-      email: emailFilter,
-      status: { $in: ['invited', 'active'] }
-    },
-    { projection: { _id: 1 } }
-  )
-
-  if (existingMembership) {
-    throw Object.assign(new Error('email_already_invited'), { status: 409 })
-  }
-
   const tenant = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })
   const tenantName = (tenant?.name as string) || 'Your Tenant'
 
   const token = crypto.randomBytes(32).toString('hex')
   const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000)
 
-  await db.collection('memberships').insertOne({
-    userId: null,
-    email: normalizedEmail,
-    tenantId,
-    role: input.role,
-    status: 'invited',
-    inviteToken: token,
-    invitedBy: requesterId,
-    invitedAt: now,
-    createdAt: now,
-    expiresAt
-  })
+  const existingMemberships = await db
+    .collection('memberships')
+    .find(
+      {
+        tenantId,
+        email: emailFilter
+      },
+      { projection: { _id: 1, status: 1, createdAt: 1, updatedAt: 1 } }
+    )
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .toArray()
+
+  const hasActiveMembership = existingMemberships.some(m => String((m as any).status || '') === 'active')
+
+  if (hasActiveMembership) {
+    throw Object.assign(new Error('email_already_invited'), { status: 409 })
+  }
+
+  const primaryMembership = existingMemberships[0]
+
+  if (existingMemberships.length > 1 && primaryMembership?._id) {
+    await db.collection('memberships').updateMany(
+      {
+        tenantId,
+        email: emailFilter,
+        _id: { $ne: primaryMembership._id }
+      },
+      {
+        $set: {
+          status: 'revoked',
+          updatedAt: now
+        },
+        $unset: {
+          inviteToken: '',
+          expiresAt: ''
+        }
+      }
+    )
+  }
+
+  if (primaryMembership?._id) {
+    await db.collection('memberships').updateOne(
+      { _id: primaryMembership._id, tenantId },
+      {
+        $set: {
+          userId: null,
+          email: normalizedEmail,
+          role: input.role,
+          status: 'invited',
+          inviteToken: token,
+          invitedBy: requesterId,
+          invitedAt: now,
+          updatedAt: now,
+          expiresAt
+        },
+        $unset: {
+          activatedAt: '',
+          revokedAt: '',
+          revokedBy: ''
+        }
+      }
+    )
+  } else {
+    await db.collection('memberships').insertOne({
+      userId: null,
+      email: normalizedEmail,
+      tenantId,
+      role: input.role,
+      status: 'invited',
+      inviteToken: token,
+      invitedBy: requesterId,
+      invitedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt
+    })
+  }
 
   return { token, expiresAt, tenantName }
 }

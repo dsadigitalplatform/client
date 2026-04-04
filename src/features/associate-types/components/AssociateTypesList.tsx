@@ -232,13 +232,17 @@ const AssociateTypesList = () => {
                                             />
                                         </Box>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                                            <IconButton
-                                                color='error'
-                                                onClick={() => setDeleteTarget({ id: a.id, name: a.name })}
-                                                aria-label={`Delete ${a.name}`}
-                                            >
-                                                <i className='ri-delete-bin-6-line' />
-                                            </IconButton>
+                                            {a.canManage ? (
+                                                <IconButton
+                                                    color='error'
+                                                    onClick={() => setDeleteTarget({ id: a.id, name: a.name })}
+                                                    aria-label={`Delete ${a.name}`}
+                                                >
+                                                    <i className='ri-delete-bin-6-line' />
+                                                </IconButton>
+                                            ) : (
+                                                <Box sx={{ width: 40, height: 40 }} />
+                                            )}
                                         </Box>
                                     </CardContent>
                                 </Card>
@@ -308,14 +312,16 @@ const AssociateTypesList = () => {
                                             />
                                         </TableCell>
                                         <TableCell align='right'>
-                                            <Button
-                                                size='small'
-                                                color='error'
-                                                variant='outlined'
-                                                onClick={() => setDeleteTarget({ id: a.id, name: a.name })}
-                                            >
-                                                Delete
-                                            </Button>
+                                            {a.canManage ? (
+                                                <Button
+                                                    size='small'
+                                                    color='error'
+                                                    variant='outlined'
+                                                    onClick={() => setDeleteTarget({ id: a.id, name: a.name })}
+                                                >
+                                                    Delete
+                                                </Button>
+                                            ) : null}
                                         </TableCell>
                                     </TableRow>
                                 )

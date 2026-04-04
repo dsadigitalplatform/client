@@ -165,8 +165,9 @@ export async function GET(request: Request) {
   const customerId = url.searchParams.get('customerId') || ''
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
+  const tenantIdHex = tenantIdObj.toHexString()
 
-  const baseFilter: any = { tenantId: tenantIdObj }
+  const baseFilter: any = { tenantId: { $in: [tenantIdObj, tenantIdHex] } }
   
   // Filter by isActive - show only active cases by default, include inactive if explicitly requested
   if (!showInactive) {
@@ -175,26 +176,66 @@ export async function GET(request: Request) {
 
   if (stageId) {
     if (!ObjectId.isValid(stageId)) return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
-    baseFilter.stageId = new ObjectId(stageId)
+    const stageObjId = new ObjectId(stageId)
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $or: [{ stageId: stageObjId }, { stageId }]
+      }
+    ]
   }
 
   if (assignedAgentId) {
     if (!ObjectId.isValid(assignedAgentId)) return NextResponse.json({ error: 'invalid_assignedAgentId' }, { status: 400 })
-    baseFilter.assignedAgentId = new ObjectId(assignedAgentId)
+    const assignedAgentObjId = new ObjectId(assignedAgentId)
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $or: [{ assignedAgentId: assignedAgentObjId }, { assignedAgentId }]
+      }
+    ]
   }
 
   if (customerId) {
     if (!ObjectId.isValid(customerId)) return NextResponse.json({ error: 'invalid_customerId' }, { status: 400 })
-    baseFilter.customerId = new ObjectId(customerId)
+    const customerObjId = new ObjectId(customerId)
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $or: [{ customerId: customerObjId }, { customerId }]
+      }
+    ]
   }
 
   if (loanTypeId) {
     if (!ObjectId.isValid(loanTypeId)) return NextResponse.json({ error: 'invalid_loanTypeId' }, { status: 400 })
-    baseFilter.loanTypeId = new ObjectId(loanTypeId)
+    const loanTypeObjId = new ObjectId(loanTypeId)
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $or: [{ loanTypeId: loanTypeObjId }, { loanTypeId }]
+      }
+    ]
   }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    baseFilter.$or = [{ createdBy: userId }, { assignedAgentId: userId }]
+    const userIdHex = userId.toHexString()
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $or: [
+          { createdBy: userId },
+          { createdBy: userIdHex },
+          { assignedAgentId: userId },
+          { assignedAgentId: userIdHex }
+        ]
+      }
+    ]
   }
 
   const rows = await db
@@ -206,9 +247,23 @@ export async function GET(request: Request) {
       {
         $lookup: {
           from: 'customers',
-          let: { customerId: '$customerId', tenantId: '$tenantId' },
+          let: {
+            customerIdObj: { $convert: { input: '$customerId', to: 'objectId', onError: null, onNull: null } },
+            customerIdRaw: '$customerId'
+          },
           pipeline: [
-            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$customerId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: ['$tenantId', [tenantIdObj, tenantIdHex]] },
+                    {
+                      $or: [{ $eq: ['$_id', '$$customerIdObj'] }, { $eq: [{ $toString: '$_id' }, { $toString: '$$customerIdRaw' }] }]
+                    }
+                  ]
+                }
+              }
+            },
             { $project: { fullName: 1 } }
           ],
           as: 'customer'
@@ -218,9 +273,23 @@ export async function GET(request: Request) {
       {
         $lookup: {
           from: 'loanTypes',
-          let: { loanTypeId: '$loanTypeId', tenantId: '$tenantId' },
+          let: {
+            loanTypeIdObj: { $convert: { input: '$loanTypeId', to: 'objectId', onError: null, onNull: null } },
+            loanTypeIdRaw: '$loanTypeId'
+          },
           pipeline: [
-            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$loanTypeId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: ['$tenantId', [tenantIdObj, tenantIdHex]] },
+                    {
+                      $or: [{ $eq: ['$_id', '$$loanTypeIdObj'] }, { $eq: [{ $toString: '$_id' }, { $toString: '$$loanTypeIdRaw' }] }]
+                    }
+                  ]
+                }
+              }
+            },
             { $project: { name: 1 } }
           ],
           as: 'loanType'
@@ -230,9 +299,21 @@ export async function GET(request: Request) {
       {
         $lookup: {
           from: 'loanStatusPipelineStages',
-          let: { stageId: '$stageId', tenantId: '$tenantId' },
+          let: {
+            stageIdObj: { $convert: { input: '$stageId', to: 'objectId', onError: null, onNull: null } },
+            stageIdRaw: '$stageId'
+          },
           pipeline: [
-            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$stageId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: ['$tenantId', [tenantIdObj, tenantIdHex]] },
+                    { $or: [{ $eq: ['$_id', '$$stageIdObj'] }, { $eq: [{ $toString: '$_id' }, { $toString: '$$stageIdRaw' }] }] }
+                  ]
+                }
+              }
+            },
             { $project: { name: 1, order: 1 } }
           ],
           as: 'stage'
@@ -242,9 +323,23 @@ export async function GET(request: Request) {
       {
         $lookup: {
           from: 'users',
-          localField: 'assignedAgentId',
-          foreignField: '_id',
-          pipeline: [{ $project: { name: 1, email: 1 } }],
+          let: {
+            assignedAgentIdObj: { $convert: { input: '$assignedAgentId', to: 'objectId', onError: null, onNull: null } },
+            assignedAgentIdRaw: '$assignedAgentId'
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ['$_id', '$$assignedAgentIdObj'] },
+                    { $eq: [{ $toString: '$_id' }, { $toString: '$$assignedAgentIdRaw' }] }
+                  ]
+                }
+              }
+            },
+            { $project: { name: 1, email: 1 } }
+          ],
           as: 'assignedAgent'
         }
       },
@@ -288,11 +383,11 @@ export async function GET(request: Request) {
           totalDocuments: 1,
           incompleteDocumentsCount: 1,
           pendingDocumentsCount: 1,
-          customerName: '$customer.fullName',
-          loanTypeName: '$loanType.name',
-          stageName: '$stage.name',
-          assignedAgentName: '$assignedAgent.name',
-          assignedAgentEmail: '$assignedAgent.email'
+          customerName: { $ifNull: ['$customer.fullName', '$customerName'] },
+          loanTypeName: { $ifNull: ['$loanType.name', '$loanTypeName'] },
+          stageName: { $ifNull: ['$stage.name', '$stageName'] },
+          assignedAgentName: { $ifNull: ['$assignedAgent.name', '$assignedAgentName'] },
+          assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] }
         }
       }
     ])

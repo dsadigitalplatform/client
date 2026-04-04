@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import crypto from 'crypto'
 
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
@@ -27,7 +28,8 @@ type MembershipItem = {
 type RevokeInvitePayload = {
   tenantId?: string
   membershipId?: string
-  action?: 'revoke_invite' | 'resend_invite'
+  role?: 'OWNER' | 'ADMIN' | 'USER'
+  action?: 'revoke_invite' | 'resend_invite' | 'update_invite_role' | 'revoke_access'
 }
 
 export async function GET(request: Request) {
@@ -43,6 +45,7 @@ export async function GET(request: Request) {
   }
 
   const db = await getDb()
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
   const userId = new ObjectId(session.userId)
   const email = String((session as any)?.user?.email || '')
 
@@ -55,17 +58,19 @@ export async function GET(request: Request) {
 
   if (emailFilter) orFilters.push(emailFilter)
 
-  const ownerMembership = await db
-    .collection('memberships')
-    .findOne({
-      tenantId: new ObjectId(tenantId),
-      $or: orFilters,
-      role: { $in: ['OWNER', 'ADMIN'] },
-      status: 'active'
-    })
+  if (!isSuperAdmin) {
+    const ownerMembership = await db
+      .collection('memberships')
+      .findOne({
+        tenantId: new ObjectId(tenantId),
+        $or: orFilters,
+        role: { $in: ['OWNER', 'ADMIN'] },
+        status: 'active'
+      })
 
-  if (!ownerMembership) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    if (!ownerMembership) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
   }
 
   const items = await db
@@ -73,7 +78,7 @@ export async function GET(request: Request) {
     .find(
       {
         tenantId: new ObjectId(tenantId),
-        status: { $in: ['invited', 'active'] },
+        status: { $in: ['invited', 'active', 'revoked'] },
         userId: { $ne: new ObjectId(session.userId) }
       },
       { projection: { _id: 1, userId: 1, email: 1, role: 1, status: 1, invitedBy: 1 } }
@@ -129,7 +134,7 @@ export async function PATCH(request: Request) {
   const membershipId = String(body?.membershipId || '')
   const action = body?.action
 
-  if (action !== 'revoke_invite' && action !== 'resend_invite') {
+  if (action !== 'revoke_invite' && action !== 'resend_invite' && action !== 'update_invite_role' && action !== 'revoke_access') {
     return NextResponse.json({ error: 'invalid_action' }, { status: 400 })
   }
 
@@ -156,23 +161,32 @@ export async function PATCH(request: Request) {
   if (requesterEmailFilter) orFilters.push(requesterEmailFilter)
 
   const tenantIdObj = new ObjectId(tenantId)
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any)?.currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
 
   const targetMembershipId = new ObjectId(membershipId)
 
   const targetMembership = await db.collection('memberships').findOne(
     {
       _id: targetMembershipId,
-      tenantId: tenantIdObj,
-      status: 'invited'
+      tenantId: tenantIdObj
     },
-    { projection: { role: 1, invitedBy: 1, email: 1, tenantId: 1 } }
+    { projection: { role: 1, invitedBy: 1, email: 1, tenantId: 1, status: 1, userId: 1 } }
   )
 
   if (!targetMembership) {
     return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
   }
 
+  let requesterRole: MembershipRole = 'USER'
+
   if (!isSuperAdmin) {
+    if (!currentTenantId || currentTenantId !== tenantId) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
     const requesterMembership = await db
       .collection('memberships')
       .findOne({ tenantId: tenantIdObj, $or: orFilters, status: 'active' }, { projection: { role: 1 } })
@@ -181,19 +195,98 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
 
-    const requesterRole = String((requesterMembership as any).role || 'USER') as MembershipRole
+    requesterRole = String((requesterMembership as any).role || 'USER') as MembershipRole
     const targetInvitedById = ((targetMembership as any).invitedBy as ObjectId | undefined)?.toHexString?.() || ''
     const isOwner = requesterRole === 'OWNER'
     const isAdminRevokingOwnInvite = requesterRole === 'ADMIN' && targetInvitedById === requesterId.toHexString()
+    const isRoleUpdateOrAccessRevoke = action === 'update_invite_role' || action === 'revoke_access'
 
-    if (!isOwner && !isAdminRevokingOwnInvite) {
+    if (isRoleUpdateOrAccessRevoke) {
+      if (!isOwner) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+      if (String((targetMembership as any).role || '') === 'OWNER') {
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+      }
+    } else if (!isOwner && !isAdminRevokingOwnInvite) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
   }
 
   const now = new Date()
 
+  if (action === 'update_invite_role') {
+    const nextRole = body?.role
+
+    if (nextRole !== 'OWNER' && nextRole !== 'ADMIN' && nextRole !== 'USER') {
+      return NextResponse.json({ error: 'invalid_role' }, { status: 400 })
+    }
+
+    if (!isSuperAdmin && nextRole === 'OWNER') {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
+    if (String((targetMembership as any).status || '') !== 'active') {
+      return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
+    }
+
+    const updated = await db.collection('memberships').updateOne(
+      {
+        _id: targetMembershipId,
+        tenantId: tenantIdObj,
+        status: 'active'
+      },
+      {
+        $set: {
+          role: nextRole,
+          updatedAt: now
+        }
+      }
+    )
+
+    if (updated.matchedCount === 0) {
+      return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'revoke_access') {
+    if (String((targetMembership as any).status || '') === 'revoked') {
+      return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
+    }
+
+    const revoked = await db.collection('memberships').updateOne(
+      {
+        _id: targetMembershipId,
+        tenantId: tenantIdObj,
+        status: { $in: ['invited', 'active'] }
+      },
+      {
+        $set: {
+          status: 'revoked',
+          revokedAt: now,
+          revokedBy: requesterId,
+          updatedAt: now
+        },
+        $unset: {
+          inviteToken: '',
+          expiresAt: ''
+        }
+      }
+    )
+
+    if (revoked.matchedCount === 0) {
+      return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true })
+  }
+
   if (action === 'resend_invite') {
+    if (String((targetMembership as any).status || '') !== 'invited') {
+      return NextResponse.json({ error: 'invite_not_found' }, { status: 404 })
+    }
+
     const token = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000)
     const invitedEmail = String((targetMembership as any).email || '').trim()

@@ -13,6 +13,13 @@ import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
 import Alert from '@mui/material/Alert'
 import Chip from '@mui/material/Chip'
 import Card from '@mui/material/Card'
@@ -27,6 +34,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
 type InviteRole = 'ADMIN' | 'USER'
+type EditableRole = 'OWNER' | 'ADMIN' | 'USER'
 
 type InvitationPayload = {
   email: string
@@ -57,6 +65,9 @@ const InviteUserForm = () => {
   const [submitting, setSubmitting] = useState<boolean>(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null)
+  const [roleDraftById, setRoleDraftById] = useState<Record<string, EditableRole>>({})
+  const [revokeTarget, setRevokeTarget] = useState<{ id: string; email: string } | null>(null)
   const [tenantRole, setTenantRole] = useState<TenantRole | undefined>(undefined)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -141,7 +152,7 @@ const InviteUserForm = () => {
     }
   }
 
-  const handleWithdrawInvite = async (membershipId?: string) => {
+  const handleRevokeAccess = async (membershipId?: string) => {
     if (!membershipId) return
 
     if (!tenantId) {
@@ -159,7 +170,7 @@ const InviteUserForm = () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'revoke_invite',
+          action: 'revoke_access',
           tenantId,
           membershipId
         })
@@ -169,18 +180,94 @@ const InviteUserForm = () => {
 
       if (!res.ok) {
         if (payload?.error === 'invite_not_found') {
-          throw new Error('Invitation is no longer active')
+          throw new Error('User access is no longer active')
         }
 
-        throw new Error(payload?.error || 'Failed to withdraw invitation')
+        if (payload?.error === 'forbidden') {
+          throw new Error('You are not allowed to revoke this access')
+        }
+
+        throw new Error(payload?.error || 'Failed to revoke access')
       }
 
-      setSuccessMsg('Invitation withdrawn')
+      setSuccessMsg('Access revoked')
       mutate()
     } catch (e: any) {
       setErrorMsg(e.message || 'Unexpected error')
     } finally {
       setRevokingId(null)
+    }
+  }
+
+  const openRevokeDialog = (membershipId?: string, targetEmail?: string) => {
+    if (!membershipId) return
+
+    setRevokeTarget({ id: membershipId, email: targetEmail || 'this user' })
+  }
+
+  const closeRevokeDialog = () => {
+    if (revokingId) return
+    setRevokeTarget(null)
+  }
+
+  const confirmRevokeAccess = async () => {
+    if (!revokeTarget?.id) return
+    await handleRevokeAccess(revokeTarget.id)
+    setRevokeTarget(null)
+  }
+
+  const handleUpdateInvitedRole = async (membershipId?: string, nextRole?: EditableRole) => {
+    if (!membershipId || !nextRole) return
+
+    if (!tenantId) {
+      setErrorMsg('No tenant selected')
+
+      return
+    }
+
+    setSuccessMsg(null)
+    setErrorMsg(null)
+    setSavingRoleId(membershipId)
+
+    try {
+      const res = await fetch('/api/memberships', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_invite_role',
+          tenantId,
+          membershipId,
+          role: nextRole
+        })
+      })
+
+      const payload = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        if (payload?.error === 'invite_not_found') {
+          throw new Error('Membership is no longer available')
+        }
+
+        if (payload?.error === 'forbidden') {
+          throw new Error('You are not allowed to update this role')
+        }
+
+        throw new Error(payload?.error || 'Failed to update role')
+      }
+
+      setSuccessMsg('Role updated')
+      setRoleDraftById(prev => {
+        const next = { ...prev }
+
+        delete next[membershipId]
+
+        return next
+      })
+      mutate()
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Unexpected error')
+    } finally {
+      setSavingRoleId(null)
     }
   }
 
@@ -233,11 +320,11 @@ const InviteUserForm = () => {
 
   const raw = (data as any)?.memberships ?? data
   const list: Membership[] = Array.isArray(raw) ? raw : []
-  const members = list.filter(m => m.status === 'invited' || m.status === 'active')
+  const members = list
   const meUserId = (session as any)?.userId as string | undefined
   const meEmail = (session as any)?.user?.email as string | undefined
 
-  const canWithdrawInvite = (m: Membership) => {
+  const canResendInvite = (m: Membership) => {
     if (m.status !== 'invited') return false
     if (isSuperAdmin) return true
     if (tenantRole === 'OWNER') return true
@@ -245,6 +332,28 @@ const InviteUserForm = () => {
 
     return false
   }
+
+  const canUpdateInvitedRole = (m: Membership) => {
+    if (m.status !== 'active') return false
+    if (!isSuperAdmin && m.role === 'OWNER') return false
+
+    return isSuperAdmin || tenantRole === 'OWNER'
+  }
+
+  const canRevokeAccess = (m: Membership) => {
+    if (m.status !== 'invited' && m.status !== 'active') return false
+
+    return isSuperAdmin || tenantRole === 'OWNER'
+  }
+
+  const selectedRoleFor = (m: Membership): EditableRole => {
+    if (!m._id) return m.role
+    if (roleDraftById[m._id]) return roleDraftById[m._id]
+
+    return m.role
+  }
+
+  const roleChanged = (m: Membership) => selectedRoleFor(m) !== m.role
 
   const filtered = members.filter(m => {
     if (m.userId && meUserId && m.userId === meUserId) return false
@@ -258,6 +367,7 @@ const InviteUserForm = () => {
   const statusColor = (s: MembershipStatus) => {
     if (s === 'active') return 'success'
     if (s === 'invited') return 'primary'
+    if (s === 'revoked') return 'error'
 
     return 'default'
   }
@@ -298,7 +408,7 @@ const InviteUserForm = () => {
         {submitting ? 'Sending...' : 'Send Invitation'}
       </Button>
       <Box className='flex flex-col gap-2'>
-        <Typography variant='h6'>Invited Users</Typography>
+        <Typography variant='h6'>Organisation Access</Typography>
         {isMobile ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {isLoading ? (
@@ -313,7 +423,7 @@ const InviteUserForm = () => {
               <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent sx={{ p: 2 }}>
                   <Typography variant='body2' color='text.secondary'>
-                    No invited users
+                    No users found
                   </Typography>
                 </CardContent>
               </Card>
@@ -350,26 +460,74 @@ const InviteUserForm = () => {
                         <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
                           Invited by: {m.invitedByName || '—'}
                         </Typography>
-                        {canWithdrawInvite(m) ? (
-                          <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            <Button
-                              size='small'
-                              variant='outlined'
-                              onClick={() => handleResendInvite(m._id)}
-                              disabled={resendingId === m._id || revokingId === m._id}
-                            >
-                              {resendingId === m._id ? 'Resending...' : 'Resend Invite'}
-                            </Button>
-                            <Button
-                              size='small'
-                              color='error'
-                              variant='outlined'
-                              onClick={() => handleWithdrawInvite(m._id)}
-                              disabled={revokingId === m._id || resendingId === m._id}
-                            >
-                              {revokingId === m._id ? 'Withdrawing...' : 'Withdraw Invite'}
-                            </Button>
+                        {canUpdateInvitedRole(m) && m._id ? (
+                          <Box sx={{ mt: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <FormControl size='small' sx={{ minWidth: 130 }}>
+                              <InputLabel id={`member-role-${m._id}`}>Role</InputLabel>
+                              <Select
+                                labelId={`member-role-${m._id}`}
+                                label='Role'
+                                value={selectedRoleFor(m)}
+                                onChange={e => setRoleDraftById(prev => ({ ...prev, [m._id as string]: e.target.value as EditableRole }))}
+                                disabled={savingRoleId === m._id || revokingId === m._id || resendingId === m._id}
+                              >
+                                {isSuperAdmin ? <MenuItem value='OWNER'>Owner</MenuItem> : null}
+                                <MenuItem value='ADMIN'>Admin</MenuItem>
+                                <MenuItem value='USER'>User</MenuItem>
+                              </Select>
+                            </FormControl>
+                            <Tooltip title='Save role'>
+                              <span>
+                                <IconButton
+                                  size='small'
+                                  color='primary'
+                                  onClick={() => handleUpdateInvitedRole(m._id, selectedRoleFor(m))}
+                                  disabled={savingRoleId === m._id || !roleChanged(m) || revokingId === m._id || resendingId === m._id}
+                                >
+                                  <i className='ri-save-line' />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                           </Box>
+                        ) : null}
+                        {canResendInvite(m) || canRevokeAccess(m) ? (
+                          <Box sx={{ mt: 0.75, display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                            {canResendInvite(m) ? (
+                              <Tooltip title='Resend invite'>
+                                <span>
+                                  <IconButton
+                                    size='small'
+                                    color='primary'
+                                    onClick={() => handleResendInvite(m._id)}
+                                    disabled={resendingId === m._id || revokingId === m._id || savingRoleId === m._id}
+                                  >
+                                    <i className='ri-mail-send-line' />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                            {canRevokeAccess(m) ? (
+                              <Tooltip title='Revoke access'>
+                                <span>
+                                  <IconButton
+                                    size='small'
+                                    color='error'
+                                    onClick={() => openRevokeDialog(m._id, m.email)}
+                                    disabled={revokingId === m._id || resendingId === m._id || savingRoleId === m._id}
+                                  >
+                                    <i className='ri-user-unfollow-line' />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                          </Box>
+                        ) : null}
+                        {(savingRoleId === m._id || resendingId === m._id || revokingId === m._id) ? (
+                          <Typography variant='caption' color='text.secondary' sx={{ mt: 0.5, display: 'block' }}>
+                            {savingRoleId === m._id ? 'Saving role...' : null}
+                            {resendingId === m._id ? 'Resending invite...' : null}
+                            {revokingId === m._id ? 'Revoking access...' : null}
+                          </Typography>
                         ) : null}
                       </Box>
                     </Box>
@@ -386,7 +544,7 @@ const InviteUserForm = () => {
                 <TableCell>Role</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Invited By</TableCell>
-                <TableCell align='right'>Action</TableCell>
+                <TableCell align='right'>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -402,29 +560,75 @@ const InviteUserForm = () => {
                 filtered.map((m, idx) => (
                   <TableRow key={m._id ?? idx}>
                     <TableCell>{m.email ?? ''}</TableCell>
-                    <TableCell>{m.role}</TableCell>
-                    <TableCell>{statusLabel(m.status)}</TableCell>
+                    <TableCell>
+                      {canUpdateInvitedRole(m) && m._id ? (
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                          <FormControl size='small' sx={{ minWidth: 120 }}>
+                            <InputLabel id={`table-member-role-${m._id}`}>Role</InputLabel>
+                            <Select
+                              labelId={`table-member-role-${m._id}`}
+                              label='Role'
+                              value={selectedRoleFor(m)}
+                              onChange={e => setRoleDraftById(prev => ({ ...prev, [m._id as string]: e.target.value as EditableRole }))}
+                              disabled={savingRoleId === m._id || revokingId === m._id || resendingId === m._id}
+                            >
+                              {isSuperAdmin ? <MenuItem value='OWNER'>Owner</MenuItem> : null}
+                              <MenuItem value='ADMIN'>Admin</MenuItem>
+                              <MenuItem value='USER'>User</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <Tooltip title='Save role'>
+                            <span>
+                              <IconButton
+                                size='small'
+                                color='primary'
+                                onClick={() => handleUpdateInvitedRole(m._id, selectedRoleFor(m))}
+                                disabled={savingRoleId === m._id || !roleChanged(m) || revokingId === m._id || resendingId === m._id}
+                              >
+                                <i className='ri-save-line' />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Box>
+                      ) : (
+                        m.role
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip size='small' variant='outlined' color={statusColor(m.status)} label={statusLabel(m.status)} sx={{ boxShadow: 'none' }} />
+                    </TableCell>
                     <TableCell>{m.invitedByName || '—'}</TableCell>
                     <TableCell align='right'>
-                      {canWithdrawInvite(m) ? (
-                        <Box sx={{ display: 'inline-flex', gap: 1 }}>
-                          <Button
-                            size='small'
-                            variant='outlined'
-                            onClick={() => handleResendInvite(m._id)}
-                            disabled={resendingId === m._id || revokingId === m._id}
-                          >
-                            {resendingId === m._id ? 'Resending...' : 'Resend Invite'}
-                          </Button>
-                          <Button
-                            size='small'
-                            color='error'
-                            variant='outlined'
-                            onClick={() => handleWithdrawInvite(m._id)}
-                            disabled={revokingId === m._id || resendingId === m._id}
-                          >
-                            {revokingId === m._id ? 'Withdrawing...' : 'Withdraw Invite'}
-                          </Button>
+                      {(canResendInvite(m) || canRevokeAccess(m)) && m._id ? (
+                        <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
+                          {canResendInvite(m) ? (
+                            <Tooltip title='Resend invite'>
+                              <span>
+                                <IconButton
+                                  size='small'
+                                  color='primary'
+                                  onClick={() => handleResendInvite(m._id)}
+                                  disabled={resendingId === m._id || revokingId === m._id || savingRoleId === m._id}
+                                >
+                                  <i className='ri-mail-send-line' />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          ) : null}
+                          {canRevokeAccess(m) ? (
+                            <Tooltip title='Revoke access'>
+                              <span>
+                                <IconButton
+                                  size='small'
+                                  color='error'
+                                  onClick={() => openRevokeDialog(m._id, m.email)}
+                                  disabled={revokingId === m._id || resendingId === m._id || savingRoleId === m._id}
+                                >
+                                  <i className='ri-user-unfollow-line' />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          ) : null}
                         </Box>
                       ) : null}
                     </TableCell>
@@ -435,6 +639,22 @@ const InviteUserForm = () => {
           </Table>
         )}
       </Box>
+      <Dialog open={Boolean(revokeTarget)} onClose={closeRevokeDialog} fullWidth maxWidth='xs'>
+        <DialogTitle>Confirm Revoke Access</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to revoke access for {revokeTarget?.email || 'this user'}?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRevokeDialog} disabled={Boolean(revokingId)}>
+            Cancel
+          </Button>
+          <Button color='error' variant='contained' onClick={confirmRevokeAccess} disabled={Boolean(revokingId)}>
+            {revokingId ? 'Revoking...' : 'Revoke Access'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

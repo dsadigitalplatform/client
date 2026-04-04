@@ -5,6 +5,7 @@ export type LoanType = {
   isActive: boolean
   createdAt: string | null
   checklistCount?: number
+  canManage?: boolean
 }
 
 export type LoanTypeDocumentStatus = 'REQUIRED' | 'OPTIONAL' | 'INACTIVE'

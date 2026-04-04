@@ -203,9 +203,13 @@ const LoanStatusPipelineList = () => {
                     />
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    <IconButton color='error' onClick={() => setDeleteTarget({ id: s.id, name: s.name })} aria-label={`Delete ${s.name}`}>
-                      <i className='ri-delete-bin-6-line' />
-                    </IconButton>
+                    {s.canManage ? (
+                      <IconButton color='error' onClick={() => setDeleteTarget({ id: s.id, name: s.name })} aria-label={`Delete ${s.name}`}>
+                        <i className='ri-delete-bin-6-line' />
+                      </IconButton>
+                    ) : (
+                      <Box sx={{ width: 40, height: 40 }} />
+                    )}
                   </Box>
                 </CardContent>
               </Card>
@@ -260,9 +264,11 @@ const LoanStatusPipelineList = () => {
                   </TableCell>
                   <TableCell>{s.description || '-'}</TableCell>
                   <TableCell align='right'>
-                    <Button size='small' color='error' variant='outlined' onClick={() => setDeleteTarget({ id: s.id, name: s.name })}>
-                      Delete
-                    </Button>
+                    {s.canManage ? (
+                      <Button size='small' color='error' variant='outlined' onClick={() => setDeleteTarget({ id: s.id, name: s.name })}>
+                        Delete
+                      </Button>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))

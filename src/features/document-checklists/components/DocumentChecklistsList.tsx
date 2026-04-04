@@ -272,13 +272,17 @@ const DocumentChecklistsList = () => {
                                             />
                                         </Box>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                                            <IconButton
-                                                color='error'
-                                                onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
-                                                aria-label={`Delete ${d.name}`}
-                                            >
-                                                <i className='ri-delete-bin-6-line' />
-                                            </IconButton>
+                                            {d.canManage ? (
+                                                <IconButton
+                                                    color='error'
+                                                    onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
+                                                    aria-label={`Delete ${d.name}`}
+                                                >
+                                                    <i className='ri-delete-bin-6-line' />
+                                                </IconButton>
+                                            ) : (
+                                                <Box sx={{ width: 40, height: 40 }} />
+                                            )}
                                         </Box>
                                     </CardContent>
                                 </Card>
@@ -350,14 +354,16 @@ const DocumentChecklistsList = () => {
                                             />
                                         </TableCell>
                                         <TableCell align='right'>
-                                            <Button
-                                                size='small'
-                                                color='error'
-                                                variant='outlined'
-                                                onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
-                                            >
-                                                Delete
-                                            </Button>
+                                            {d.canManage ? (
+                                                <Button
+                                                    size='small'
+                                                    color='error'
+                                                    variant='outlined'
+                                                    onClick={() => setDeleteTarget({ id: d.id, name: d.name })}
+                                                >
+                                                    Delete
+                                                </Button>
+                                            ) : null}
                                         </TableCell>
                                     </TableRow>
                                 )

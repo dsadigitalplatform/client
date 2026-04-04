@@ -89,6 +89,8 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
     )
   }
 
+  const canManage = Boolean(data?.canManage)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Card>
@@ -101,13 +103,17 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                   Back to List
                 </Button>
                 {!editMode ? (
-                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
-                    Edit
+                  canManage ? (
+                    <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                      Edit
+                    </Button>
+                  ) : null
+                ) : null}
+                {canManage ? (
+                  <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                    Delete
                   </Button>
                 ) : null}
-                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
-                  Delete
-                </Button>
               </Box>
             }
           />
@@ -127,12 +133,16 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                 Stage
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit stage'>
-                  <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
-                </IconButton>
-                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete stage'>
-                  <i className='ri-delete-bin-6-line' />
-                </IconButton>
+                {canManage ? (
+                  <>
+                    <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit stage'>
+                      <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
+                    </IconButton>
+                    <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete stage'>
+                      <i className='ri-delete-bin-6-line' />
+                    </IconButton>
+                  </>
+                ) : null}
               </Box>
             </Box>
           ) : null}
@@ -178,7 +188,7 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
         </CardContent>
       </Card>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <Dialog open={canManage && confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Delete Stage</DialogTitle>
         <DialogContent>
           <Typography variant='body2'>Are you sure you want to delete this stage?</Typography>

@@ -4,5 +4,6 @@ export type LoanStatusStage = {
   description: string | null
   order: number
   createdAt: string | null
+  canManage?: boolean
 }
 

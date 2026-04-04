@@ -4,4 +4,5 @@ export type DocumentChecklist = {
   description: string | null
   isActive: boolean
   createdAt: string | null
+  canManage?: boolean
 }

@@ -39,6 +39,8 @@ const LoanCasesList = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const sessionUserId = String((session as any)?.userId || '')
+  const [tenantRole, setTenantRole] = useState<'OWNER' | 'ADMIN' | 'USER' | undefined>(undefined)
+  const isUserRole = tenantRole === 'USER'
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
@@ -46,14 +48,15 @@ const LoanCasesList = () => {
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
+  const effectiveAssignedAgentId = isUserRole ? '' : assignedAgentId
 
   const filters = useMemo(
     () => ({
       stageId: stageId || undefined,
-      assignedAgentId: assignedAgentId || undefined,
+      assignedAgentId: effectiveAssignedAgentId || undefined,
       showInactive: showInactive || undefined
     }),
-    [stageId, assignedAgentId, showInactive]
+    [stageId, effectiveAssignedAgentId, showInactive]
   )
 
   const { cases, loading } = useLoanCases(filters)
@@ -75,13 +78,34 @@ const LoanCasesList = () => {
   }, [])
 
   useEffect(() => {
-    if (hasAgentFilterOverride) return
     if (!sessionUserId) return
+
+    if (isUserRole) {
+      if (assignedAgentId === sessionUserId) return
+      setAssignedAgentId(sessionUserId)
+
+      return
+    }
+
+    if (hasAgentFilterOverride) return
     if (assignedAgentId) return
     if (!userOptions.some(u => u.id === sessionUserId)) return
 
     setAssignedAgentId(sessionUserId)
-  }, [assignedAgentId, hasAgentFilterOverride, sessionUserId, userOptions])
+  }, [assignedAgentId, hasAgentFilterOverride, isUserRole, sessionUserId, userOptions])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/session/tenant', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        const role = typeof data?.role === 'string' ? (data.role as 'OWNER' | 'ADMIN' | 'USER') : undefined
+
+        setTenantRole(role)
+      } catch {
+      }
+    })()
+  }, [])
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
   const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
@@ -150,6 +174,7 @@ const LoanCasesList = () => {
             labelId='loan-cases-agent-filter'
             label='Assigned Agent'
             value={assignedAgentId}
+            disabled={isUserRole}
             onChange={e => {
               setHasAgentFilterOverride(true)
               setAssignedAgentId(String(e.target.value))

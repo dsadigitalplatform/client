@@ -85,6 +85,8 @@ const AssociateTypeDetails = ({ id }: Props) => {
     )
   }
 
+  const canManage = Boolean(data?.canManage)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Card>
@@ -97,13 +99,17 @@ const AssociateTypeDetails = ({ id }: Props) => {
                   Back to List
                 </Button>
                 {!editMode ? (
-                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
-                    Edit
+                  canManage ? (
+                    <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                      Edit
+                    </Button>
+                  ) : null
+                ) : null}
+                {canManage ? (
+                  <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                    Delete
                   </Button>
                 ) : null}
-                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
-                  Delete
-                </Button>
               </Box>
             }
           />
@@ -123,12 +129,16 @@ const AssociateTypeDetails = ({ id }: Props) => {
                 Associate Type
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit associate type'>
-                  <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
-                </IconButton>
-                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete associate type'>
-                  <i className='ri-delete-bin-6-line' />
-                </IconButton>
+                {canManage ? (
+                  <>
+                    <IconButton color='primary' onClick={() => setEditMode(v => !v)} aria-label='Edit associate type'>
+                      <i className={editMode ? 'ri-close-line' : 'ri-pencil-line'} />
+                    </IconButton>
+                    <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete associate type'>
+                      <i className='ri-delete-bin-6-line' />
+                    </IconButton>
+                  </>
+                ) : null}
               </Box>
             </Box>
           ) : null}
@@ -206,7 +216,7 @@ const AssociateTypeDetails = ({ id }: Props) => {
         </Alert>
       </Snackbar>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <Dialog open={canManage && confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Delete Associate Type</DialogTitle>
         <DialogContent>
           <Typography variant='body2'>This will permanently delete the associate type.</Typography>

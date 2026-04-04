@@ -121,11 +121,6 @@ export async function GET(request: Request) {
 
   const baseFilter: any = { tenantId: tenantIdObj }
 
-  // normal users restricted to their own creations
-  if ((membership as any).role !== 'ADMIN' && (membership as any).role !== 'OWNER') {
-    baseFilter.createdBy = userId
-  }
-
   if (mobileParam) {
     const normalized = String(mobileParam).trim()
 

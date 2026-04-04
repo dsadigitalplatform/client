@@ -132,6 +132,7 @@ const CustomerDetails = ({ id }: Props) => {
   if (!data) return <Typography>Not found</Typography>
 
   const secondaryContacts = Array.isArray(data.secondaryContacts) ? data.secondaryContacts : []
+  const canManage = Boolean(data?.canManage)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -197,9 +198,13 @@ const CustomerDetails = ({ id }: Props) => {
                   <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
                     Customer
                   </Typography>
-                  <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit customer'>
-                    <i className='ri-pencil-line' />
-                  </IconButton>
+                  {canManage ? (
+                    <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit customer'>
+                      <i className='ri-pencil-line' />
+                    </IconButton>
+                  ) : (
+                    <Box sx={{ width: 40, height: 40 }} />
+                  )}
                 </Box>
               ) : null}
               {isMobile ? (
@@ -382,21 +387,33 @@ const CustomerDetails = ({ id }: Props) => {
               <Divider sx={{ my: { xs: 2.5, sm: 3 } }} />
               {isMobile ? (
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  <Button variant='contained' fullWidth onClick={() => setEditMode(true)}>
-                    Update
-                  </Button>
-                  <Button variant='outlined' color='error' fullWidth onClick={() => setConfirmOpen(true)}>
-                    Delete
-                  </Button>
+                  {canManage ? (
+                    <>
+                      <Button variant='contained' fullWidth onClick={() => setEditMode(true)}>
+                        Update
+                      </Button>
+                      <Button variant='outlined' color='error' fullWidth onClick={() => setConfirmOpen(true)}>
+                        Delete
+                      </Button>
+                    </>
+                  ) : (
+                    <Button fullWidth onClick={() => router.push('/customers')}>
+                      Back to List
+                    </Button>
+                  )}
                 </Box>
               ) : (
                 <Box className='flex gap-2'>
-                  <Button variant='contained' onClick={() => setEditMode(true)}>
-                    Update
-                  </Button>
-                  <Button variant='outlined' color='error' onClick={() => setConfirmOpen(true)}>
-                    Delete
-                  </Button>
+                  {canManage ? (
+                    <>
+                      <Button variant='contained' onClick={() => setEditMode(true)}>
+                        Update
+                      </Button>
+                      <Button variant='outlined' color='error' onClick={() => setConfirmOpen(true)}>
+                        Delete
+                      </Button>
+                    </>
+                  ) : null}
                   <Link href='/customers'>
                     <Button>Back to List</Button>
                   </Link>

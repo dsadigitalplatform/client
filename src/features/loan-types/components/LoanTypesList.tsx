@@ -388,18 +388,24 @@ const LoanTypesList = () => {
                                                     }}
                                                 />
                                             ) : (
-                                                <Button
-                                                    size='small'
-                                                    variant='outlined'
-                                                    startIcon={<i className='ri-add-line' />}
-                                                    onClick={() => openMapping(lt.id, lt.name)}
-                                                >
-                                                    Add Checklist
-                                                </Button>
+                                                lt.canManage ? (
+                                                    <Button
+                                                        size='small'
+                                                        variant='outlined'
+                                                        startIcon={<i className='ri-add-line' />}
+                                                        onClick={() => openMapping(lt.id, lt.name)}
+                                                    >
+                                                        Add Checklist
+                                                    </Button>
+                                                ) : <Box />
                                             )}
-                                            <IconButton color='error' onClick={() => setConfirmId(lt.id)} aria-label='Delete loan type'>
-                                                <i className='ri-delete-bin-6-line' />
-                                            </IconButton>
+                                            {lt.canManage ? (
+                                                <IconButton color='error' onClick={() => setConfirmId(lt.id)} aria-label='Delete loan type'>
+                                                    <i className='ri-delete-bin-6-line' />
+                                                </IconButton>
+                                            ) : (
+                                                <Box sx={{ width: 40, height: 40 }} />
+                                            )}
                                         </Box>
                                     </CardContent>
                                 </Card>
@@ -467,14 +473,18 @@ const LoanTypesList = () => {
                                                     }}
                                                 />
                                             ) : (
-                                                <Button
-                                                    size='small'
-                                                    variant='outlined'
-                                                    startIcon={<i className='ri-add-line' />}
-                                                    onClick={() => openMapping(lt.id, lt.name)}
-                                                >
-                                                    Add Checklist
-                                                </Button>
+                                                lt.canManage ? (
+                                                    <Button
+                                                        size='small'
+                                                        variant='outlined'
+                                                        startIcon={<i className='ri-add-line' />}
+                                                        onClick={() => openMapping(lt.id, lt.name)}
+                                                    >
+                                                        Add Checklist
+                                                    </Button>
+                                                ) : (
+                                                    <Typography variant='body2' color='text.secondary'>-</Typography>
+                                                )
                                             )}
                                         </TableCell>
                                         <TableCell>
@@ -492,14 +502,16 @@ const LoanTypesList = () => {
                                             />
                                         </TableCell>
                                         <TableCell align='right'>
-                                            <Button
-                                                color='error'
-                                                size='small'
-                                                variant='outlined'
-                                                onClick={() => setConfirmId(lt.id)}
-                                            >
-                                                Delete
-                                            </Button>
+                                            {lt.canManage ? (
+                                                <Button
+                                                    color='error'
+                                                    size='small'
+                                                    variant='outlined'
+                                                    onClick={() => setConfirmId(lt.id)}
+                                                >
+                                                    Delete
+                                                </Button>
+                                            ) : null}
                                         </TableCell>
                                     </TableRow>
                                 )

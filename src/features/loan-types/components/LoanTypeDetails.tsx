@@ -181,6 +181,8 @@ const LoanTypeDetails = ({ id }: Props) => {
     )
   }
 
+  const canManage = Boolean(data?.canManage)
+
   const mappedRows = mappings
     .map(m => {
       const doc = documents.find(d => d.id === m.documentId)
@@ -201,13 +203,17 @@ const LoanTypeDetails = ({ id }: Props) => {
                   Back to Loan Types
                 </Button>
                 {!editMode ? (
-                  <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
-                    Edit
+                  canManage ? (
+                    <Button size='small' variant='outlined' onClick={() => setEditMode(true)}>
+                      Edit
+                    </Button>
+                  ) : null
+                ) : null}
+                {canManage ? (
+                  <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
+                    Delete
                   </Button>
                 ) : null}
-                <Button size='small' color='error' variant='outlined' onClick={() => setConfirmOpen(true)}>
-                  Delete
-                </Button>
               </Box>
             }
           />
@@ -227,12 +233,16 @@ const LoanTypeDetails = ({ id }: Props) => {
                 Loan Type
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit loan type'>
-                  <i className='ri-pencil-line' />
-                </IconButton>
-                <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete loan type'>
-                  <i className='ri-delete-bin-6-line' />
-                </IconButton>
+                {canManage ? (
+                  <>
+                    <IconButton color='primary' onClick={() => setEditMode(true)} aria-label='Edit loan type'>
+                      <i className='ri-pencil-line' />
+                    </IconButton>
+                    <IconButton color='error' onClick={() => setConfirmOpen(true)} aria-label='Delete loan type'>
+                      <i className='ri-delete-bin-6-line' />
+                    </IconButton>
+                  </>
+                ) : null}
               </Box>
             </Box>
           ) : null}
@@ -306,7 +316,7 @@ const LoanTypeDetails = ({ id }: Props) => {
                   label='Add Document'
                   value={newDocumentId}
                   onChange={e => setNewDocumentId(e.target.value)}
-                  disabled={mappingSaving}
+                  disabled={mappingSaving || !canManage}
                   fullWidth={fullScreen}
                 >
                   {documents.length === 0 ? (
@@ -321,14 +331,14 @@ const LoanTypeDetails = ({ id }: Props) => {
                 </TextField>
               </FormControl>
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
-                <Button variant='outlined' onClick={addDocument} disabled={!newDocumentId || mappingSaving} fullWidth={fullScreen}>
+                <Button variant='outlined' onClick={addDocument} disabled={!newDocumentId || mappingSaving || !canManage} fullWidth={fullScreen}>
                   Add
                 </Button>
                 <Button
                   variant='text'
                   onClick={() => setCreateOpen(true)}
                   startIcon={<i className='ri-add-line' />}
-                  disabled={mappingSaving}
+                  disabled={mappingSaving || !canManage}
                   fullWidth={fullScreen}
                 >
                   Create Checklist
@@ -372,7 +382,7 @@ const LoanTypeDetails = ({ id }: Props) => {
                                 label='Status'
                                 value={row.status}
                                 onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
-                                disabled={mappingSaving}
+                                disabled={mappingSaving || !canManage}
                                 sx={{ flex: 1 }}
                               >
                                 {STATUS_OPTIONS.map(opt => (
@@ -381,15 +391,17 @@ const LoanTypeDetails = ({ id }: Props) => {
                                   </MenuItem>
                                 ))}
                               </TextField>
-                              <IconButton
-                                aria-label='Remove document'
-                                onClick={() => removeMapping(row.id)}
-                                disabled={mappingSaving}
-                                color='error'
-                                sx={{ mt: 'auto', mb: 0.25 }}
-                              >
-                                <i className='ri-delete-bin-6-line' />
-                              </IconButton>
+                              {canManage ? (
+                                <IconButton
+                                  aria-label='Remove document'
+                                  onClick={() => removeMapping(row.id)}
+                                  disabled={mappingSaving}
+                                  color='error'
+                                  sx={{ mt: 'auto', mb: 0.25 }}
+                                >
+                                  <i className='ri-delete-bin-6-line' />
+                                </IconButton>
+                              ) : null}
                             </Box>
                           </Box>
                         </Box>
@@ -422,7 +434,7 @@ const LoanTypeDetails = ({ id }: Props) => {
                             size='small'
                             value={row.status}
                             onChange={e => updateStatus(row.id, e.target.value as LoanTypeDocumentStatus)}
-                            disabled={mappingSaving}
+                            disabled={mappingSaving || !canManage}
                           >
                             {STATUS_OPTIONS.map(opt => (
                               <MenuItem key={opt.value} value={opt.value}>
@@ -432,14 +444,16 @@ const LoanTypeDetails = ({ id }: Props) => {
                           </TextField>
                         </TableCell>
                         <TableCell align='right'>
-                          <IconButton
-                            aria-label='Remove document'
-                            onClick={() => removeMapping(row.id)}
-                            disabled={mappingSaving}
-                            color='error'
-                          >
-                            <i className='ri-delete-bin-6-line' />
-                          </IconButton>
+                          {canManage ? (
+                            <IconButton
+                              aria-label='Remove document'
+                              onClick={() => removeMapping(row.id)}
+                              disabled={mappingSaving}
+                              color='error'
+                            >
+                              <i className='ri-delete-bin-6-line' />
+                            </IconButton>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))
@@ -483,7 +497,7 @@ const LoanTypeDetails = ({ id }: Props) => {
         </Alert>
       </Snackbar>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <Dialog open={canManage && confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Delete Loan Type</DialogTitle>
         <DialogContent>
           <Typography variant='body2'>This will permanently delete the loan type.</Typography>

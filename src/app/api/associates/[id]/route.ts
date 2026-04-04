@@ -77,6 +77,43 @@ const generateUniqueCode = async (
   return `${safeBase}-${Date.now()}`
 }
 
+async function getRequestContext(session: any) {
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
+
+  if (!currentTenantId) return { error: NextResponse.json({ error: 'tenant_required' }, { status: 400 }) }
+  if (!ObjectId.isValid(currentTenantId)) return { error: NextResponse.json({ error: 'invalid_tenant' }, { status: 400 }) }
+
+  const db = await getDb()
+  const tenantIdObj = new ObjectId(currentTenantId)
+  const userId = new ObjectId(session.userId)
+  const userEmail = String((session as any)?.user?.email || '')
+
+  const emailFilter =
+    userEmail && userEmail.length > 0
+      ? { email: { $regex: `^${userEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
+
+  const membership = await db
+    .collection('memberships')
+    .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+
+  if (!membership) return { error: NextResponse.json({ error: 'not_member' }, { status: 403 }) }
+
+  return {
+    db,
+    tenantIdObj,
+    userId,
+    role: String((membership as any).role || 'USER') as 'OWNER' | 'ADMIN' | 'USER'
+  }
+}
+
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
 
@@ -84,15 +121,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const store = await cookies()
-  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
 
-  if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
-  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
-  const db = await getDb()
-  const tenantIdObj = new ObjectId(currentTenantId)
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role } = context
   const row = await db.collection('associates').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
 
   if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -103,6 +137,15 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
           .collection('associateTypes')
           .findOne({ _id: new ObjectId(String((row as any).associateTypeId)), tenantId: tenantIdObj }, { projection: { name: 1 } })
       : null
+
+  const createdByRaw = (row as any).createdBy
+
+  const createdById =
+    createdByRaw && typeof createdByRaw === 'object' && typeof createdByRaw.toHexString === 'function'
+      ? createdByRaw.toHexString()
+      : String(createdByRaw || '')
+
+  const canManage = role === 'ADMIN' || role === 'OWNER' || createdById === userId.toHexString()
 
   const data = {
     id: String((row as any)._id),
@@ -116,7 +159,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     payout: (row as any).payout ?? null,
     code: (row as any).code || '',
     pan: (row as any).pan ?? null,
-    isActive: Boolean((row as any).isActive)
+    isActive: Boolean((row as any).isActive),
+    canManage
   }
 
   return NextResponse.json(data)
@@ -129,15 +173,12 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const store = await cookies()
-  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
 
-  if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
-  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
-  const db = await getDb()
-  const tenantIdObj = new ObjectId(currentTenantId)
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role } = context
   const body = await request.json().catch(() => ({}))
 
   const patch: any = {}
@@ -187,9 +228,14 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   }
 
   if (patch.associateName != null || patch.companyName != null || patch.mobile != null) {
+    const userScopedFilter =
+      role === 'ADMIN' || role === 'OWNER'
+        ? {}
+        : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
+
     const existing = await db
       .collection('associates')
-      .findOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { projection: { associateName: 1, companyName: 1, mobile: 1 } })
+      .findOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { projection: { associateName: 1, companyName: 1, mobile: 1 } })
 
     if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -201,9 +247,14 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   }
 
   try {
+    const userScopedFilter =
+      role === 'ADMIN' || role === 'OWNER'
+        ? {}
+        : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
+
     const res = await db
       .collection('associates')
-      .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { $set: patch })
+      .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { $set: patch })
 
     if (res.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
@@ -224,16 +275,19 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
-  const store = await cookies()
-  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
 
-  if (!currentTenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
-  if (!ObjectId.isValid(currentTenantId)) return NextResponse.json({ error: 'invalid_tenant' }, { status: 400 })
-  const db = await getDb()
-  const tenantIdObj = new ObjectId(currentTenantId)
-  const res = await db.collection('associates').deleteOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role } = context
+
+  const userScopedFilter =
+    role === 'ADMIN' || role === 'OWNER'
+      ? {}
+      : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
+
+  const res = await db.collection('associates').deleteOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter })
 
   if (res.deletedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 

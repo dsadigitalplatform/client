@@ -77,6 +77,9 @@ const LoanCasesPipelineDashboard = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const sessionUserId = String((session as any)?.userId || '')
+  const sessionUserName = String((session as any)?.user?.name || (session as any)?.user?.email || 'My Leads')
+  const [tenantRole, setTenantRole] = useState<'OWNER' | 'ADMIN' | 'USER' | undefined>(undefined)
+  const isUserRole = tenantRole === 'USER'
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -125,6 +128,19 @@ const LoanCasesPipelineDashboard = () => {
     })()
   }, [])
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/session/tenant', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        const role = typeof data?.role === 'string' ? (data.role as 'OWNER' | 'ADMIN' | 'USER') : undefined
+
+        setTenantRole(role)
+      } catch {
+      }
+    })()
+  }, [])
+
   const stageById = useMemo(() => {
     const map = new Map<string, PipelineStage>()
 
@@ -169,19 +185,31 @@ const LoanCasesPipelineDashboard = () => {
       map.set(c.assignedAgentId, c.assignedAgentName || c.assignedAgentEmail || 'Agent')
     })
 
+    if (isUserRole && sessionUserId && !map.has(sessionUserId)) {
+      map.set(sessionUserId, sessionUserName)
+    }
+
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [board.casesById])
+  }, [board.casesById, isUserRole, sessionUserId, sessionUserName])
 
   useEffect(() => {
-    if (hasAgentFilterOverride) return
     if (!sessionUserId) return
+
+    if (isUserRole) {
+      if (filters.assignedAgentId === sessionUserId) return
+      setFilters(f => ({ ...f, assignedAgentId: sessionUserId }))
+
+      return
+    }
+
+    if (hasAgentFilterOverride) return
     if (filters.assignedAgentId) return
     if (!agentOptions.some(a => a.id === sessionUserId)) return
 
     setFilters(f => ({ ...f, assignedAgentId: sessionUserId }))
-  }, [agentOptions, filters.assignedAgentId, hasAgentFilterOverride, sessionUserId])
+  }, [agentOptions, filters.assignedAgentId, hasAgentFilterOverride, isUserRole, sessionUserId])
 
   const filteredCaseIdsByStage = useMemo(() => {
     const search = filters.search.trim().toLowerCase()
@@ -203,7 +231,7 @@ const LoanCasesPipelineDashboard = () => {
 
         if (!c) return false
 
-        if (filters.assignedAgentId && c.assignedAgentId !== filters.assignedAgentId) return false
+        if (filters.assignedAgentId && (!isUserRole || filters.assignedAgentId !== sessionUserId) && c.assignedAgentId !== filters.assignedAgentId) return false
         if (filters.loanTypeId && c.loanTypeId !== filters.loanTypeId) return false
         if (search && !(c.customerName || '').toLowerCase().includes(search)) return false
 
@@ -212,7 +240,7 @@ const LoanCasesPipelineDashboard = () => {
     })
 
     return result
-  }, [board.caseIdsByStage, board.casesById, board.stages, filters.assignedAgentId, filters.loanTypeId, filters.search, filters.stageId])
+  }, [board.caseIdsByStage, board.casesById, board.stages, filters.assignedAgentId, filters.loanTypeId, filters.search, filters.stageId, isUserRole, sessionUserId])
 
   const analytics = useMemo(() => {
     const filteredIds = Object.values(filteredCaseIdsByStage).flat()
@@ -372,6 +400,7 @@ const LoanCasesPipelineDashboard = () => {
               labelId='loan-case-pipeline-agent'
               label='Agent'
               value={filters.assignedAgentId}
+              disabled={isUserRole}
               onChange={e => {
                 setHasAgentFilterOverride(true)
                 setFilters(f => ({ ...f, assignedAgentId: String(e.target.value) }))
