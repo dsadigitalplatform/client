@@ -67,6 +67,7 @@ import { getAssociates } from '@features/associates/services/associatesService'
 import type { Associate } from '@features/associates/associates.types'
 import {
   createLoanCase,
+  getLoanCaseBankNames,
   getLoanCases,
   getLeadAuditHistory,
   getChecklistByLoanType,
@@ -605,19 +606,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     void (async () => {
       try {
-        const cases = await getLoanCases()
-        const byKey = new Map<string, string>()
+        const bankNames = await getLoanCaseBankNames()
 
-        cases.forEach(c => {
-          const value = (c.bankName || '').trim()
-
-          if (!value) return
-          const key = value.toLowerCase()
-
-          if (!byKey.has(key)) byKey.set(key, value)
-        })
-
-        setBankNameOptions(Array.from(byKey.values()).sort((a, b) => a.localeCompare(b)))
+        setBankNameOptions(bankNames)
       } catch {
         setBankNameOptions([])
       }

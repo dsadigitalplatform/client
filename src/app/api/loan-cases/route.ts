@@ -165,7 +165,24 @@ export async function GET(request: Request) {
   const customerId = url.searchParams.get('customerId') || ''
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
+  const bankNameOptions = url.searchParams.get('bankNameOptions') === 'true'
   const tenantIdHex = tenantIdObj.toHexString()
+
+  if (bankNameOptions) {
+    const rows = await db
+      .collection('loanCases')
+      .aggregate([
+        { $match: { tenantId: { $in: [tenantIdObj, tenantIdHex] }, bankName: { $type: 'string' } } },
+        { $project: { bankName: { $trim: { input: '$bankName' } } } },
+        { $match: { bankName: { $ne: '' } } },
+        { $group: { _id: { $toLower: '$bankName' }, value: { $first: '$bankName' } } },
+        { $sort: { value: 1 } },
+        { $project: { _id: 0, value: 1 } }
+      ])
+      .toArray()
+
+    return NextResponse.json({ bankNames: rows.map(r => String((r as any).value || '')) })
+  }
 
   const baseFilter: any = { tenantId: { $in: [tenantIdObj, tenantIdHex] } }
   

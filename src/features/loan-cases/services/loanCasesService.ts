@@ -38,6 +38,24 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   return (data?.cases ?? []) as LoanCaseListItem[]
 }
 
+export async function getLoanCaseBankNames() {
+  const url = new URL('/api/loan-cases', typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
+
+  url.searchParams.set('bankNameOptions', 'true')
+
+  const res = await fetch(url.toString(), { cache: 'no-store' })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+
+    throw new Error(errText || `Failed to fetch bank names (${res.status})`)
+  }
+
+  const data = await res.json().catch(() => ({}))
+
+  return (data?.bankNames ?? []) as string[]
+}
+
 export async function getLoanCaseById(id: string) {
   const res = await fetch(`/api/loan-cases/${id}`, { cache: 'no-store' })
 
