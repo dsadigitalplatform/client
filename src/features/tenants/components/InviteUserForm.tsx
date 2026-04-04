@@ -36,12 +36,15 @@ type InvitationPayload = {
 
 type MembershipRole = 'OWNER' | 'ADMIN' | 'USER'
 type MembershipStatus = 'invited' | 'active' | 'revoked'
+type TenantRole = 'OWNER' | 'ADMIN' | 'USER'
 type Membership = {
   _id?: string
   userId?: string
   email?: string
   role: MembershipRole
   status: MembershipStatus
+  invitedById?: string
+  invitedByName?: string
 }
 
 const InviteUserForm = () => {
@@ -52,8 +55,12 @@ const InviteUserForm = () => {
   const [email, setEmail] = useState<string>('')
   const [role, setRole] = useState<InviteRole>('USER')
   const [submitting, setSubmitting] = useState<boolean>(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
+  const [tenantRole, setTenantRole] = useState<TenantRole | undefined>(undefined)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
 
   const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value)
 
@@ -68,8 +75,10 @@ const InviteUserForm = () => {
   useSWR('/api/session/tenant', (url: string) => fetch(url, { cache: 'no-store' }).then(r => r.json()), {
     onSuccess: (res: any) => {
       const id = typeof res?.currentTenantId === 'string' ? res.currentTenantId : ''
+      const role = typeof res?.role === 'string' ? (res.role as TenantRole) : undefined
 
       if (id && id !== tenantId) setTenantId(id)
+      if (role) setTenantRole(role)
     },
     revalidateOnFocus: false
   })
@@ -82,20 +91,20 @@ const InviteUserForm = () => {
 
     if (!currentId) {
       setErrorMsg('No tenant selected')
-      
-return
+
+      return
     }
 
     if (!email.trim() || !isValidEmail(email.trim())) {
       setErrorMsg('Please enter a valid email')
-      
-return
+
+      return
     }
 
-      const body: InvitationPayload = {
+    const body: InvitationPayload = {
       email: email.trim(),
       role,
-        tenantId: currentId
+      tenantId: currentId
     }
 
     setSubmitting(true)
@@ -110,6 +119,14 @@ return
       const data = await res.json()
 
       if (!res.ok) {
+        if (data?.error === 'email_already_invited') {
+          throw new Error('This email is already invited or already a member in this organisation')
+        }
+
+        if (data?.error === 'admin_cannot_invite_admin') {
+          throw new Error('Admin users can invite only User role')
+        }
+
         throw new Error(data?.error || 'Failed to send invitation')
       }
 
@@ -124,11 +141,110 @@ return
     }
   }
 
+  const handleWithdrawInvite = async (membershipId?: string) => {
+    if (!membershipId) return
+
+    if (!tenantId) {
+      setErrorMsg('No tenant selected')
+
+      return
+    }
+
+    setSuccessMsg(null)
+    setErrorMsg(null)
+    setRevokingId(membershipId)
+
+    try {
+      const res = await fetch('/api/memberships', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'revoke_invite',
+          tenantId,
+          membershipId
+        })
+      })
+
+      const payload = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        if (payload?.error === 'invite_not_found') {
+          throw new Error('Invitation is no longer active')
+        }
+
+        throw new Error(payload?.error || 'Failed to withdraw invitation')
+      }
+
+      setSuccessMsg('Invitation withdrawn')
+      mutate()
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Unexpected error')
+    } finally {
+      setRevokingId(null)
+    }
+  }
+
+  const handleResendInvite = async (membershipId?: string) => {
+    if (!membershipId) return
+
+    if (!tenantId) {
+      setErrorMsg('No tenant selected')
+
+      return
+    }
+
+    setSuccessMsg(null)
+    setErrorMsg(null)
+    setResendingId(membershipId)
+
+    try {
+      const res = await fetch('/api/memberships', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resend_invite',
+          tenantId,
+          membershipId
+        })
+      })
+
+      const payload = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        if (payload?.error === 'invite_not_found') {
+          throw new Error('Invitation is no longer active')
+        }
+
+        if (payload?.error === 'forbidden') {
+          throw new Error('You are not allowed to resend this invitation')
+        }
+
+        throw new Error(payload?.error || 'Failed to resend invitation')
+      }
+
+      setSuccessMsg('Invitation resent')
+      mutate()
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Unexpected error')
+    } finally {
+      setResendingId(null)
+    }
+  }
+
   const raw = (data as any)?.memberships ?? data
   const list: Membership[] = Array.isArray(raw) ? raw : []
   const members = list.filter(m => m.status === 'invited' || m.status === 'active')
   const meUserId = (session as any)?.userId as string | undefined
   const meEmail = (session as any)?.user?.email as string | undefined
+
+  const canWithdrawInvite = (m: Membership) => {
+    if (m.status !== 'invited') return false
+    if (isSuperAdmin) return true
+    if (tenantRole === 'OWNER') return true
+    if (tenantRole === 'ADMIN' && meUserId && m.invitedById === meUserId) return true
+
+    return false
+  }
 
   const filtered = members.filter(m => {
     if (m.userId && meUserId && m.userId === meUserId) return false
@@ -173,7 +289,7 @@ return
             value={role}
             onChange={e => setRole(e.target.value as InviteRole)}
           >
-            <MenuItem value='ADMIN'>Admin</MenuItem>
+            {isSuperAdmin || tenantRole === 'OWNER' ? <MenuItem value='ADMIN'>Admin</MenuItem> : null}
             <MenuItem value='USER'>User</MenuItem>
           </Select>
         </FormControl>
@@ -231,6 +347,30 @@ return
                           />
                           <Chip size='small' variant='outlined' color={statusColor(m.status)} label={statusLabel(m.status)} sx={{ boxShadow: 'none' }} />
                         </Box>
+                        <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
+                          Invited by: {m.invitedByName || '—'}
+                        </Typography>
+                        {canWithdrawInvite(m) ? (
+                          <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            <Button
+                              size='small'
+                              variant='outlined'
+                              onClick={() => handleResendInvite(m._id)}
+                              disabled={resendingId === m._id || revokingId === m._id}
+                            >
+                              {resendingId === m._id ? 'Resending...' : 'Resend Invite'}
+                            </Button>
+                            <Button
+                              size='small'
+                              color='error'
+                              variant='outlined'
+                              onClick={() => handleWithdrawInvite(m._id)}
+                              disabled={revokingId === m._id || resendingId === m._id}
+                            >
+                              {revokingId === m._id ? 'Withdrawing...' : 'Withdraw Invite'}
+                            </Button>
+                          </Box>
+                        ) : null}
                       </Box>
                     </Box>
                   </CardContent>
@@ -245,16 +385,18 @@ return
                 <TableCell>Email</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Invited By</TableCell>
+                <TableCell align='right'>Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3}>Loading...</TableCell>
+                  <TableCell colSpan={5}>Loading...</TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3}>No members</TableCell>
+                  <TableCell colSpan={5}>No members</TableCell>
                 </TableRow>
               ) : (
                 filtered.map((m, idx) => (
@@ -262,6 +404,30 @@ return
                     <TableCell>{m.email ?? ''}</TableCell>
                     <TableCell>{m.role}</TableCell>
                     <TableCell>{statusLabel(m.status)}</TableCell>
+                    <TableCell>{m.invitedByName || '—'}</TableCell>
+                    <TableCell align='right'>
+                      {canWithdrawInvite(m) ? (
+                        <Box sx={{ display: 'inline-flex', gap: 1 }}>
+                          <Button
+                            size='small'
+                            variant='outlined'
+                            onClick={() => handleResendInvite(m._id)}
+                            disabled={resendingId === m._id || revokingId === m._id}
+                          >
+                            {resendingId === m._id ? 'Resending...' : 'Resend Invite'}
+                          </Button>
+                          <Button
+                            size='small'
+                            color='error'
+                            variant='outlined'
+                            onClick={() => handleWithdrawInvite(m._id)}
+                            disabled={revokingId === m._id || resendingId === m._id}
+                          >
+                            {revokingId === m._id ? 'Withdrawing...' : 'Withdraw Invite'}
+                          </Button>
+                        </Box>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))
               )}

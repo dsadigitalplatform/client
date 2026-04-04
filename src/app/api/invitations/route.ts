@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     const requesterUserId = (session as any)?.userId as string | undefined
+    const requesterIsSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
 
     if (!requesterUserId) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -49,7 +50,8 @@ export async function POST(req: Request) {
       requesterUserId,
       tenantId,
       email,
-      role
+      role,
+      requesterIsSuperAdmin
     })
 
     await sendInvitationEmail(email, result.tenantName, result.token)
@@ -60,9 +62,17 @@ export async function POST(req: Request) {
     })
   } catch (err: any) {
     const status = typeof err?.status === 'number' ? err.status : 500
-    const message = status === 403 ? 'forbidden' : 'internal_error'
+    const rawMessage = String(err?.message || '')
 
-    
-return NextResponse.json({ error: message }, { status })
+    const message =
+      status === 403
+        ? rawMessage === 'admin_cannot_invite_admin'
+          ? 'admin_cannot_invite_admin'
+          : 'forbidden'
+        : status === 409 && rawMessage === 'email_already_invited'
+          ? 'email_already_invited'
+          : 'internal_error'
+
+    return NextResponse.json({ error: message }, { status })
   }
 }

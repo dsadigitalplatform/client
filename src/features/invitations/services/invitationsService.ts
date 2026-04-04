@@ -11,6 +11,7 @@ export type CreateInvitationInput = {
   tenantId: string
   email: string
   role: InviteRole
+  requesterIsSuperAdmin?: boolean
 }
 
 export type CreateInvitationResult = {
@@ -26,13 +27,34 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Cr
   const requesterId = new ObjectId(input.requesterUserId)
   const tenantId = new ObjectId(input.tenantId)
   const normalizedEmail = input.email.trim().toLowerCase()
+  const emailFilter = new RegExp('^' + normalizedEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i')
+  const isSuperAdmin = Boolean(input.requesterIsSuperAdmin)
 
-  const ownerMembership = await db
+  const requesterMembership = await db
     .collection('memberships')
     .findOne({ userId: requesterId, tenantId, role: { $in: ['OWNER', 'ADMIN'] }, status: 'active' })
 
-  if (!ownerMembership) {
+  if (!isSuperAdmin && !requesterMembership) {
     throw Object.assign(new Error('forbidden'), { status: 403 })
+  }
+
+  const requesterRole = String((requesterMembership as any)?.role || '')
+
+  if (!isSuperAdmin && requesterRole === 'ADMIN' && input.role === 'ADMIN') {
+    throw Object.assign(new Error('admin_cannot_invite_admin'), { status: 403 })
+  }
+
+  const existingMembership = await db.collection('memberships').findOne(
+    {
+      tenantId,
+      email: emailFilter,
+      status: { $in: ['invited', 'active'] }
+    },
+    { projection: { _id: 1 } }
+  )
+
+  if (existingMembership) {
+    throw Object.assign(new Error('email_already_invited'), { status: 409 })
   }
 
   const tenant = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })

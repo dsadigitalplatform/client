@@ -64,7 +64,7 @@ const AcceptInviteView = ({ token }: AcceptInviteViewProps) => {
         } else {
           const d = await res.json().catch(() => ({}))
 
-          if (d?.error === 'not_found') setError('Invitation link is invalid or expired.')
+          if (d?.error === 'not_found') setError('Link expired. Please ask your admin for a new invite.')
         }
       } catch { }
     }
@@ -104,7 +104,7 @@ const AcceptInviteView = ({ token }: AcceptInviteViewProps) => {
         if (err === 'email_mismatch') {
           setError('This invite was sent to another email. Please sign in with the invited email.')
         } else if (err === 'invalid_token') {
-          setError('Invitation link is invalid or expired.')
+          setError('Link expired. Please ask your admin for a new invite.')
         } else {
           setError('An unexpected error occurred.')
         }

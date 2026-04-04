@@ -11,7 +11,7 @@ export function getMenuVisibility(params: { isSuperAdmin?: boolean; tenantRole?:
   const role = params.tenantRole
   const hasTenant = Boolean(params.hasTenantSelected)
 
-  const canInvite = role === 'OWNER' || role === 'ADMIN'
+  const canInvite = hasTenant && (isSuper || role === 'OWNER' || role === 'ADMIN')
 
   return {
     showCustomers: hasTenant,

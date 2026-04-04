@@ -36,13 +36,6 @@ const CustomersList = () => {
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
   const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
 
-  const cibilMeta = (v: number) => {
-    if (v >= 750) return { label: 'High', color: 'success' as const, icon: 'ri-arrow-up-s-line' }
-    if (v >= 650) return { label: 'Average', color: 'warning' as const, icon: 'ri-equalizer-line' }
-
-    return { label: 'Low', color: 'error' as const, icon: 'ri-alert-line' }
-  }
-
   const handleExport = () => {
     const rows = [
       ['Full Name', 'Mobile', 'Email', 'Employment Type', 'Monthly Income', 'CIBIL'],
@@ -282,19 +275,17 @@ const CustomersList = () => {
               <TableCell>Name</TableCell>
               <TableCell>Mobile</TableCell>
               <TableCell>Email</TableCell>
-              <TableCell>Employment</TableCell>
               <TableCell>Income</TableCell>
-              <TableCell>CIBIL</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7}>Loading...</TableCell>
+                <TableCell colSpan={5}>Loading...</TableCell>
               </TableRow>
             ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>No customers found</TableCell>
+                <TableCell colSpan={5}>No customers found</TableCell>
               </TableRow>
             ) : (
               customers.map((c, index) => (
@@ -371,51 +362,8 @@ const CustomersList = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={c.employmentType === 'SALARIED' ? 'Salaried' : 'Self-employed'}
-                      size='small'
-                      color={c.employmentType === 'SALARIED' ? 'primary' : 'secondary'}
-                      variant='outlined'
-                      sx={{
-                        boxShadow: 'none',
-                        backgroundColor:
-                          c.employmentType === 'SALARIED'
-                            ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)'
-                            : 'rgb(var(--mui-palette-secondary-mainChannel) / 0.08)'
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
                     {c.monthlyIncome != null ? (
                       <span>{formatINR(c.monthlyIncome)}</span>
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {c.cibilScore != null ? (
-                      (() => {
-                        const m = cibilMeta(c.cibilScore)
-
-                        return (
-                          <Chip
-                            size='small'
-                            color={m.color}
-                            variant='outlined'
-                            icon={<i className={`${m.icon}`} />}
-                            label={`${c.cibilScore} (${m.label})`}
-                            sx={{
-                              boxShadow: 'none',
-                              backgroundColor:
-                                m.color === 'success'
-                                  ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
-                                  : m.color === 'warning'
-                                    ? 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
-                                    : 'rgb(var(--mui-palette-error-mainChannel) / 0.08)'
-                            }}
-                          />
-                        )
-                      })()
                     ) : (
                       '-'
                     )}
