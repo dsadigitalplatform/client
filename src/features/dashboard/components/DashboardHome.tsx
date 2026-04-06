@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+
+import type { ApexOptions } from 'apexcharts'
 
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
@@ -22,6 +25,7 @@ import SnackbarContent from '@mui/material/SnackbarContent'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
 import Chip from '@mui/material/Chip'
+import { useTheme } from '@mui/material/styles'
 import { useSession } from 'next-auth/react'
 
 import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
@@ -31,6 +35,7 @@ import { getAppointmentById, listAppointments } from '@features/appointments/ser
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
 
 const DONUT_SIZE = 64
+const AppReactApexCharts = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const formatINR = (amount: number) => {
     const safe = Number.isFinite(amount) ? amount : 0
@@ -50,6 +55,19 @@ type DonutSegment = {
     label: string
     value: number
     color: string
+}
+
+type AmountBreakdownPoint = {
+    label: string
+    value: number
+}
+
+type TimelineMode = 'WEEK' | 'MONTH' | 'YEAR'
+
+type TimelinePoint = {
+    label: string
+    value: number
+    sortKey: number
 }
 
 const SegmentedDonut = ({
@@ -119,7 +137,177 @@ const SegmentedDonut = ({
     )
 }
 
+const formatCompactINR = (amount: number) => {
+    const safe = Number.isFinite(amount) ? amount : 0
+
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        notation: 'compact',
+        maximumFractionDigits: 1
+    }).format(safe)
+}
+
+const formatAxisAmount = (value: number) => {
+    const safe = Number.isFinite(value) ? value : 0
+
+    return `₹${new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(safe)}`
+}
+
+const BAR_PALETTE_LIGHT = ['#7C6CF8', '#21A8FF', '#46C95A', '#F4A261', '#EF476F', '#6C757D']
+const BAR_PALETTE_DARK = ['#A493FF', '#73C8FF', '#78E08F', '#FFC385', '#FF89A0', '#B5BDC6']
+
+const AmountBarTrendApexChart = ({
+    points,
+    darkMode,
+    trendColor
+}: {
+    points: AmountBreakdownPoint[]
+    darkMode: boolean
+    trendColor: string
+}) => {
+    const palette = darkMode ? BAR_PALETTE_DARK : BAR_PALETTE_LIGHT
+    const categories = points.map(p => p.label)
+    const amounts = points.map(p => Number(p.value || 0))
+
+    const options: ApexOptions = {
+        chart: {
+            type: 'line',
+            stacked: false,
+            toolbar: { show: false },
+            parentHeightOffset: 0,
+            fontFamily: 'inherit'
+        },
+        stroke: {
+            width: [0, 2.5],
+            curve: 'smooth'
+        },
+        markers: {
+            size: 3.5,
+            colors: [trendColor],
+            strokeWidth: 0,
+            hover: { sizeOffset: 2 }
+        },
+        colors: ['#7C6CF8', trendColor],
+        fill: {
+            opacity: [0.95, 1]
+        },
+        legend: { show: false },
+        dataLabels: { enabled: false },
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                distributed: true,
+                columnWidth: '52%',
+                borderRadius: 8
+            }
+        },
+        grid: {
+            borderColor: darkMode ? 'rgb(var(--mui-palette-dividerChannel) / 0.35)' : 'rgb(var(--mui-palette-dividerChannel) / 0.6)',
+            strokeDashArray: 4,
+            xaxis: { lines: { show: true } },
+            yaxis: { lines: { show: false } },
+            padding: { left: 0, right: 8, top: 0, bottom: -8 }
+        },
+        xaxis: {
+            categories,
+            axisBorder: { show: false },
+            axisTicks: { show: false },
+            labels: {
+                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '10px', fontWeight: '500' },
+                rotate: -18,
+                trim: true,
+                hideOverlappingLabels: true
+            },
+            tooltip: { enabled: false }
+        },
+        yaxis: {
+            labels: {
+                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
+                formatter: value => formatAxisAmount(Number(value))
+            }
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            x: { show: true },
+            y: {
+                formatter: value => formatINR(Number(value || 0))
+            }
+        }
+    }
+
+    return (
+        <AppReactApexCharts
+            type='line'
+            height={220}
+            options={{ ...options, colors: [...palette, trendColor] }}
+            series={[
+                { name: 'Amount', type: 'bar', data: amounts },
+                { name: 'Trend', type: 'line', data: amounts }
+            ]}
+        />
+    )
+}
+
+const TimelineApexChart = ({ points, darkMode }: { points: TimelinePoint[]; darkMode: boolean }) => {
+    const labels = points.map(p => p.label)
+    const values = points.map(p => Number(p.value || 0))
+
+    const options: ApexOptions = {
+        chart: {
+            type: 'area',
+            toolbar: { show: false },
+            parentHeightOffset: 0,
+            fontFamily: 'inherit'
+        },
+        colors: ['#00A6FB'],
+        stroke: { curve: 'smooth', width: 2.8 },
+        fill: {
+            type: 'gradient',
+            gradient: {
+                shade: darkMode ? 'dark' : 'light',
+                type: 'vertical',
+                shadeIntensity: 0.25,
+                opacityFrom: 0.4,
+                opacityTo: 0.05,
+                stops: [0, 95, 100]
+            }
+        },
+        dataLabels: { enabled: false },
+        markers: { size: 3, strokeWidth: 0, hover: { sizeOffset: 2 } },
+        grid: {
+            borderColor: darkMode ? 'rgb(var(--mui-palette-dividerChannel) / 0.35)' : 'rgb(var(--mui-palette-dividerChannel) / 0.6)',
+            strokeDashArray: 4,
+            padding: { left: 4, right: 4, top: 0, bottom: -6 }
+        },
+        xaxis: {
+            categories: labels,
+            axisBorder: { show: false },
+            axisTicks: { show: false },
+            labels: {
+                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
+                rotate: 0,
+                hideOverlappingLabels: true
+            }
+        },
+        yaxis: {
+            labels: {
+                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
+                formatter: value => formatAxisAmount(Number(value))
+            }
+        },
+        tooltip: {
+            y: { formatter: value => formatINR(Number(value || 0)) }
+        },
+        legend: { show: false }
+    }
+
+    return <AppReactApexCharts type='area' height={220} options={options} series={[{ name: 'Loan Amount', data: values }]} />
+}
+
 const DashboardHome = () => {
+    const theme = useTheme()
     const { data: session } = useSession()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -422,6 +610,7 @@ const DashboardHome = () => {
 
     const showWelcomeCta = !isSuperAdmin && !hasMembership && !checking
     const hasTenant = Boolean(currentTenantId)
+    const isDarkMode = theme.palette.mode === 'dark'
 
     const disbursementStageIds = useMemo(() => {
         const ids = new Set<string>()
@@ -471,6 +660,121 @@ const DashboardHome = () => {
     const closedCasesValue = useMemo(() => {
         return closedCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
     }, [closedCases])
+
+    const bankWiseSums = useMemo<AmountBreakdownPoint[]>(() => {
+        const byBank = new Map<string, number>()
+
+        myLeads.forEach(c => {
+            const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
+
+            if (amount <= 0) return
+
+            const label = String(c.bankName || '').trim() || 'Unspecified bank'
+
+            byBank.set(label, (byBank.get(label) || 0) + amount)
+        })
+
+        return Array.from(byBank.entries())
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 6)
+    }, [myLeads])
+
+    const loanTypeWiseSums = useMemo<AmountBreakdownPoint[]>(() => {
+        const byLoanType = new Map<string, number>()
+
+        myLeads.forEach(c => {
+            const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
+
+            if (amount <= 0) return
+
+            const label = String(c.loanTypeName || '').trim() || 'Unspecified loan type'
+
+            byLoanType.set(label, (byLoanType.get(label) || 0) + amount)
+        })
+
+        return Array.from(byLoanType.entries())
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 6)
+    }, [myLeads])
+
+    const timelineSummary = useMemo<{ mode: TimelineMode; points: TimelinePoint[] }>(() => {
+        const dated = myLeads
+            .map(c => {
+                const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
+                const date = c.updatedAt ? new Date(c.updatedAt) : null
+
+                if (!date || !Number.isFinite(date.getTime()) || amount <= 0) return null
+
+                return { date, amount }
+            })
+            .filter(Boolean) as Array<{ date: Date; amount: number }>
+
+        if (dated.length === 0) return { mode: 'WEEK', points: [] }
+
+        const minTs = Math.min(...dated.map(r => r.date.getTime()))
+        const maxTs = Math.max(...dated.map(r => r.date.getTime()))
+        const spanDays = Math.max(1, Math.ceil((maxTs - minTs) / (1000 * 60 * 60 * 24)))
+
+        const mode: TimelineMode =
+            dated.length <= 20 || spanDays <= 70 ? 'WEEK' : dated.length <= 120 || spanDays <= 500 ? 'MONTH' : 'YEAR'
+
+        const buckets = new Map<string, TimelinePoint>()
+
+        dated.forEach(r => {
+            const d = new Date(r.date)
+            let key = ''
+            let label = ''
+            let sortKey = 0
+
+            if (mode === 'WEEK') {
+                const day = d.getDay()
+                const diff = day === 0 ? -6 : 1 - day
+
+                d.setDate(d.getDate() + diff)
+                d.setHours(0, 0, 0, 0)
+                key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+                label = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(d)
+                sortKey = d.getTime()
+            } else if (mode === 'MONTH') {
+                d.setDate(1)
+                d.setHours(0, 0, 0, 0)
+                key = `${d.getFullYear()}-${d.getMonth() + 1}`
+                label = new Intl.DateTimeFormat('en-IN', { month: 'short', year: '2-digit' }).format(d)
+                sortKey = d.getTime()
+            } else {
+                d.setMonth(0, 1)
+                d.setHours(0, 0, 0, 0)
+                key = `${d.getFullYear()}`
+                label = String(d.getFullYear())
+                sortKey = d.getTime()
+            }
+
+            const prev = buckets.get(key)
+
+            if (prev) {
+                prev.value += r.amount
+            } else {
+                buckets.set(key, { label, value: r.amount, sortKey })
+            }
+        })
+
+        const sorted = Array.from(buckets.values()).sort((a, b) => a.sortKey - b.sortKey)
+        const maxPoints = mode === 'WEEK' ? 10 : mode === 'MONTH' ? 12 : 8
+
+        return { mode, points: sorted.slice(-maxPoints) }
+    }, [myLeads])
+
+    const bankWiseTotal = useMemo(() => bankWiseSums.reduce((sum, row) => sum + row.value, 0), [bankWiseSums])
+    const loanTypeWiseTotal = useMemo(() => loanTypeWiseSums.reduce((sum, row) => sum + row.value, 0), [loanTypeWiseSums])
+
+    const timelineTotal = useMemo(
+        () => timelineSummary.points.reduce((sum, row) => sum + row.value, 0),
+        [timelineSummary.points]
+    )
+
+    const timelineModeLabel = timelineSummary.mode === 'WEEK' ? 'Weekly' : timelineSummary.mode === 'MONTH' ? 'Monthly' : 'Yearly'
 
     const activeCustomersCount = useMemo(() => {
         const ids = new Set<string>()
@@ -949,6 +1253,147 @@ const DashboardHome = () => {
                                     </TableBody>
                                 </Table>
                             </TableContainer>
+                        )}
+                    </CardContent>
+                </Card>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ p: 2.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.5 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography variant='subtitle2' color='text.secondary'>
+                                    Bank wise loan sum
+                                </Typography>
+                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
+                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(bankWiseTotal)) : '—'}
+                                </Typography>
+                            </Box>
+                            <Avatar
+                                sx={{
+                                    width: 38,
+                                    height: 38,
+                                    bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
+                                    color: 'var(--mui-palette-primary-main)'
+                                }}
+                            >
+                                <i className='ri-bank-line' />
+                            </Avatar>
+                        </Box>
+                        {!hasTenant ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Select an organization to view bank analytics.
+                            </Typography>
+                        ) : myLeadsLoading ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Loading bank analytics...
+                            </Typography>
+                        ) : bankWiseSums.length === 0 ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                No amount data available.
+                            </Typography>
+                        ) : (
+                            <>
+                                <AmountBarTrendApexChart
+                                    points={bankWiseSums}
+                                    trendColor='var(--mui-palette-primary-main)'
+                                    darkMode={isDarkMode}
+                                />
+                                <Typography variant='caption' color='text.secondary'>
+                                    Top bank: {bankWiseSums[0]?.label} · {formatCompactINR(bankWiseSums[0]?.value || 0)}
+                                </Typography>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ p: 2.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.5 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography variant='subtitle2' color='text.secondary'>
+                                    Loan type wise sum
+                                </Typography>
+                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
+                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(loanTypeWiseTotal)) : '—'}
+                                </Typography>
+                            </Box>
+                            <Avatar
+                                sx={{
+                                    width: 38,
+                                    height: 38,
+                                    bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)',
+                                    color: 'var(--mui-palette-success-main)'
+                                }}
+                            >
+                                <i className='ri-file-chart-line' />
+                            </Avatar>
+                        </Box>
+                        {!hasTenant ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Select an organization to view loan type analytics.
+                            </Typography>
+                        ) : myLeadsLoading ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Loading loan type analytics...
+                            </Typography>
+                        ) : loanTypeWiseSums.length === 0 ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                No amount data available.
+                            </Typography>
+                        ) : (
+                            <>
+                                <AmountBarTrendApexChart
+                                    points={loanTypeWiseSums}
+                                    trendColor='var(--mui-palette-success-main)'
+                                    darkMode={isDarkMode}
+                                />
+                                <Typography variant='caption' color='text.secondary'>
+                                    Top loan type: {loanTypeWiseSums[0]?.label} · {formatCompactINR(loanTypeWiseSums[0]?.value || 0)}
+                                </Typography>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                    <CardContent sx={{ p: 2.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.75 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography variant='subtitle2' color='text.secondary'>
+                                    Loan amount timeline
+                                </Typography>
+                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
+                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(timelineTotal)) : '—'}
+                                </Typography>
+                            </Box>
+                            <Chip size='small' variant='outlined' label={timelineModeLabel} />
+                        </Box>
+                        {!hasTenant ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Select an organization to view timeline analytics.
+                            </Typography>
+                        ) : myLeadsLoading ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                Loading timeline analytics...
+                            </Typography>
+                        ) : timelineSummary.points.length === 0 ? (
+                            <Typography variant='body2' color='text.secondary'>
+                                No timeline data available.
+                            </Typography>
+                        ) : (
+                            <>
+                                <TimelineApexChart
+                                    points={timelineSummary.points}
+                                    darkMode={isDarkMode}
+                                />
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                                    <Typography variant='caption' color='text.secondary'>
+                                        {timelineSummary.points[0]?.label}
+                                    </Typography>
+                                    <Typography variant='caption' color='text.secondary'>
+                                        {timelineSummary.points[timelineSummary.points.length - 1]?.label}
+                                    </Typography>
+                                </Box>
+                            </>
                         )}
                     </CardContent>
                 </Card>
