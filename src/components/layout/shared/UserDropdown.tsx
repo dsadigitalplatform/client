@@ -5,7 +5,7 @@ import type { MouseEvent } from 'react'
 
 import { useRouter } from 'next/navigation'
 
-import { signOut } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 import { styled } from '@mui/material/styles'
 import Badge from '@mui/material/Badge'
 import Avatar from '@mui/material/Avatar'
@@ -18,6 +18,13 @@ import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
+import CircularProgress from '@mui/material/CircularProgress'
+import Box from '@mui/material/Box'
 
 import { useSettings } from '@core/hooks/useSettings'
 import { SwitchOrganisationDialog } from '@features/tenants/components/SwitchOrganisationDialog'
@@ -43,6 +50,13 @@ type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
 }
 
+type ImpersonationUser = {
+  id: string
+  name: string
+  email?: string | null
+  isSuperAdmin?: boolean
+}
+
 const roleLabel = (role?: TenantInfo['role']) => {
   if (role === 'OWNER') return 'Owner'
   if (role === 'ADMIN') return 'Admin'
@@ -66,14 +80,26 @@ const UserDropdown = ({
   const [canSwitch, setCanSwitch] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [resolvedTenant, setResolvedTenant] = useState<TenantInfo | undefined>(tenant)
+  const [impersonateOpen, setImpersonateOpen] = useState(false)
+  const [impersonatingBusy, setImpersonatingBusy] = useState(false)
+  const [impersonationError, setImpersonationError] = useState<string | null>(null)
+  const [impersonationUsers, setImpersonationUsers] = useState<ImpersonationUser[]>([])
+  const [impersonationUsersLoading, setImpersonationUsersLoading] = useState(false)
+  const [impersonationQuery, setImpersonationQuery] = useState('')
+  const [selectedTargetUserId, setSelectedTargetUserId] = useState('')
+  const [impersonationReason, setImpersonationReason] = useState('')
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
 
   // Hooks
   const router = useRouter()
+  const { data: session, update } = useSession()
 
   const { settings } = useSettings()
+  const activeImpersonation = (session as any)?.impersonation
+  const isImpersonating = Boolean(activeImpersonation?.active)
+  const canImpersonate = Boolean(isSuperAdmin) && !isImpersonating
 
   const handleDropdownOpen = () => {
     const next = !open
@@ -148,6 +174,101 @@ const UserDropdown = ({
       await signOut({ callbackUrl: '/login' })
     } finally {
       setLoggingOut(false)
+    }
+  }
+
+  const loadImpersonationUsers = async (query?: string) => {
+    setImpersonationUsersLoading(true)
+    setImpersonationError(null)
+
+    try {
+      const q = encodeURIComponent(String(query || '').trim())
+      const res = await fetch(`/api/super-admin/impersonation/users${q ? `?q=${q}` : ''}`, { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setImpersonationError('Unable to load users')
+        setImpersonationUsers([])
+
+        return
+      }
+
+      const items: ImpersonationUser[] = Array.isArray(data?.users) ? data.users : []
+      const filtered = items.filter(u => !u?.isSuperAdmin)
+
+      setImpersonationUsers(filtered)
+      setSelectedTargetUserId(filtered[0]?.id || '')
+    } catch {
+      setImpersonationError('Unable to load users')
+      setImpersonationUsers([])
+    } finally {
+      setImpersonationUsersLoading(false)
+    }
+  }
+
+  const openImpersonationDialog = async () => {
+    setOpen(false)
+    setImpersonateOpen(true)
+    await loadImpersonationUsers(impersonationQuery)
+  }
+
+  const startImpersonation = async () => {
+    if (!selectedTargetUserId) return
+    setImpersonatingBusy(true)
+    setImpersonationError(null)
+
+    try {
+      const res = await fetch('/api/super-admin/impersonation/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targetUserId: selectedTargetUserId,
+          reason: impersonationReason.trim() || undefined
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok || !data?.nonce) {
+        setImpersonationError('Unable to start impersonation')
+
+        return
+      }
+
+      await update({ impersonationStartNonce: data.nonce } as any)
+      setImpersonateOpen(false)
+      router.push('/post-login')
+      router.refresh()
+    } catch {
+      setImpersonationError('Unable to start impersonation')
+    } finally {
+      setImpersonatingBusy(false)
+    }
+  }
+
+  const stopImpersonation = async () => {
+    setImpersonatingBusy(true)
+    setImpersonationError(null)
+
+    try {
+      const res = await fetch('/api/super-admin/impersonation/stop', {
+        method: 'POST'
+      })
+
+      if (!res.ok) {
+        setImpersonationError('Unable to return to super admin')
+
+        return
+      }
+
+      await update({ impersonationStop: true } as any)
+      setOpen(false)
+      router.push('/post-login')
+      router.refresh()
+    } catch {
+      setImpersonationError('Unable to return to super admin')
+    } finally {
+      setImpersonatingBusy(false)
     }
   }
 
@@ -283,6 +404,18 @@ const UserDropdown = ({
                       <Typography color='text.primary'>Switch Organisation</Typography>
                     </MenuItem>
                   )}
+                  {canImpersonate && (
+                    <MenuItem className='gap-3' onClick={() => openImpersonationDialog()}>
+                      <i className='ri-user-search-line' />
+                      <Typography color='text.primary'>Login as User</Typography>
+                    </MenuItem>
+                  )}
+                  {isImpersonating && (
+                    <MenuItem className='gap-3' onClick={() => stopImpersonation()}>
+                      <i className='ri-shield-user-line' />
+                      <Typography color='text.primary'>Return to Super Admin</Typography>
+                    </MenuItem>
+                  )}
                   <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/profile')}>
                     <i className='ri-user-3-line' />
                     <Typography color='text.primary'>My Profile</Typography>
@@ -307,6 +440,75 @@ const UserDropdown = ({
         )}
       </Popper>
       <SwitchOrganisationDialog open={switchOpen} onClose={() => setSwitchOpen(false)} />
+      <Dialog open={impersonateOpen} onClose={() => setImpersonateOpen(false)} fullWidth maxWidth='sm'>
+        <DialogTitle>Login as User</DialogTitle>
+        <DialogContent>
+          <Box className='flex flex-col gap-4 pt-2'>
+            <Box className='flex gap-2 items-center'>
+              <TextField
+                fullWidth
+                size='small'
+                label='Search user'
+                value={impersonationQuery}
+                onChange={e => setImpersonationQuery(e.target.value)}
+              />
+              <Button
+                variant='outlined'
+                onClick={() => loadImpersonationUsers(impersonationQuery)}
+                disabled={impersonationUsersLoading || impersonatingBusy}
+              >
+                Search
+              </Button>
+            </Box>
+            <TextField
+              select
+              fullWidth
+              size='small'
+              label='Select user'
+              value={selectedTargetUserId}
+              onChange={e => setSelectedTargetUserId(e.target.value)}
+              disabled={impersonationUsersLoading || impersonatingBusy}
+            >
+              {impersonationUsers.map(u => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name || 'Unnamed'} {u.email ? `(${u.email})` : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              fullWidth
+              size='small'
+              label='Reason (optional)'
+              value={impersonationReason}
+              onChange={e => setImpersonationReason(e.target.value)}
+              disabled={impersonatingBusy}
+            />
+            {impersonationUsersLoading && (
+              <Box className='flex items-center gap-2'>
+                <CircularProgress size={16} />
+                <Typography variant='body2'>Loading users...</Typography>
+              </Box>
+            )}
+            {impersonationError && (
+              <Typography variant='body2' color='error'>
+                {impersonationError}
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImpersonateOpen(false)} disabled={impersonatingBusy}>
+            Cancel
+          </Button>
+          <Button
+            variant='contained'
+            onClick={() => startImpersonation()}
+            disabled={impersonatingBusy || impersonationUsersLoading || !selectedTargetUserId}
+          >
+            {impersonatingBusy ? 'Starting...' : 'Login as User'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }

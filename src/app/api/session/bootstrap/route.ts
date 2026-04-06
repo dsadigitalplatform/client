@@ -93,5 +93,7 @@ export async function GET() {
     ? { id: currentTenantId, name: currentTenantName || null, role: currentRole || null }
     : null
 
-  return NextResponse.json({ user, currentTenant, tenants: tenantsOut, memberships })
+  const impersonation = (session as any)?.impersonation || null
+
+  return NextResponse.json({ user, currentTenant, tenants: tenantsOut, memberships, impersonation })
 }

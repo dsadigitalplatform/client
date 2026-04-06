@@ -6,6 +6,68 @@ import { ObjectId } from 'mongodb'
 import { getDb } from '@/lib/mongodb'
 import { getSuperAdminEmail } from '@/lib/env'
 
+function escapeRegexLiteral(input: string) {
+  return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+}
+
+type HydratedUserState = {
+  isSuperAdmin: boolean
+  tenantIds: string[]
+  currentTenantId?: string
+  email?: string
+  name?: string
+  image?: string
+}
+
+type TokenImpersonation = {
+  active: boolean
+  actorUserId: string
+  targetUserId: string
+  startedAt: string
+  reason?: string
+  auditId?: string
+}
+
+async function hydrateUserState(
+  db: Awaited<ReturnType<typeof getDb>>,
+  userId: string,
+  preferredTenantId?: string
+): Promise<HydratedUserState> {
+  const userDoc = await db
+    .collection('users')
+    .findOne({ _id: new ObjectId(userId) }, { projection: { isSuperAdmin: 1, email: 1, name: 1, image: 1 } })
+
+  const email = String((userDoc as any)?.email || '')
+
+  const emailFilter =
+    email && email.length > 0
+      ? { email: { $regex: `^${escapeRegexLiteral(email)}$`, $options: 'i' } }
+      : undefined
+
+  const orFilters = [{ userId: new ObjectId(userId) }] as any[]
+
+  if (emailFilter) orFilters.push(emailFilter)
+
+  const memberships = await db
+    .collection('memberships')
+    .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1 } })
+    .toArray()
+
+  const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
+
+  const currentTenantId =
+    preferredTenantId && tenantIds.includes(preferredTenantId) ? preferredTenantId : tenantIds[0]
+
+  return {
+    isSuperAdmin: Boolean((userDoc as any)?.isSuperAdmin),
+    tenantIds,
+    currentTenantId,
+    email: (userDoc as any)?.email ?? undefined,
+    name: (userDoc as any)?.name ?? undefined,
+    image: (userDoc as any)?.image ?? undefined
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     Google({
@@ -43,42 +105,135 @@ return url
 return `${baseUrl}/post-login`
     },
     async jwt({ token, account, profile, trigger, session }) {
-      // Allow client-triggered session updates to set currentTenantId
-      if (trigger === 'update' && (session as any)?.currentTenantId) {
-        ;(token as any).currentTenantId = (session as any).currentTenantId
-        
-return token
+      if (trigger === 'update') {
+        if ((session as any)?.currentTenantId) {
+          ;(token as any).currentTenantId = (session as any).currentTenantId
+        }
+
+        const impersonationStartNonce = String((session as any)?.impersonationStartNonce || '')
+        const shouldStopImpersonation = Boolean((session as any)?.impersonationStop)
+
+        if (impersonationStartNonce && token.userId && !(token as any)?.impersonation?.active) {
+          const db = await getDb()
+          const actorUserId = String(token.userId)
+
+          const actorDoc = await db
+            .collection('users')
+            .findOne({ _id: new ObjectId(actorUserId) }, { projection: { isSuperAdmin: 1 } })
+
+          if (!Boolean((actorDoc as any)?.isSuperAdmin)) return token
+
+          const nonceDoc = await db.collection('impersonationNonces').findOneAndUpdate(
+            {
+              nonce: impersonationStartNonce,
+              actorUserId: new ObjectId(actorUserId),
+              usedAt: null,
+              expiresAt: { $gt: new Date() }
+            },
+            { $set: { usedAt: new Date(), updatedAt: new Date() } },
+            { returnDocument: 'after' }
+          )
+
+          const nonceValue: any = (nonceDoc as any)?.value ?? nonceDoc ?? null
+
+          if (!nonceValue?.targetUserId) return token
+
+          const targetUserId =
+            typeof nonceValue.targetUserId?.toHexString === 'function'
+              ? nonceValue.targetUserId.toHexString()
+              : String(nonceValue.targetUserId)
+
+          const preferredTenantIdRaw =
+            typeof nonceValue.tenantId?.toHexString === 'function'
+              ? nonceValue.tenantId.toHexString()
+              : String(nonceValue.tenantId || '')
+
+          const preferredTenantId = preferredTenantIdRaw && ObjectId.isValid(preferredTenantIdRaw) ? preferredTenantIdRaw : undefined
+
+          const targetState = await hydrateUserState(db, targetUserId, preferredTenantId)
+
+          token.userId = targetUserId
+          ;(token as any).isSuperAdmin = targetState.isSuperAdmin
+          token.tenantIds = targetState.tenantIds
+          token.currentTenantId = targetState.currentTenantId
+          ;(token as any).email = targetState.email
+          ;(token as any).name = targetState.name
+          ;(token as any).picture = targetState.image
+          ;(token as any).impersonation = {
+            active: true,
+            actorUserId,
+            targetUserId,
+            startedAt: new Date().toISOString(),
+            reason: String(nonceValue.reason || '') || undefined,
+            auditId:
+              typeof nonceValue.auditId?.toHexString === 'function'
+                ? nonceValue.auditId.toHexString()
+                : String(nonceValue.auditId || '') || undefined
+          } as TokenImpersonation
+
+          if (nonceValue.auditId) {
+            await db.collection('impersonationAudits').updateOne(
+              { _id: nonceValue.auditId },
+              {
+                $set: {
+                  status: 'active',
+                  startedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            )
+          }
+
+          return token
+        }
+
+        if (shouldStopImpersonation && (token as any)?.impersonation?.active) {
+          const db = await getDb()
+          const activeImpersonation = (token as any).impersonation as TokenImpersonation
+          const actorUserId = String(activeImpersonation.actorUserId || '')
+
+          if (!actorUserId || !ObjectId.isValid(actorUserId)) return token
+          const actorState = await hydrateUserState(db, actorUserId)
+
+          token.userId = actorUserId
+          ;(token as any).isSuperAdmin = actorState.isSuperAdmin
+          token.tenantIds = actorState.tenantIds
+          token.currentTenantId = actorState.currentTenantId
+          ;(token as any).email = actorState.email
+          ;(token as any).name = actorState.name
+          ;(token as any).picture = actorState.image
+          ;(token as any).impersonation = undefined
+
+          if (activeImpersonation.auditId && ObjectId.isValid(activeImpersonation.auditId)) {
+            await db.collection('impersonationAudits').updateOne(
+              { _id: new ObjectId(activeImpersonation.auditId) },
+              {
+                $set: {
+                  status: 'ended',
+                  endedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            )
+          }
+
+          return token
+        }
+
+        return token
       }
 
       if (token.userId) {
         const db = await getDb()
 
-        const userDoc = await db
-          .collection('users')
-          .findOne({ _id: new ObjectId(token.userId) }, { projection: { isSuperAdmin: 1, email: 1 } })
+        const state = await hydrateUserState(db, String(token.userId), token.currentTenantId)
 
-        ;(token as any).isSuperAdmin = Boolean((userDoc as any)?.isSuperAdmin)
-
-        const email = String((userDoc as any)?.email || '')
-
-        const emailFilter =
-          email && email.length > 0
-            ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
-            : undefined
-
-        const orFilters = [{ userId: new ObjectId(token.userId) }] as any[]
-
-        if (emailFilter) orFilters.push(emailFilter)
-
-        const memberships = await db
-          .collection('memberships')
-          .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1 } })
-          .toArray()
-
-        const tenantIds = memberships.map(m => (m.tenantId as ObjectId).toHexString())
-
-        token.tenantIds = tenantIds
-        token.currentTenantId = token.currentTenantId || tenantIds[0]
+        ;(token as any).isSuperAdmin = state.isSuperAdmin
+        token.tenantIds = state.tenantIds
+        token.currentTenantId = state.currentTenantId
+        ;(token as any).email = state.email
+        ;(token as any).name = state.name
+        ;(token as any).picture = state.image
 
         return token
       }
@@ -179,6 +334,7 @@ return token
       ;(session as any).tenantIds = (token as any).tenantIds
       ;(session as any).currentTenantId = (token as any).currentTenantId
       ;(session as any).isSuperAdmin = (token as any).isSuperAdmin
+      ;(session as any).impersonation = (token as any).impersonation
 
       if (session.user) {
         ;(session.user as any).isSuperAdmin = (token as any).isSuperAdmin
@@ -192,7 +348,7 @@ return token
 
         const emailFilter =
           email && email.length > 0
-            ? { email: { $regex: `^${email.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+            ? { email: { $regex: `^${escapeRegexLiteral(email)}$`, $options: 'i' } }
             : undefined
 
         const orFilters = [{ userId: userIdObj }] as any[]
