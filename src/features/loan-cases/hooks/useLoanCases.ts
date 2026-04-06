@@ -8,6 +8,7 @@ import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
 export type LoanCasesFilters = {
   stageId?: string
   assignedAgentId?: string
+  bankName?: string
   showInactive?: boolean
 }
 

@@ -164,6 +164,7 @@ export async function GET(request: Request) {
   const assignedAgentId = url.searchParams.get('assignedAgentId') || ''
   const customerId = url.searchParams.get('customerId') || ''
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
+  const bankName = url.searchParams.get('bankName') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
   const bankNameOptions = url.searchParams.get('bankNameOptions') === 'true'
   const tenantIdHex = tenantIdObj.toHexString()
@@ -235,6 +236,30 @@ export async function GET(request: Request) {
       ...(baseFilter.$and || []),
       {
         $or: [{ loanTypeId: loanTypeObjId }, { loanTypeId }]
+      }
+    ]
+  }
+
+  if (bankName.trim()) {
+    const normalizedBankName = bankName.trim().toLowerCase()
+
+    baseFilter.$and = [
+      ...(baseFilter.$and || []),
+      {
+        $expr: {
+          $eq: [
+            {
+              $toLower: {
+                $trim: {
+                  input: {
+                    $toString: { $ifNull: ['$bankName', ''] }
+                  }
+                }
+              }
+            },
+            normalizedBankName
+          ]
+        }
       }
     ]
   }

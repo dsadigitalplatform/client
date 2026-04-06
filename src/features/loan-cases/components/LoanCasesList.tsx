@@ -28,7 +28,7 @@ import { useTheme } from '@mui/material/styles'
 import MuiLink from '@mui/material/Link'
 
 import { useLoanCases } from '@features/loan-cases/hooks/useLoanCases'
-import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
+import { getLoanCaseBankNames, getTenantUsers } from '@features/loan-cases/services/loanCasesService'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
 
@@ -44,19 +44,23 @@ const LoanCasesList = () => {
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
+  const [bankName, setBankName] = useState<string>('')
   const [showInactive, setShowInactive] = useState<boolean>(false)
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
+  const [bankNames, setBankNames] = useState<string[]>([])
   const effectiveAssignedAgentId = isUserRole ? '' : assignedAgentId
+  const defaultAssignedAgentId = sessionUserId || ''
 
   const filters = useMemo(
     () => ({
       stageId: stageId || undefined,
       assignedAgentId: effectiveAssignedAgentId || undefined,
+      bankName: bankName || undefined,
       showInactive: showInactive || undefined
     }),
-    [stageId, effectiveAssignedAgentId, showInactive]
+    [bankName, stageId, effectiveAssignedAgentId, showInactive]
   )
 
   const { cases, loading } = useLoanCases(filters)
@@ -64,14 +68,22 @@ const LoanCasesList = () => {
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
 
+  const hasActiveFilters =
+    Boolean(stageId) || Boolean(bankName) || showInactive || assignedAgentId !== defaultAssignedAgentId
+
   useEffect(() => {
 
     void (async () => {
       try {
-        const [stagesData, usersData] = await Promise.all([getLoanStatusPipelineStages(), getTenantUsers()])
+        const [stagesData, usersData, bankNamesData] = await Promise.all([
+          getLoanStatusPipelineStages(),
+          getTenantUsers(),
+          getLoanCaseBankNames()
+        ])
 
         setStages(stagesData as any)
         setUsers(usersData as any)
+        setBankNames(Array.isArray(bankNamesData) ? bankNamesData : [])
       } catch {
       }
     })()
@@ -163,7 +175,7 @@ const LoanCasesList = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' },
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr auto auto' },
           gap: 2,
           alignItems: 'center'
         }}
@@ -184,6 +196,24 @@ const LoanCasesList = () => {
             {userOptions.map(u => (
               <MenuItem key={u.id} value={u.id}>
                 {u.name || u.email || u.id}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size='small' fullWidth>
+          <InputLabel id='loan-cases-bank-filter'>Bank</InputLabel>
+          <Select
+            labelId='loan-cases-bank-filter'
+            label='Bank'
+            value={bankName}
+            onChange={e => {
+              setBankName(String(e.target.value))
+            }}
+          >
+            <MenuItem value=''>All Banks</MenuItem>
+            {bankNames.map(name => (
+              <MenuItem key={name} value={name}>
+                {name}
               </MenuItem>
             ))}
           </Select>
@@ -219,6 +249,20 @@ const LoanCasesList = () => {
           label='Show inactive'
           sx={{ mt: 0 }}
         />
+        <Button
+          variant='text'
+          color='secondary'
+          disabled={!hasActiveFilters}
+          onClick={() => {
+            setStageId('')
+            setBankName('')
+            setShowInactive(false)
+            setHasAgentFilterOverride(false)
+            setAssignedAgentId(defaultAssignedAgentId)
+          }}
+        >
+          Clear Filters
+        </Button>
       </Box>
 
       {isMobile ? (

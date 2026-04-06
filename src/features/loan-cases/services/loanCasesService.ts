@@ -13,6 +13,7 @@ export type GetLoanCasesParams = {
   assignedAgentId?: string
   customerId?: string
   loanTypeId?: string
+  bankName?: string
   showInactive?: boolean
 }
 
@@ -23,6 +24,7 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.assignedAgentId) url.searchParams.set('assignedAgentId', params.assignedAgentId)
   if (params.customerId) url.searchParams.set('customerId', params.customerId)
   if (params.loanTypeId) url.searchParams.set('loanTypeId', params.loanTypeId)
+  if (params.bankName) url.searchParams.set('bankName', params.bankName)
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
 
   const res = await fetch(url.toString(), { cache: 'no-store' })
