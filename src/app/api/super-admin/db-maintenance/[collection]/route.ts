@@ -26,9 +26,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ collection:
   const url = new URL(request.url)
   const limitParam = url.searchParams.get('limit')
   const cursor = url.searchParams.get('cursor')
+  const createdById = (url.searchParams.get('createdById') || '').trim()
   const limit = limitParam ? Number(limitParam) : undefined
 
-  const result = await listDbMaintenanceDocuments({ collection, limit, cursor })
+  const result = await listDbMaintenanceDocuments({
+    collection,
+    limit,
+    cursor,
+    createdById: createdById.length > 0 ? createdById : null
+  })
 
   return NextResponse.json(result)
 }
@@ -47,8 +53,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ collection
 
   const body = await request.json().catch(() => ({}))
   const ids = Array.isArray(body?.ids) ? body.ids.map((v: any) => String(v)) : []
+  const createdByIdRaw = body?.createdById
+  const createdById = createdByIdRaw == null ? null : String(createdByIdRaw).trim()
 
-  const result = await deleteDbMaintenanceDocuments({ collection, ids })
+  const result = await deleteDbMaintenanceDocuments({ collection, ids, createdById })
 
   return NextResponse.json(result)
 }

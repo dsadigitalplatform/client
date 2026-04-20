@@ -28,6 +28,7 @@ import { useTheme } from '@mui/material/styles'
 import { dbMaintenanceService } from '../services/dbMaintenanceService'
 import type {
   DbMaintenanceCollectionInfo,
+  DbMaintenanceCreatorOption,
   DbMaintenanceDocumentPreview,
   DbMaintenanceTenantInfo,
   DbMaintenanceTenantPurgeResult
@@ -67,6 +68,13 @@ export const DbMaintenanceView = () => {
   const [recordsConfirmOpen, setRecordsConfirmOpen] = useState(false)
   const [recordsConfirmText, setRecordsConfirmText] = useState('')
   const [deletingSelected, setDeletingSelected] = useState(false)
+  const [creatorsLoading, setCreatorsLoading] = useState(false)
+  const [creatorsError, setCreatorsError] = useState<string | null>(null)
+  const [creators, setCreators] = useState<DbMaintenanceCreatorOption[]>([])
+  const [selectedCreatedById, setSelectedCreatedById] = useState('')
+  const [deleteByUserConfirmOpen, setDeleteByUserConfirmOpen] = useState(false)
+  const [deleteByUserConfirmText, setDeleteByUserConfirmText] = useState('')
+  const [deletingByUser, setDeletingByUser] = useState(false)
 
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -74,6 +82,8 @@ export const DbMaintenanceView = () => {
   const selectedInfo = useMemo(() => collections.find(c => c.name === selected) || null, [collections, selected])
   const selectedIds = useMemo(() => Object.keys(recordSelections).filter(k => recordSelections[k]), [recordSelections])
   const selectedTenant = useMemo(() => tenants.find(t => t.id === selectedTenantId) || null, [tenants, selectedTenantId])
+  const supportsCreatorFilter = selected === 'loanCases' || selected === 'appointments'
+  const selectedCreator = useMemo(() => creators.find(c => c.id === selectedCreatedById) || null, [creators, selectedCreatedById])
 
   const load = async () => {
     setLoading(true)
@@ -193,8 +203,17 @@ export const DbMaintenanceView = () => {
     setRecordsError(null)
 
     try {
+      const creatorFilteringEnabled =
+        (collectionName === 'loanCases' || collectionName === 'appointments') && Boolean(selectedCreatedById)
+
       const cursor = reset ? null : recordsNextCursor
-      const res = await dbMaintenanceService.listDocuments(collectionName, { limit: 50, cursor })
+
+      const res = await dbMaintenanceService.listDocuments(collectionName, {
+        limit: 50,
+        cursor,
+        createdById: creatorFilteringEnabled ? selectedCreatedById : null
+      })
+
       const items = Array.isArray(res?.items) ? res.items : []
 
       if (reset) {
@@ -211,6 +230,31 @@ export const DbMaintenanceView = () => {
     }
   }
 
+  const loadCreators = async (collectionName: string) => {
+    if (!(collectionName === 'loanCases' || collectionName === 'appointments')) {
+      setCreators([])
+      setSelectedCreatedById('')
+      setCreatorsError(null)
+
+      return
+    }
+
+    setCreatorsLoading(true)
+    setCreatorsError(null)
+
+    try {
+      const res = await dbMaintenanceService.listCreators(collectionName)
+      const list = Array.isArray(res?.creators) ? res.creators : []
+
+      setCreators(list)
+      if (selectedCreatedById && !list.some(c => c.id === selectedCreatedById)) setSelectedCreatedById('')
+    } catch (e: any) {
+      setCreatorsError(e?.message || 'Failed to load creators')
+    } finally {
+      setCreatorsLoading(false)
+    }
+  }
+
   const openRecords = async (collectionName?: string) => {
     const name = typeof collectionName === 'string' && collectionName.length > 0 ? collectionName : selected
 
@@ -221,19 +265,31 @@ export const DbMaintenanceView = () => {
     setRecordSelections({})
     setRecords([])
     setRecordsNextCursor(null)
+    setCreators([])
+    setSelectedCreatedById('')
+    setCreatorsError(null)
+    setDeleteByUserConfirmOpen(false)
+    setDeleteByUserConfirmText('')
+
+    await loadCreators(name)
     await loadRecords(name, { reset: true })
   }
 
   const closeRecords = () => {
-    if (recordsLoading || deletingSelected) return
+    if (recordsLoading || deletingSelected || deletingByUser) return
 
     setRecordsOpen(false)
     setRecordsError(null)
     setRecordSelections({})
     setRecords([])
     setRecordsNextCursor(null)
+    setCreators([])
+    setSelectedCreatedById('')
+    setCreatorsError(null)
     setRecordsConfirmOpen(false)
     setRecordsConfirmText('')
+    setDeleteByUserConfirmOpen(false)
+    setDeleteByUserConfirmText('')
   }
 
   const toggleRecord = (id: string) => {
@@ -252,6 +308,9 @@ export const DbMaintenanceView = () => {
   }
 
   const canDeleteSelected = recordsConfirmText.trim().toUpperCase() === 'DELETE' && selectedIds.length > 0
+
+  const canDeleteByUser =
+    supportsCreatorFilter && Boolean(selectedCreatedById) && deleteByUserConfirmText.trim().toUpperCase() === 'DELETE'
 
   const deleteSelected = async () => {
     if (!selected || !canDeleteSelected) return
@@ -273,6 +332,46 @@ export const DbMaintenanceView = () => {
       setDeletingSelected(false)
     }
   }
+
+  const openDeleteByUserConfirm = () => {
+    setDeleteByUserConfirmText('')
+    setDeleteByUserConfirmOpen(true)
+  }
+
+  const closeDeleteByUserConfirm = () => {
+    if (deletingByUser) return
+    setDeleteByUserConfirmOpen(false)
+    setDeleteByUserConfirmText('')
+  }
+
+  const deleteByUser = async () => {
+    if (!selected || !selectedCreatedById || !supportsCreatorFilter || !canDeleteByUser) return
+
+    setDeletingByUser(true)
+    setError(null)
+    setRecordsError(null)
+
+    try {
+      await dbMaintenanceService.deleteDocuments(selected, [], { createdById: selectedCreatedById })
+      setRecordSelections({})
+      setDeleteByUserConfirmOpen(false)
+      setDeleteByUserConfirmText('')
+      await loadCreators(selected)
+      await loadRecords(selected, { reset: true })
+      await load()
+    } catch (e: any) {
+      setRecordsError(e?.message || 'Failed to delete records by creator')
+    } finally {
+      setDeletingByUser(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!recordsOpen || !selected || !supportsCreatorFilter) return
+
+    loadRecords(selected, { reset: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCreatedById])
 
   return (
     <Box className='flex flex-col gap-4'>
@@ -569,25 +668,71 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Records: {selected || '-'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           {recordsError && <Typography color='error'>{recordsError}</Typography>}
+          {creatorsError && <Typography color='error'>{creatorsError}</Typography>}
+          {supportsCreatorFilter && (
+            <FormControl fullWidth size='small'>
+              <InputLabel id='db-maintenance-created-by-select-label'>Created By</InputLabel>
+              <Select
+                labelId='db-maintenance-created-by-select-label'
+                value={selectedCreatedById}
+                label='Created By'
+                onChange={e => setSelectedCreatedById(String(e.target.value))}
+                disabled={creatorsLoading || recordsLoading || deletingSelected || deletingByUser}
+              >
+                <MenuItem value=''>All creators</MenuItem>
+                {creators.map(c => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.name}
+                    {c.email ? ` (${c.email})` : ''} - {c.documentCount}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
             <Typography variant='body2' color='text.secondary'>
               Selected records: {selectedIds.length}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
-              <Button variant='outlined' onClick={() => loadRecords(selected, { reset: true })} disabled={recordsLoading || deletingSelected} fullWidth={isMobile}>
+              <Button
+                variant='outlined'
+                onClick={() => {
+                  if (!selected) return
+                  loadCreators(selected)
+                  loadRecords(selected, { reset: true })
+                }}
+                disabled={recordsLoading || deletingSelected || deletingByUser}
+                fullWidth={isMobile}
+              >
                 Refresh
               </Button>
               <Button
                 color='error'
                 variant='contained'
                 onClick={openDeleteSelectedConfirm}
-                disabled={selectedIds.length === 0 || recordsLoading || deletingSelected}
+                disabled={selectedIds.length === 0 || recordsLoading || deletingSelected || deletingByUser}
                 fullWidth={isMobile}
               >
                 Delete Selected
               </Button>
+              {supportsCreatorFilter && (
+                <Button
+                  color='error'
+                  variant='outlined'
+                  onClick={openDeleteByUserConfirm}
+                  disabled={!selectedCreatedById || recordsLoading || deletingSelected || deletingByUser}
+                  fullWidth={isMobile}
+                >
+                  Delete By User
+                </Button>
+              )}
             </Box>
           </Box>
+          {supportsCreatorFilter && (
+            <Typography variant='body2' color='text.secondary'>
+              Creator filter: {selectedCreator ? `${selectedCreator.name}${selectedCreator.email ? ` (${selectedCreator.email})` : ''}` : 'All creators'}
+            </Typography>
+          )}
 
           {isMobile ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -649,7 +794,7 @@ export const DbMaintenanceView = () => {
             <Button
               variant='outlined'
               onClick={() => loadRecords(selected, { reset: false })}
-              disabled={!recordsNextCursor || recordsLoading || deletingSelected}
+              disabled={!recordsNextCursor || recordsLoading || deletingSelected || deletingByUser}
               fullWidth={isMobile}
             >
               Load More
@@ -657,7 +802,7 @@ export const DbMaintenanceView = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button variant='text' onClick={closeRecords} disabled={recordsLoading || deletingSelected}>
+          <Button variant='text' onClick={closeRecords} disabled={recordsLoading || deletingSelected || deletingByUser}>
             Close
           </Button>
         </DialogActions>
@@ -684,6 +829,31 @@ export const DbMaintenanceView = () => {
           </Button>
           <Button color='error' variant='contained' onClick={deleteSelected} disabled={!canDeleteSelected || deletingSelected}>
             {deletingSelected ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={deleteByUserConfirmOpen} onClose={closeDeleteByUserConfirm} fullWidth maxWidth='sm' fullScreen={isMobile}>
+        <DialogTitle>Delete Records By User</DialogTitle>
+        <DialogContent className='flex flex-col gap-3'>
+          <Typography variant='body2' color='text.secondary'>
+            This will permanently delete all records from <strong>{selected || '-'}</strong> created by:{' '}
+            <strong>{selectedCreator ? `${selectedCreator.name}${selectedCreator.email ? ` (${selectedCreator.email})` : ''}` : '-'}</strong>
+          </Typography>
+          <Typography variant='body2' color='text.secondary'>Type DELETE to confirm.</Typography>
+          <TextField
+            label='Type DELETE to confirm'
+            value={deleteByUserConfirmText}
+            onChange={e => setDeleteByUserConfirmText(e.target.value)}
+            fullWidth
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button variant='text' onClick={closeDeleteByUserConfirm} disabled={deletingByUser}>
+            Cancel
+          </Button>
+          <Button color='error' variant='contained' onClick={deleteByUser} disabled={!canDeleteByUser || deletingByUser}>
+            {deletingByUser ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

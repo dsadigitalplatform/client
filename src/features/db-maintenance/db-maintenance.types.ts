@@ -16,6 +16,13 @@ export type DbMaintenanceDocumentPreview = {
   summary: string
 }
 
+export type DbMaintenanceCreatorOption = {
+  id: string
+  name: string
+  email: string | null
+  documentCount: number
+}
+
 export type DbMaintenanceTenantInfo = {
   id: string
   name: string

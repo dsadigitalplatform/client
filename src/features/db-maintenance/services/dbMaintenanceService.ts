@@ -1,6 +1,7 @@
 import type {
   DbMaintenanceClearResult,
   DbMaintenanceCollectionInfo,
+  DbMaintenanceCreatorOption,
   DbMaintenanceDocumentPreview,
   DbMaintenanceTenantInfo,
   DbMaintenanceTenantPurgeResult
@@ -37,11 +38,12 @@ export const dbMaintenanceService = {
       method: 'POST',
       body: JSON.stringify({ tenantId })
     }),
-  listDocuments: (collection: string, params?: { limit?: number; cursor?: string | null }) => {
+  listDocuments: (collection: string, params?: { limit?: number; cursor?: string | null; createdById?: string | null }) => {
     const qs = new URLSearchParams()
 
     if (params?.limit != null) qs.set('limit', String(params.limit))
     if (params?.cursor) qs.set('cursor', String(params.cursor))
+    if (params?.createdById) qs.set('createdById', String(params.createdById))
 
     const suffix = qs.toString() ? `?${qs.toString()}` : ''
 
@@ -49,9 +51,11 @@ export const dbMaintenanceService = {
       `/api/super-admin/db-maintenance/${encodeURIComponent(collection)}${suffix}`
     )
   },
-  deleteDocuments: (collection: string, ids: string[]) =>
+  listCreators: (collection: string) =>
+    api<{ creators: DbMaintenanceCreatorOption[] }>(`/api/super-admin/db-maintenance/${encodeURIComponent(collection)}/creators`),
+  deleteDocuments: (collection: string, ids: string[], options?: { createdById?: string | null }) =>
     api<{ deleted: number }>(`/api/super-admin/db-maintenance/${encodeURIComponent(collection)}`, {
       method: 'POST',
-      body: JSON.stringify({ ids })
+      body: JSON.stringify({ ids, createdById: options?.createdById || null })
     })
 }

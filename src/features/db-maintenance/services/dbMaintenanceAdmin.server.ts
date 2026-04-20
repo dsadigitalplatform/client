@@ -7,6 +7,7 @@ import { getDb } from '@/lib/mongodb'
 import type {
   DbMaintenanceClearResult,
   DbMaintenanceCollectionInfo,
+  DbMaintenanceCreatorOption,
   DbMaintenanceDocumentPreview,
   DbMaintenanceTenantInfo,
   DbMaintenanceTenantPurgeResult
@@ -25,7 +26,8 @@ export const DB_MAINTENANCE_COLLECTIONS = [
   'documentChecklists',
   'loanStatusPipelineStages',
   'loanTypeDocuments',
-  'loanCases'
+  'loanCases',
+  'appointments'
 ] as const
 
 const allowed = new Set<string>(DB_MAINTENANCE_COLLECTIONS)
@@ -117,10 +119,63 @@ function buildSummary(doc: any): string {
   return parts.join(' • ')
 }
 
+function buildCreatedByFilter(createdByIdRaw: string): Record<string, any> {
+  const createdById = String(createdByIdRaw || '').trim()
+
+  if (!createdById) return {}
+
+  const filters: any[] = [{ createdBy: createdById }]
+
+  if (ObjectId.isValid(createdById)) {
+    filters.push({ createdBy: new ObjectId(createdById) })
+  }
+
+  return { $or: filters }
+}
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  const out: T[][] = []
+
+  for (let i = 0; i < items.length; i += chunkSize) {
+    out.push(items.slice(i, i + chunkSize))
+  }
+
+  return out
+}
+
+async function deleteAuditLogsForLoanCaseIds(db: any, loanCaseIds: string[]): Promise<number> {
+  const ids = Array.from(new Set(loanCaseIds.map(v => String(v || '').trim()).filter(Boolean)))
+
+  if (ids.length === 0) return 0
+
+  const auditExists = (await db.listCollections({ name: 'auditLogs' }, { nameOnly: true }).toArray()).length > 0
+
+  if (!auditExists) return 0
+
+  let deletedTotal = 0
+
+  for (const batch of chunkArray(ids, 200)) {
+    const objectIds = batch.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
+    const filters: any[] = [{ 'metadata.leadId': { $in: batch } }]
+
+    if (objectIds.length > 0) {
+      filters.push({ 'metadata.leadId': { $in: objectIds } })
+    }
+
+    const q = filters.length === 1 ? filters[0] : { $or: filters }
+    const res = await db.collection('auditLogs').deleteMany(q)
+
+    deletedTotal += res.deletedCount || 0
+  }
+
+  return deletedTotal
+}
+
 export async function listDbMaintenanceDocuments(params: {
   collection: string
   limit?: number
   cursor?: string | null
+  createdById?: string | null
 }): Promise<{ items: DbMaintenanceDocumentPreview[]; nextCursor: string | null }> {
   const db = await getDb()
   const collection = params.collection
@@ -134,6 +189,11 @@ export async function listDbMaintenanceDocuments(params: {
   }
 
   const query: any = {}
+  const createdByFilter = params.createdById ? buildCreatedByFilter(params.createdById) : {}
+
+  if (Object.keys(createdByFilter).length > 0) {
+    query.$and = [...(query.$and || []), createdByFilter]
+  }
 
   if (params.cursor && typeof params.cursor === 'string' && params.cursor.trim().length > 0) {
     const c = params.cursor.trim()
@@ -159,18 +219,77 @@ export async function listDbMaintenanceDocuments(params: {
   return { items, nextCursor }
 }
 
-export async function deleteDbMaintenanceDocuments(params: { collection: string; ids: string[] }): Promise<{ deleted: number }> {
+export async function listDbMaintenanceCreators(params: { collection: string }): Promise<DbMaintenanceCreatorOption[]> {
   const db = await getDb()
   const collection = params.collection
-  const ids = Array.isArray(params.ids) ? params.ids : []
-
-  const unique = Array.from(new Set(ids.map(s => String(s || '').trim()).filter(Boolean))).slice(0, 500)
-
-  if (unique.length === 0) return { deleted: 0 }
 
   const exist = (await db.listCollections({ name: collection }, { nameOnly: true }).toArray()).length > 0
 
+  if (!exist) return []
+
+  const creatorCounts = await db
+    .collection(collection)
+    .aggregate([
+      { $match: { createdBy: { $exists: true, $ne: null } } },
+      { $project: { createdById: { $toString: '$createdBy' } } },
+      { $match: { createdById: { $ne: '' } } },
+      { $group: { _id: '$createdById', count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: 500 }
+    ])
+    .toArray()
+
+  if (creatorCounts.length === 0) return []
+
+  const creatorIds = creatorCounts.map(row => String((row as any)._id || '')).filter(Boolean)
+  const objectIds = creatorIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id))
+  const usersById = new Map<string, { name: string; email: string | null }>()
+
+  if (objectIds.length > 0) {
+    const users = await db
+      .collection('users')
+      .find({ _id: { $in: objectIds } }, { projection: { _id: 1, name: 1, email: 1 } })
+      .toArray()
+
+    users.forEach(user => {
+      const id = toIdString((user as any)?._id)
+
+      usersById.set(id, {
+        name: typeof (user as any)?.name === 'string' && (user as any).name.trim() ? String((user as any).name).trim() : id,
+        email: typeof (user as any)?.email === 'string' && (user as any).email.trim() ? String((user as any).email).trim() : null
+      })
+    })
+  }
+
+  return creatorCounts.map(row => {
+    const id = String((row as any)?._id || '')
+    const info = usersById.get(id)
+    const fallbackName = info?.email || id
+
+    return {
+      id,
+      name: info?.name || fallbackName,
+      email: info?.email || null,
+      documentCount: Number((row as any)?.count || 0)
+    }
+  })
+}
+
+export async function deleteDbMaintenanceDocuments(params: {
+  collection: string
+  ids: string[]
+  createdById?: string | null
+}): Promise<{ deleted: number }> {
+  const db = await getDb()
+  const collection = params.collection
+  const ids = Array.isArray(params.ids) ? params.ids : []
+  const unique = Array.from(new Set(ids.map(s => String(s || '').trim()).filter(Boolean))).slice(0, 500)
+  const createdById = String(params.createdById || '').trim()
+  const exist = (await db.listCollections({ name: collection }, { nameOnly: true }).toArray()).length > 0
+
   if (!exist) return { deleted: 0 }
+
+  if (unique.length === 0 && !createdById) return { deleted: 0 }
 
   const ors: any[] = []
 
@@ -179,7 +298,25 @@ export async function deleteDbMaintenanceDocuments(params: { collection: string;
     ors.push({ _id: id })
   }
 
-  const res = await db.collection(collection).deleteMany({ $or: ors })
+  const queryParts: any[] = []
+
+  if (ors.length > 0) queryParts.push({ $or: ors })
+  if (createdById) queryParts.push(buildCreatedByFilter(createdById))
+
+  const deleteQuery = queryParts.length === 1 ? queryParts[0] : { $and: queryParts }
+  let loanCaseIdsToDelete: string[] = []
+
+  if (collection === 'loanCases') {
+    const rows = await db.collection('loanCases').find(deleteQuery, { projection: { _id: 1 } }).toArray()
+
+    loanCaseIdsToDelete = rows.map((r: any) => toIdString(r?._id)).filter(Boolean)
+  }
+
+  const res = await db.collection(collection).deleteMany(deleteQuery)
+
+  if (collection === 'loanCases' && loanCaseIdsToDelete.length > 0) {
+    await deleteAuditLogsForLoanCaseIds(db, loanCaseIdsToDelete)
+  }
 
   return { deleted: res.deletedCount || 0 }
 }
@@ -252,6 +389,7 @@ export async function purgeTenantData(tenantIdRaw: string): Promise<DbMaintenanc
   deletedByCollection.loanStatusPipelineStages = await deleteByTenantId('loanStatusPipelineStages', tenantId)
   deletedByCollection.loanTypeDocuments = await deleteByTenantId('loanTypeDocuments', tenantId)
   deletedByCollection.loanCases = await deleteByTenantId('loanCases', tenantId)
+  deletedByCollection.appointments = await deleteByTenantId('appointments', tenantId)
 
   const membershipsExists = (await db.listCollections({ name: 'memberships' }, { nameOnly: true }).toArray()).length > 0
 
