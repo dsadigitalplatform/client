@@ -82,6 +82,7 @@ import type {
   LeadSource,
   LoanCaseDetails,
   LoanCaseDocument,
+  LoanCaseRemark,
   LoanCaseDocumentStatus,
   TenantUserOption
 } from '@features/loan-cases/loan-cases.types'
@@ -250,6 +251,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [auditHistoryLoaded, setAuditHistoryLoaded] = useState(false)
   const [auditHistoryError, setAuditHistoryError] = useState<string | null>(null)
   const [auditHistoryItems, setAuditHistoryItems] = useState<LeadAuditHistoryItem[]>([])
+  const [remarksPanelOpen, setRemarksPanelOpen] = useState(true)
+  const [remarks, setRemarks] = useState<LoanCaseRemark[]>([])
+  const [remarkInput, setRemarkInput] = useState('')
+  const [addingRemark, setAddingRemark] = useState(false)
+  const [remarksError, setRemarksError] = useState<string | null>(null)
   const duplicateCheckSeqRef = useRef(0)
 
   const apptScheduledAtValue = useMemo(() => {
@@ -506,6 +512,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setTenureMonths(data.tenureMonths != null ? String(data.tenureMonths) : '')
         setEmi(data.emi != null ? String(data.emi) : '')
         setDocuments(Array.isArray(data.documents) ? data.documents : [])
+        setRemarks(Array.isArray(data.remarks) ? data.remarks : [])
         setIsLocked(Boolean(data.isLocked))
         setIsActive(Boolean(data.isActive))
       } catch (e: any) {
@@ -627,6 +634,67 @@ const LoanCaseForm = ({ caseId }: Props) => {
         return { label: 'Email', icon: 'ri-mail-line' }
       default:
         return { label: '-', icon: 'ri-calendar-event-line' }
+    }
+  }
+
+  const formatRemarkDateTime = (value: string | null | undefined) => {
+    if (!value) return 'Unknown time'
+    const d = dayjs(value)
+
+    return d.isValid() ? d.format('DD MMM YYYY, hh:mm A') : 'Unknown time'
+  }
+
+  const currentUserLabel = String((session as any)?.user?.name || (session as any)?.user?.email || 'You')
+  const hasRemarkPrerequisitesInCreate = Boolean(customerId && loanTypeId)
+  const canAddRemarks = isActive && !submitting && !loading && !addingRemark && (id ? true : hasRemarkPrerequisitesInCreate)
+
+  const addRemark = async () => {
+    const text = remarkInput.trim()
+
+    if (!text) {
+      setRemarksError('Please enter a remark')
+
+      return
+    }
+
+    if (text.length > 1000) {
+      setRemarksError('Remark must be at most 1000 characters')
+
+      return
+    }
+
+    setRemarksError(null)
+
+    if (!id) {
+      const nowIso = new Date().toISOString()
+
+      setRemarks(prev => [
+        {
+          text,
+          updatedByUserId: String((session as any)?.userId || '') || null,
+          updatedByName: String((session as any)?.user?.name || '') || null,
+          updatedByEmail: String((session as any)?.user?.email || '') || null,
+          updatedAt: nowIso
+        },
+        ...prev
+      ])
+      setRemarkInput('')
+
+      return
+    }
+
+    setAddingRemark(true)
+
+    try {
+      await updateLoanCase(id, { remarkToAdd: text })
+      const refreshed = await getLoanCaseById(id)
+
+      setRemarks(Array.isArray(refreshed.remarks) ? refreshed.remarks : [])
+      setRemarkInput('')
+    } catch (e: any) {
+      setRemarksError(e?.message || 'Failed to add remark')
+    } finally {
+      setAddingRemark(false)
     }
   }
 
@@ -826,9 +894,17 @@ const LoanCaseForm = ({ caseId }: Props) => {
               notes: a.outcomeComments.trim().length === 0 ? null : a.outcomeComments.trim()
             })
           }
+
+          // Persist draft remarks after lead creation; API prepends each remark, so save oldest first.
+          for (const remark of [...remarks].reverse()) {
+            const text = String(remark.text || '').trim()
+
+            if (!text) continue
+            await updateLoanCase(res.id, { remarkToAdd: text })
+          }
         } catch (e: any) {
           setIsLocked(true)
-          setError(e?.message || 'Lead was created but appointments could not be created')
+          setError(e?.message || 'Lead was created but related activities could not be completed')
 
           return
         }
@@ -1709,6 +1785,78 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Box>
               )}
+
+              <Divider />
+
+              <Accordion
+                disableGutters
+                expanded={remarksPanelOpen}
+                onChange={(_, expanded) => setRemarksPanelOpen(expanded)}
+                sx={{ borderRadius: 2.5, overflow: 'hidden' }}
+              >
+                <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, width: '100%' }}>
+                    <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
+                      Remarks
+                    </Typography>
+                    <Chip size='small' variant='outlined' label={`${remarks.length} remark${remarks.length === 1 ? '' : 's'}`} />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Stack spacing={1.25}>
+                    {remarks.length === 0 ? (
+                      <Paper variant='outlined' sx={{ p: 2, borderRadius: 2.5, borderStyle: 'dashed' }}>
+                        <Typography variant='body2' color='text.secondary'>
+                          No remarks yet.
+                        </Typography>
+                      </Paper>
+                    ) : (
+                      remarks.map((remark, index) => (
+                        <Paper key={`${remark.updatedAt || 'remark'}-${index}`} variant='outlined' sx={{ p: 1.5, borderRadius: 2.5 }}>
+                          <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                            {remark.text}
+                          </Typography>
+                          <Typography variant='caption' color='text.secondary'>
+                            {`${remark.updatedByName || remark.updatedByEmail || 'Unknown'} • ${formatRemarkDateTime(remark.updatedAt)}`}
+                          </Typography>
+                        </Paper>
+                      ))
+                    )}
+
+                    <TextField
+                      label='Add Remark'
+                      value={remarkInput}
+                      onChange={e => {
+                        setRemarkInput(e.target.value)
+                        if (remarksError) setRemarksError(null)
+                      }}
+                      fullWidth
+                      multiline
+                      minRows={3}
+                      disabled={!canAddRemarks}
+                      error={Boolean(remarksError)}
+                      helperText={
+                        remarksError ||
+                        (!id && !hasRemarkPrerequisitesInCreate
+                          ? 'Select Customer and Loan Type to add remarks'
+                          : null) ||
+                        (!id
+                          ? `Remark will be saved after lead creation. Added by ${currentUserLabel}`
+                          : `Newest remarks appear on top. Added by ${currentUserLabel}`)
+                      }
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button
+                        variant='contained'
+                        onClick={() => void addRemark()}
+                        disabled={!canAddRemarks || remarkInput.trim().length === 0}
+                      >
+                        {addingRemark ? 'Adding...' : 'Add Remark'}
+                      </Button>
+                    </Box>
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
 
               <Divider />
 

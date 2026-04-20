@@ -7,6 +7,14 @@ export type LoanCaseDocument = {
   status: LoanCaseDocumentStatus
 }
 
+export type LoanCaseRemark = {
+  text: string
+  updatedByUserId: string | null
+  updatedByName: string | null
+  updatedByEmail: string | null
+  updatedAt: string | null
+}
+
 export type LoanCaseListItem = {
   id: string
   customerId: string
@@ -28,6 +36,7 @@ export type LoanCaseListItem = {
   pendingDocumentsCount?: number
   hasIncompleteDocuments?: boolean
   canMoveStage?: boolean
+  remarks?: LoanCaseRemark[]
 }
 
 export type LoanCaseDetails = {
@@ -56,6 +65,7 @@ export type LoanCaseDetails = {
   isActive: boolean
   createdAt: string | null
   updatedAt: string | null
+  remarks?: LoanCaseRemark[]
 }
 
 export type CreateLoanCaseInput = {
@@ -76,6 +86,7 @@ export type CreateLoanCaseInput = {
 
 export type UpdateLoanCaseInput = Partial<CreateLoanCaseInput> & {
   documents?: Array<{ documentId: string; status: LoanCaseDocumentStatus }>
+  remarkToAdd?: string
 }
 
 export type TenantUserOption = {

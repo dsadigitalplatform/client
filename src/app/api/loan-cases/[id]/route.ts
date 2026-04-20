@@ -41,6 +41,31 @@ function areSameObjectId(a: ObjectId | null, b: ObjectId | null) {
   return a.equals(b)
 }
 
+function normalizeLoanCaseRemarks(input: unknown) {
+  if (!Array.isArray(input)) return [] as Array<{
+    text: string
+    updatedByUserId: string | null
+    updatedByName: string | null
+    updatedByEmail: string | null
+    updatedAt: string | null
+  }>
+
+  return input
+    .map((item: any) => {
+      const rawUpdatedAt = item?.updatedAt
+      const parsedUpdatedAt = rawUpdatedAt ? new Date(rawUpdatedAt) : null
+
+      return {
+        text: typeof item?.text === 'string' ? item.text.trim() : '',
+        updatedByUserId: item?.updatedByUserId ? String(item.updatedByUserId) : null,
+        updatedByName: item?.updatedByName ? String(item.updatedByName) : null,
+        updatedByEmail: item?.updatedByEmail ? String(item.updatedByEmail) : null,
+        updatedAt: parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null
+      }
+    })
+    .filter(item => item.text.length > 0)
+}
+
 async function writeAuditLog(params: {
   db: any
   actorUserId: ObjectId
@@ -271,7 +296,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     isLocked: Boolean((row as any).isLocked),
     isActive: (row as any).isActive !== false,
     updatedAt: (row as any).updatedAt ? new Date((row as any).updatedAt).toISOString() : null,
-    createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null
+    createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
+    remarks: normalizeLoanCaseRemarks((row as any).remarks)
   }
 
   return NextResponse.json(data)
@@ -306,6 +332,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     | null = null
   const incomingLeadSource = body.leadSource !== undefined ? String(body.leadSource) : undefined
   const incomingAssociateId = body.associateId !== undefined ? (body.associateId == null ? null : String(body.associateId)) : undefined
+  const remarkToAdd = body.remarkToAdd === undefined ? undefined : String(body.remarkToAdd ?? '').trim()
 
   if (body.nextFollowUpDate !== undefined) {
     const d = body.nextFollowUpDate ? new Date(body.nextFollowUpDate) : null
@@ -323,6 +350,33 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   if (body.customerId != null && String(body.customerId) !== String((existing as any).customerId)) {
     errors.customerId = 'Customer cannot be changed after first save'
+  }
+
+  if (remarkToAdd !== undefined) {
+    if (!remarkToAdd) {
+      errors.remarkToAdd = 'Remark is required'
+    } else if (remarkToAdd.length > 1000) {
+      errors.remarkToAdd = 'Remark must be at most 1000 characters'
+    } else {
+      const existingRemarks = normalizeLoanCaseRemarks((existing as any).remarks)
+
+      patch.remarks = [
+        {
+          text: remarkToAdd,
+          updatedByUserId: userId.toHexString(),
+          updatedByName: String(session?.user?.name || '') || null,
+          updatedByEmail: String(session?.user?.email || '') || null,
+          updatedAt: new Date()
+        },
+        ...existingRemarks.map(item => ({
+          text: item.text,
+          updatedByUserId: item.updatedByUserId,
+          updatedByName: item.updatedByName,
+          updatedByEmail: item.updatedByEmail,
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : null
+        }))
+      ]
+    }
   }
 
   if (body.loanTypeId != null) {

@@ -492,6 +492,21 @@ const loanCasesValidator = {
           additionalProperties: true
         }
       },
+      remarks: {
+        bsonType: ['array', 'null'],
+        items: {
+          bsonType: 'object',
+          required: ['text', 'updatedAt'],
+          properties: {
+            text: { bsonType: 'string', minLength: 1, maxLength: 1000 },
+            updatedByUserId: { bsonType: ['objectId', 'string', 'null'] },
+            updatedByName: { bsonType: ['string', 'null'] },
+            updatedByEmail: { bsonType: ['string', 'null'] },
+            updatedAt: { bsonType: ['date', 'null'] }
+          },
+          additionalProperties: true
+        }
+      },
       createdBy: { bsonType: 'objectId' },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },

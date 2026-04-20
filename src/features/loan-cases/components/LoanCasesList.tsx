@@ -122,6 +122,15 @@ const LoanCasesList = () => {
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
   const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
 
+  const formatRemarkDate = (value: string | null | undefined) => {
+    if (!value) return '—'
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) return '—'
+
+    return date.toLocaleString()
+  }
+
   const stageChipColor = (name: string) => {
     const n = name.toLowerCase()
 
@@ -404,13 +413,14 @@ const LoanCasesList = () => {
                   <TableCell align='right'>Requested</TableCell>
                   <TableCell>Stage</TableCell>
                   <TableCell>Assigned Agent</TableCell>
+                  <TableCell>Remarks</TableCell>
                   <TableCell>Last Updated</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={9}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         Loading...
                       </Typography>
@@ -418,7 +428,7 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : cases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={9}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         No cases found
                       </Typography>
@@ -478,6 +488,25 @@ const LoanCasesList = () => {
                         />
                       </TableCell>
                       <TableCell>{c.assignedAgentName || c.assignedAgentEmail || '—'}</TableCell>
+                      <TableCell sx={{ minWidth: 280 }}>
+                        {c.remarks && c.remarks.length > 0 ? (
+                          <Box>
+                            <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                              {c.remarks[0].text}
+                            </Typography>
+                            <Typography variant='caption' color='text.secondary'>
+                              {`${c.remarks[0].updatedByName || c.remarks[0].updatedByEmail || 'Unknown'} • ${formatRemarkDate(c.remarks[0].updatedAt)}`}
+                            </Typography>
+                            {c.remarks.length > 1 ? (
+                              <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
+                                {`${c.remarks.length} remarks`}
+                              </Typography>
+                            ) : null}
+                          </Box>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
                       <TableCell>{c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '—'}</TableCell>
                     </TableRow>
                   ))

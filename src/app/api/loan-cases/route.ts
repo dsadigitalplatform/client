@@ -79,6 +79,31 @@ function isLeadSource(v: unknown): v is LeadSource {
   return typeof v === 'string' && (LEAD_SOURCE_VALUES as readonly string[]).includes(v)
 }
 
+function normalizeLoanCaseRemarks(input: unknown) {
+  if (!Array.isArray(input)) return [] as Array<{
+    text: string
+    updatedByUserId: string | null
+    updatedByName: string | null
+    updatedByEmail: string | null
+    updatedAt: string | null
+  }>
+
+  return input
+    .map((item: any) => {
+      const rawUpdatedAt = item?.updatedAt
+      const parsedUpdatedAt = rawUpdatedAt ? new Date(rawUpdatedAt) : null
+
+      return {
+        text: typeof item?.text === 'string' ? item.text.trim() : '',
+        updatedByUserId: item?.updatedByUserId ? String(item.updatedByUserId) : null,
+        updatedByName: item?.updatedByName ? String(item.updatedByName) : null,
+        updatedByEmail: item?.updatedByEmail ? String(item.updatedByEmail) : null,
+        updatedAt: parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt.toISOString() : null
+      }
+    })
+    .filter(item => item.text.length > 0)
+}
+
 async function getTenantContext(session: any) {
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
@@ -429,7 +454,8 @@ export async function GET(request: Request) {
           loanTypeName: { $ifNull: ['$loanType.name', '$loanTypeName'] },
           stageName: { $ifNull: ['$stage.name', '$stageName'] },
           assignedAgentName: { $ifNull: ['$assignedAgent.name', '$assignedAgentName'] },
-          assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] }
+          assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] },
+          remarks: { $ifNull: ['$remarks', []] }
         }
       }
     ])
@@ -455,6 +481,7 @@ export async function GET(request: Request) {
     incompleteDocumentsCount: Number((r as any).incompleteDocumentsCount || 0),
     pendingDocumentsCount: Number((r as any).pendingDocumentsCount || 0),
     hasIncompleteDocuments: Number((r as any).incompleteDocumentsCount || 0) > 0,
+    remarks: normalizeLoanCaseRemarks((r as any).remarks),
     canMoveStage:
       role === 'ADMIN' ||
       role === 'OWNER' ||
@@ -612,6 +639,7 @@ export async function POST(request: Request) {
     leadSource,
     associateId: associateObjId,
     documents,
+    remarks: [],
     createdBy: userId,
     createdAt: now,
     updatedAt: now,
