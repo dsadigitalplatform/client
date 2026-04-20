@@ -45,6 +45,7 @@ const LoanCasesList = () => {
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
   const [bankName, setBankName] = useState<string>('')
+  const [sortBy, setSortBy] = useState<string>('updatedAt_desc')
   const [showInactive, setShowInactive] = useState<boolean>(false)
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
@@ -64,6 +65,30 @@ const LoanCasesList = () => {
   )
 
   const { cases, loading } = useLoanCases(filters)
+  const sortedCases = useMemo(() => {
+    const list = cases.slice()
+
+    const toTimestamp = (value: string | null | undefined) => {
+      if (!value) return 0
+      const timestamp = new Date(value).getTime()
+
+      return Number.isNaN(timestamp) ? 0 : timestamp
+    }
+
+    switch (sortBy) {
+      case 'updatedAt_asc':
+        return list.sort((a, b) => toTimestamp(a.updatedAt) - toTimestamp(b.updatedAt))
+      case 'requestedAmount_desc':
+        return list.sort((a, b) => (b.requestedAmount ?? Number.NEGATIVE_INFINITY) - (a.requestedAmount ?? Number.NEGATIVE_INFINITY))
+      case 'requestedAmount_asc':
+        return list.sort((a, b) => (a.requestedAmount ?? Number.POSITIVE_INFINITY) - (b.requestedAmount ?? Number.POSITIVE_INFINITY))
+      case 'customerName_asc':
+        return list.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || ''))
+      case 'updatedAt_desc':
+      default:
+        return list.sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt))
+    }
+  }, [cases, sortBy])
 
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
@@ -184,7 +209,11 @@ const LoanCasesList = () => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr auto auto' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            md: 'repeat(4, minmax(0, 1fr)) auto auto'
+          },
           gap: 2,
           alignItems: 'center'
         }}
@@ -245,6 +274,23 @@ const LoanCasesList = () => {
             ))}
           </Select>
         </FormControl>
+        <FormControl size='small' fullWidth>
+          <InputLabel id='loan-cases-sort-by'>Sort by</InputLabel>
+          <Select
+            labelId='loan-cases-sort-by'
+            label='Sort by'
+            value={sortBy}
+            onChange={e => {
+              setSortBy(String(e.target.value))
+            }}
+          >
+            <MenuItem value='updatedAt_desc'>Last Updated (Newest)</MenuItem>
+            <MenuItem value='updatedAt_asc'>Last Updated (Oldest)</MenuItem>
+            <MenuItem value='requestedAmount_desc'>Requested Amount (High to Low)</MenuItem>
+            <MenuItem value='requestedAmount_asc'>Requested Amount (Low to High)</MenuItem>
+            <MenuItem value='customerName_asc'>Customer Name (A-Z)</MenuItem>
+          </Select>
+        </FormControl>
 
 
         <FormControlLabel
@@ -256,12 +302,14 @@ const LoanCasesList = () => {
             />
           }
           label='Show inactive'
-          sx={{ mt: 0 }}
+          sx={{ mt: 0, ml: 0, justifyContent: { xs: 'space-between', md: 'flex-start' }, width: { xs: '100%', md: 'auto' } }}
         />
         <Button
           variant='text'
           color='secondary'
           disabled={!hasActiveFilters}
+          fullWidth={isMobile}
+          sx={{ justifySelf: { md: 'start' } }}
           onClick={() => {
             setStageId('')
             setBankName('')
@@ -284,7 +332,7 @@ const LoanCasesList = () => {
                 </Typography>
               </CardContent>
             </Card>
-          ) : cases.length === 0 ? (
+          ) : sortedCases.length === 0 ? (
             <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
               <CardContent sx={{ p: 2 }}>
                 <Typography variant='body2' color='text.secondary'>
@@ -293,7 +341,7 @@ const LoanCasesList = () => {
               </CardContent>
             </Card>
           ) : (
-            cases.map((c, index) => (
+            sortedCases.map((c, index) => (
               <Card
                 key={c.id}
                 sx={{
@@ -426,7 +474,7 @@ const LoanCasesList = () => {
                       </Typography>
                     </TableCell>
                   </TableRow>
-                ) : cases.length === 0 ? (
+                ) : sortedCases.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
@@ -435,7 +483,7 @@ const LoanCasesList = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  cases.map((c, index) => (
+                  sortedCases.map((c, index) => (
                     <TableRow
                       key={c.id}
                       hover
