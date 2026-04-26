@@ -28,6 +28,7 @@ import Box from '@mui/material/Box'
 
 import { useSettings } from '@core/hooks/useSettings'
 import { SwitchOrganisationDialog } from '@features/tenants/components/SwitchOrganisationDialog'
+import OrganisationSetupSupportDialog from '@features/support/components/OrganisationSetupSupportDialog'
 
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
@@ -88,6 +89,7 @@ const UserDropdown = ({
   const [impersonationQuery, setImpersonationQuery] = useState('')
   const [selectedTargetUserId, setSelectedTargetUserId] = useState('')
   const [impersonationReason, setImpersonationReason] = useState('')
+  const [supportOpen, setSupportOpen] = useState(false)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -339,6 +341,11 @@ const UserDropdown = ({
     setSwitchOpen(true)
   }
 
+  const openSupportDialog = () => {
+    setOpen(false)
+    setSupportOpen(true)
+  }
+
   return (
     <>
       <Badge
@@ -394,16 +401,22 @@ const UserDropdown = ({
                       </div>,
                       <Divider key='org-divider' className='mlb-1' />
                     ]}
-                  <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/create-tenant')}>
-                    <i className='ri-building-2-line' />
-                    <Typography color='text.primary'>Create Organisation</Typography>
-                  </MenuItem>
+                  {isSuperAdmin && (
+                    <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/create-tenant')}>
+                      <i className='ri-building-2-line' />
+                      <Typography color='text.primary'>Create Organisation</Typography>
+                    </MenuItem>
+                  )}
                   {canSwitch && (
                     <MenuItem className='gap-3' onClick={() => openSwitchDialog()}>
                       <i className='ri-exchange-line' />
                       <Typography color='text.primary'>Switch Organisation</Typography>
                     </MenuItem>
                   )}
+                  <MenuItem className='gap-3' onClick={() => openSupportDialog()}>
+                    <i className='ri-customer-service-2-line' />
+                    <Typography color='text.primary'>Contact Support</Typography>
+                  </MenuItem>
                   {canImpersonate && (
                     <MenuItem className='gap-3' onClick={() => openImpersonationDialog()}>
                       <i className='ri-user-search-line' />
@@ -440,6 +453,12 @@ const UserDropdown = ({
         )}
       </Popper>
       <SwitchOrganisationDialog open={switchOpen} onClose={() => setSwitchOpen(false)} />
+      <OrganisationSetupSupportDialog
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        defaultFullName={user?.name}
+        defaultEmail={user?.email}
+      />
       <Dialog open={impersonateOpen} onClose={() => setImpersonateOpen(false)} fullWidth maxWidth='sm'>
         <DialogTitle>Login as User</DialogTitle>
         <DialogContent>
