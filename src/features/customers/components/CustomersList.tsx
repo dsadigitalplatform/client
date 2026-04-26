@@ -38,12 +38,13 @@ const CustomersList = () => {
 
   const handleExport = () => {
     const rows = [
-      ['Full Name', 'Mobile', 'Email', 'Employment Type', 'Monthly Income', 'CIBIL'],
+      ['Full Name', 'Mobile', 'Email', 'Employment Type', 'Requested Lead Amount', 'Monthly Income', 'CIBIL'],
       ...customers.map(c => [
         c.fullName,
         c.mobile,
         c.email ?? '',
         c.employmentType,
+        c.requestedLeadAmountTotal != null ? String(c.requestedLeadAmountTotal) : '',
         c.monthlyIncome != null ? String(c.monthlyIncome) : '',
         c.cibilScore != null ? String(c.cibilScore) : ''
       ])
@@ -251,7 +252,7 @@ const CustomersList = () => {
                       </Typography>
                       <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
                         <Chip
-                          label={c.monthlyIncome != null ? formatINR(c.monthlyIncome) : '-'}
+                          label={formatINR(c.requestedLeadAmountTotal || 0)}
                           size='small'
                           variant='outlined'
                           sx={{
@@ -275,17 +276,18 @@ const CustomersList = () => {
               <TableCell>Name</TableCell>
               <TableCell>Mobile</TableCell>
               <TableCell>Email</TableCell>
+              <TableCell>Requested Lead Amount</TableCell>
               <TableCell>Income</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5}>Loading...</TableCell>
+                <TableCell colSpan={6}>Loading...</TableCell>
               </TableRow>
             ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5}>No customers found</TableCell>
+                <TableCell colSpan={6}>No customers found</TableCell>
               </TableRow>
             ) : (
               customers.map((c, index) => (
@@ -360,6 +362,9 @@ const CustomersList = () => {
                       <i className='ri-mail-line text-lg' />
                       <span>{c.email || '-'}</span>
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    <span>{formatINR(c.requestedLeadAmountTotal || 0)}</span>
                   </TableCell>
                   <TableCell>
                     {c.monthlyIncome != null ? (

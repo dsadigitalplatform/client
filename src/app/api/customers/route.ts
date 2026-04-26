@@ -186,6 +186,54 @@ export async function GET(request: Request) {
     .limit(200)
     .toArray()
 
+  const customerIdStrings = rows.map(r => String((r as any)._id)).filter(Boolean)
+  const tenantIdHex = tenantIdObj.toHexString()
+  const requestedAmountByCustomer = new Map<string, number>()
+
+  if (customerIdStrings.length > 0) {
+    const leadSums = await db
+      .collection('loanCases')
+      .aggregate([
+        {
+          $match: {
+            tenantId: { $in: [tenantIdObj, tenantIdHex] }
+          }
+        },
+        {
+          $project: {
+            customerIdStr: { $toString: '$customerId' },
+            requestedAmountNum: {
+              $convert: {
+                input: '$requestedAmount',
+                to: 'double',
+                onError: 0,
+                onNull: 0
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            customerIdStr: { $in: customerIdStrings }
+          }
+        },
+        {
+          $group: {
+            _id: '$customerIdStr',
+            totalRequestedAmount: { $sum: '$requestedAmountNum' }
+          }
+        }
+      ])
+      .toArray()
+
+    leadSums.forEach(row => {
+      const customerId = String((row as any)?._id || '')
+      const totalRequestedAmount = Number((row as any)?.totalRequestedAmount || 0)
+
+      requestedAmountByCustomer.set(customerId, totalRequestedAmount)
+    })
+  }
+
   const customers = rows.map(r => ({
     id: String((r as any)._id),
     fullName: String((r as any).fullName || ''),
@@ -198,6 +246,7 @@ export async function GET(request: Request) {
     monthlyIncome: (r as any).monthlyIncome ?? null,
     cibilScore: (r as any).cibilScore ?? null,
     source: String((r as any).source || '') as SourceType,
+    requestedLeadAmountTotal: requestedAmountByCustomer.get(String((r as any)._id)) || 0,
     createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null
   }))
 
