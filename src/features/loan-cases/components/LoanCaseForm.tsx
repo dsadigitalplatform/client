@@ -121,6 +121,7 @@ const CREATE_CUSTOMER_OPTION: Customer = {
   monthlyIncome: null,
   cibilScore: null,
   source: 'OTHER',
+  requestedLeadAmountTotal: 0,
   createdAt: null
 }
 
@@ -494,6 +495,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           monthlyIncome: null,
           cibilScore: null,
           source: 'OTHER',
+          requestedLeadAmountTotal: 0,
           createdAt: null
         })
         setCustomerInputValue(data.customerName || '')
