@@ -147,9 +147,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
                 Invite User
               </MenuItem>
             )}
-            <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
-              Create Organisation
-            </MenuItem>
+            {showSuperAdmin && (
+              <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
+                Create Organisation
+              </MenuItem>
+            )}
             <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
               Organisation Details
             </MenuItem>

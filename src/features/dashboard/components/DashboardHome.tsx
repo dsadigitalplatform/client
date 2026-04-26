@@ -33,6 +33,7 @@ import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
+import OrganisationSetupSupportDialog from '@features/support/components/OrganisationSetupSupportDialog'
 
 const DONUT_SIZE = 64
 const AppReactApexCharts = dynamic(() => import('react-apexcharts'), { ssr: false })
@@ -332,6 +333,8 @@ const DashboardHome = () => {
     const [meetingsLoading, setMeetingsLoading] = useState(false)
     const [meetingsError, setMeetingsError] = useState<string | null>(null)
     const [actionToast, setActionToast] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
+    const [supportOpen, setSupportOpen] = useState(false)
+    const [supportAutoShown, setSupportAutoShown] = useState(false)
 
     useEffect(() => {
         let active = true
@@ -608,9 +611,16 @@ const DashboardHome = () => {
         }
     }, [currentTenantId])
 
-    const showWelcomeCta = !isSuperAdmin && !hasMembership && !checking
+    const showWelcomeCta = isSuperAdmin && !hasMembership && !checking
     const hasTenant = Boolean(currentTenantId)
     const isDarkMode = theme.palette.mode === 'dark'
+
+    useEffect(() => {
+        if (checking || isSuperAdmin || hasMembership || supportAutoShown) return
+
+        setSupportOpen(true)
+        setSupportAutoShown(true)
+    }, [checking, isSuperAdmin, hasMembership, supportAutoShown])
 
     const disbursementStageIds = useMemo(() => {
         const ids = new Set<string>()
@@ -1462,6 +1472,12 @@ const DashboardHome = () => {
                     message={actionToast.message}
                 />
             </Snackbar>
+            <OrganisationSetupSupportDialog
+                open={supportOpen}
+                onClose={() => setSupportOpen(false)}
+                defaultFullName={String((session as any)?.user?.name || '')}
+                defaultEmail={String((session as any)?.user?.email || '')}
+            />
         </Box>
     )
 }

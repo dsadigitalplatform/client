@@ -21,5 +21,6 @@ export type Customer = {
   monthlyIncome: number | null
   cibilScore: number | null
   source: SourceType
+  requestedLeadAmountTotal: number
   createdAt: string | null
 }
