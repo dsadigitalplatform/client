@@ -10,6 +10,8 @@ export type LoanCasesFilters = {
   assignedAgentId?: string
   bankName?: string
   showInactive?: boolean
+  stagedDateFrom?: string
+  stagedDateTo?: string
 }
 
 export const useLoanCases = (filters: LoanCasesFilters) => {

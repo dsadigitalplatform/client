@@ -214,7 +214,9 @@ async function main() {
             'LEAD_ASSIGNED_AGENT_CHANGED',
             'LEAD_STATUS_CHANGED',
             'LEAD_REQUESTED_AMOUNT_CHANGED',
-            'LEAD_DELETED'
+            'LEAD_DELETED',
+            'DISBURSEMENT_TRACKER_CREATED',
+            'DISBURSEMENT_RECORDED'
           ]
         },
         targetTenantId: { bsonType: 'objectId' },

@@ -7,6 +7,8 @@ import { ObjectId } from 'mongodb'
 
 import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
 
+import { computeProgressPercent } from '@features/loan-disbursements/utils/disbursementCalculations'
+
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
 
 import { authOptions } from '@/lib/auth'
@@ -279,6 +281,42 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const leadSource: LeadSource = isLeadSource((row as any).leadSource) ? (row as any).leadSource : 'DIRECT'
 
+  const leadIdObj = new ObjectId(id)
+  const disbursementTrackerRow = await db.collection('loanDisbursementTrackers').findOne({
+    tenantId: tenantIdObj,
+    leadId: leadIdObj
+  })
+
+  let disbursementTracker: {
+    id: string
+    approvedAmount: number
+    totalDisbursedAmount: number
+    remainingAmount: number
+    disbursementStatus: string
+    progressPercent: number
+    disbursementCount: number
+  } | null = null
+
+  if (disbursementTrackerRow) {
+    const trackerId = (disbursementTrackerRow as any)._id as ObjectId
+    const approvedAmount = Number((disbursementTrackerRow as any).approvedAmount || 0)
+    const totalDisbursedAmount = Number((disbursementTrackerRow as any).totalDisbursedAmount || 0)
+    const disbursementCount = await db.collection('loanDisbursements').countDocuments({
+      tenantId: tenantIdObj,
+      trackerId
+    })
+
+    disbursementTracker = {
+      id: trackerId.toHexString(),
+      approvedAmount,
+      totalDisbursedAmount,
+      remainingAmount: Number((disbursementTrackerRow as any).remainingAmount || 0),
+      disbursementStatus: String((disbursementTrackerRow as any).disbursementStatus || 'PENDING'),
+      progressPercent: computeProgressPercent(approvedAmount, totalDisbursedAmount),
+      disbursementCount
+    }
+  }
+
   const data = {
     id: String((row as any)._id),
     customerId: String((row as any).customerId),
@@ -319,6 +357,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     isLocked: Boolean((row as any).isLocked),
     isActive: (row as any).isActive !== false,
     enableProgressivePayment: Boolean((row as any).enableProgressivePayment),
+    disbursementTracker,
     updatedAt: (row as any).updatedAt ? new Date((row as any).updatedAt).toISOString() : null,
     createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
     remarks: normalizeLoanCaseRemarks((row as any).remarks)
@@ -577,6 +616,18 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     !(typeof patch.approvedAmount === 'number' && Number.isFinite(patch.approvedAmount) && patch.approvedAmount >= 0)
   )
     errors.approvedAmount = 'Approved amount must be numeric'
+
+  if (patch.enableProgressivePayment === false && Boolean((existing as any).enableProgressivePayment)) {
+    const activeTracker = await db.collection('loanDisbursementTrackers').findOne(
+      { tenantId: tenantIdObj, leadId: new ObjectId(id) },
+      { projection: { _id: 1 } }
+    )
+
+    if (activeTracker) {
+      errors.enableProgressivePayment =
+        'Cannot disable progressive payment while disbursement tracking is active'
+    }
+  }
 
   const progressivePaymentEnabled =
     patch.enableProgressivePayment !== undefined

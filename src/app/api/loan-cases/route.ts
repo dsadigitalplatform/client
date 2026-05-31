@@ -8,6 +8,10 @@ import { ObjectId } from 'mongodb'
 import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
 
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
+import {
+  buildStagedDateAuditExistsMatchStage,
+  buildStagedDateAuditLookupStage
+} from '@features/loan-cases/utils/stageAuditDate'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
@@ -193,6 +197,8 @@ export async function GET(request: Request) {
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
   const bankName = url.searchParams.get('bankName') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
+  const stagedDateFrom = url.searchParams.get('stagedDateFrom') || ''
+  const stagedDateTo = url.searchParams.get('stagedDateTo') || ''
   const bankNameOptions = url.searchParams.get('bankNameOptions') === 'true'
   const tenantIdHex = tenantIdObj.toHexString()
 
@@ -211,6 +217,20 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ bankNames: rows.map(r => String((r as any).value || '')) })
   }
+
+  if (stagedDateFrom && !parseStageSubmittedDate(stagedDateFrom)) {
+    return NextResponse.json({ error: 'invalid_stagedDateFrom' }, { status: 400 })
+  }
+
+  if (stagedDateTo && !parseStageSubmittedDate(stagedDateTo)) {
+    return NextResponse.json({ error: 'invalid_stagedDateTo' }, { status: 400 })
+  }
+
+  if (stagedDateFrom && stagedDateTo && stagedDateFrom > stagedDateTo) {
+    return NextResponse.json({ error: 'invalid_staged_date_range' }, { status: 400 })
+  }
+
+  const hasStagedDateFilter = Boolean(stagedDateFrom || stagedDateTo)
 
   const baseFilter: any = { tenantId: { $in: [tenantIdObj, tenantIdHex] } }
   
@@ -307,12 +327,27 @@ export async function GET(request: Request) {
     ]
   }
 
+  const listPipeline: Record<string, unknown>[] = [{ $match: baseFilter }]
+
+  if (hasStagedDateFilter) {
+    listPipeline.push(
+      buildStagedDateAuditLookupStage(
+        tenantIdObj,
+        tenantIdHex,
+        stagedDateFrom || undefined,
+        stagedDateTo || undefined,
+        stageId || undefined
+      ),
+      buildStagedDateAuditExistsMatchStage()
+    )
+  }
+
+  listPipeline.push({ $sort: { updatedAt: -1 } }, { $limit: 200 })
+
   const rows = await db
     .collection('loanCases')
     .aggregate([
-      { $match: baseFilter },
-      { $sort: { updatedAt: -1 } },
-      { $limit: 200 },
+      ...listPipeline,
       {
         $lookup: {
           from: 'customers',

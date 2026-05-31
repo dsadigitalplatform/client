@@ -43,6 +43,16 @@ export type LoanCaseListItem = {
   enableProgressivePayment?: boolean
 }
 
+export type LeadDisbursementTrackerSummary = {
+  id: string
+  approvedAmount: number
+  totalDisbursedAmount: number
+  remainingAmount: number
+  disbursementStatus: 'PENDING' | 'PARTIAL' | 'COMPLETED'
+  progressPercent: number
+  disbursementCount: number
+}
+
 export type LoanCaseDetails = {
   id: string
   customerId: string
@@ -75,6 +85,7 @@ export type LoanCaseDetails = {
   isLocked: boolean
   isActive: boolean
   enableProgressivePayment: boolean
+  disbursementTracker: LeadDisbursementTrackerSummary | null
   createdAt: string | null
   updatedAt: string | null
   remarks?: LoanCaseRemark[]

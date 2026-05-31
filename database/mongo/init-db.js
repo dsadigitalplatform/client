@@ -226,7 +226,9 @@ const auditLogsValidator = {
           'LEAD_ASSIGNED_AGENT_CHANGED',
           'LEAD_STATUS_CHANGED',
           'LEAD_REQUESTED_AMOUNT_CHANGED',
-          'LEAD_DELETED'
+          'LEAD_DELETED',
+          'DISBURSEMENT_TRACKER_CREATED',
+          'DISBURSEMENT_RECORDED'
         ]
       },
       targetTenantId: { bsonType: 'objectId' },
@@ -613,6 +615,89 @@ ensureIndex('appointments', { customerId: 1 }, { name: 'idx_appointments_custome
 ensureIndex('appointments', { scheduledAt: 1 }, { name: 'idx_appointments_scheduledAt' })
 ensureIndex('appointments', { assignedTo: 1 }, { name: 'idx_appointments_assignedTo' })
 ensureIndex('appointments', { parentAppointmentId: 1 }, { name: 'idx_appointments_parentAppointmentId' })
+
+/* =========================
+   progressive loan disbursements
+   One tracker per lead; line items in loanDisbursements.
+   ========================= */
+const loanDisbursementTrackersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'leadId',
+      'approvedAmount',
+      'totalDisbursedAmount',
+      'remainingAmount',
+      'disbursementStatus',
+      'createdByUserId',
+      'createdByName',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      leadId: { bsonType: 'objectId' },
+      approvedAmount: { bsonType: 'number', minimum: 0 },
+      totalDisbursedAmount: { bsonType: 'number', minimum: 0 },
+      remainingAmount: { bsonType: 'number', minimum: 0 },
+      disbursementStatus: { enum: ['PENDING', 'PARTIAL', 'COMPLETED'] },
+      createdByUserId: { bsonType: 'objectId' },
+      createdByName: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanDisbursementTrackers', loanDisbursementTrackersValidator)
+ensureIndex('loanDisbursementTrackers', { tenantId: 1 }, { name: 'idx_loanDisbursementTrackers_tenantId' })
+ensureIndex(
+  'loanDisbursementTrackers',
+  { tenantId: 1, leadId: 1 },
+  { unique: true, name: 'uniq_tenant_lead_disbursement_tracker' }
+)
+ensureIndex(
+  'loanDisbursementTrackers',
+  { tenantId: 1, disbursementStatus: 1, updatedAt: -1 },
+  { name: 'idx_loanDisbursementTrackers_tenant_status_updated' }
+)
+
+const loanDisbursementsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'trackerId',
+      'leadId',
+      'amount',
+      'disbursedDate',
+      'reason',
+      'createdByUserId',
+      'createdByName',
+      'createdAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      trackerId: { bsonType: 'objectId' },
+      leadId: { bsonType: 'objectId' },
+      amount: { bsonType: 'number', exclusiveMinimum: 0 },
+      disbursedDate: { bsonType: 'date' },
+      reason: { bsonType: 'string', minLength: 1 },
+      bankReference: { bsonType: ['string', 'null'] },
+      createdByUserId: { bsonType: 'objectId' },
+      createdByName: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanDisbursements', loanDisbursementsValidator)
+ensureIndex('loanDisbursements', { tenantId: 1 }, { name: 'idx_loanDisbursements_tenantId' })
+ensureIndex('loanDisbursements', { trackerId: 1, disbursedDate: -1 }, { name: 'idx_loanDisbursements_tracker_date' })
+ensureIndex('loanDisbursements', { leadId: 1 }, { name: 'idx_loanDisbursements_leadId' })
 
 print('Database initialization complete.')
 

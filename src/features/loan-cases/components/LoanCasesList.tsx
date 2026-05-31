@@ -17,6 +17,7 @@ import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
+import TextField from '@mui/material/TextField'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -47,6 +48,8 @@ const LoanCasesList = () => {
   const [bankName, setBankName] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('updatedAt_desc')
   const [showInactive, setShowInactive] = useState<boolean>(false)
+  const [stagedDateFrom, setStagedDateFrom] = useState<string>('')
+  const [stagedDateTo, setStagedDateTo] = useState<string>('')
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
@@ -59,9 +62,11 @@ const LoanCasesList = () => {
       stageId: stageId || undefined,
       assignedAgentId: effectiveAssignedAgentId || undefined,
       bankName: bankName || undefined,
-      showInactive: showInactive || undefined
+      showInactive: showInactive || undefined,
+      stagedDateFrom: stagedDateFrom || undefined,
+      stagedDateTo: stagedDateTo || undefined
     }),
-    [bankName, stageId, effectiveAssignedAgentId, showInactive]
+    [bankName, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo]
   )
 
   const { cases, loading } = useLoanCases(filters)
@@ -94,7 +99,12 @@ const LoanCasesList = () => {
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
 
   const hasActiveFilters =
-    Boolean(stageId) || Boolean(bankName) || showInactive || assignedAgentId !== defaultAssignedAgentId
+    Boolean(stageId) ||
+    Boolean(bankName) ||
+    Boolean(stagedDateFrom) ||
+    Boolean(stagedDateTo) ||
+    showInactive ||
+    assignedAgentId !== defaultAssignedAgentId
 
   useEffect(() => {
 
@@ -313,6 +323,8 @@ const LoanCasesList = () => {
           onClick={() => {
             setStageId('')
             setBankName('')
+            setStagedDateFrom('')
+            setStagedDateTo('')
             setShowInactive(false)
             setHasAgentFilterOverride(false)
             setAssignedAgentId(defaultAssignedAgentId)
@@ -320,6 +332,37 @@ const LoanCasesList = () => {
         >
           Clear Filters
         </Button>
+      </Box>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(2, minmax(0, 1fr)) auto' },
+          gap: 2,
+          alignItems: 'center'
+        }}
+      >
+        <TextField
+          size='small'
+          label='Staged date from'
+          type='date'
+          value={stagedDateFrom}
+          onChange={e => setStagedDateFrom(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          fullWidth
+        />
+        <TextField
+          size='small'
+          label='Staged date to'
+          type='date'
+          value={stagedDateTo}
+          onChange={e => setStagedDateTo(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          fullWidth
+        />
+        <Typography variant='caption' color='text.secondary' sx={{ display: { xs: 'none', md: 'block' } }}>
+          Matches any stage change in this date range using stage date from audit history, or submitted date when empty.
+        </Typography>
       </Box>
 
       {isMobile ? (

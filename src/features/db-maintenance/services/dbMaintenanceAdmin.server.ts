@@ -27,7 +27,9 @@ export const DB_MAINTENANCE_COLLECTIONS = [
   'loanStatusPipelineStages',
   'loanTypeDocuments',
   'loanCases',
-  'appointments'
+  'appointments',
+  'loanDisbursementTrackers',
+  'loanDisbursements'
 ] as const
 
 const allowed = new Set<string>(DB_MAINTENANCE_COLLECTIONS)

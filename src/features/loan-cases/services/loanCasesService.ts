@@ -15,6 +15,8 @@ export type GetLoanCasesParams = {
   loanTypeId?: string
   bankName?: string
   showInactive?: boolean
+  stagedDateFrom?: string
+  stagedDateTo?: string
 }
 
 export async function getLoanCases(params: GetLoanCasesParams = {}) {
@@ -26,6 +28,8 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.loanTypeId) url.searchParams.set('loanTypeId', params.loanTypeId)
   if (params.bankName) url.searchParams.set('bankName', params.bankName)
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
+  if (params.stagedDateFrom) url.searchParams.set('stagedDateFrom', params.stagedDateFrom)
+  if (params.stagedDateTo) url.searchParams.set('stagedDateTo', params.stagedDateTo)
 
   const res = await fetch(url.toString(), { cache: 'no-store' })
 

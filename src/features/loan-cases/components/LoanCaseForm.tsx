@@ -73,6 +73,7 @@ import { getAdvocates } from '@features/advocates/services/advocatesService'
 import type { Advocate } from '@features/advocates/advocates.types'
 import { getCorporates } from '@features/corporates/services/corporatesService'
 import type { Corporate } from '@features/corporates/corporates.types'
+import LeadDisbursementProgressPanel from '@features/loan-cases/components/LeadDisbursementProgressPanel'
 import {
   createLoanCase,
   getLoanCaseBankNames,
@@ -87,6 +88,7 @@ import {
 import type {
   CreateLoanCaseInput,
   LeadAuditHistoryItem,
+  LeadDisbursementTrackerSummary,
   LeadSource,
   LoanCaseDetails,
   LoanCaseDocument,
@@ -290,6 +292,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [isLocked, setIsLocked] = useState(false)
   const [isActive, setIsActive] = useState<boolean>(true)
   const [enableProgressivePayment, setEnableProgressivePayment] = useState<boolean>(false)
+  const [disbursementTracker, setDisbursementTracker] = useState<LeadDisbursementTrackerSummary | null>(null)
+  const [disbursementPanelOpen, setDisbursementPanelOpen] = useState(false)
 
   const { customers, loading: customersLoading, setSearch, refresh: refreshCustomers } = useCustomers()
 
@@ -775,6 +779,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setIsLocked(Boolean(data.isLocked))
         setIsActive(Boolean(data.isActive))
         setEnableProgressivePayment(Boolean(data.enableProgressivePayment))
+        setDisbursementTracker(data.disbursementTracker ?? null)
       } catch (e: any) {
         setError(e?.message || 'Failed to load loan case')
       } finally {
@@ -1191,11 +1196,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
       } else {
         const updatePayload: UpdateLoanCaseInput = {
           ...payloadBase,
-          enableProgressivePayment,
+          enableProgressivePayment: disbursementTracker ? true : enableProgressivePayment,
           documents: documents.map(d => ({ documentId: d.documentId, status: d.status }))
         }
 
-        if (enableProgressivePayment) {
+        if (updatePayload.enableProgressivePayment) {
           delete updatePayload.approvedAmount
         }
 
@@ -1402,6 +1407,13 @@ const LoanCaseForm = ({ caseId }: Props) => {
               </Stack>
 
               <Divider sx={{ mb: 2 }} />
+              <LeadDisbursementProgressPanel
+                tracker={disbursementTracker}
+                enableProgressivePayment={enableProgressivePayment}
+                expanded={disbursementPanelOpen}
+                onExpandedChange={setDisbursementPanelOpen}
+              />
+              <Divider sx={{ my: 2 }} />
               <Accordion
                 disableGutters
                 expanded={auditHistoryOpen}
@@ -2042,8 +2054,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
                         control={
                           <Switch
                             checked={enableProgressivePayment}
-                            onChange={e => setEnableProgressivePayment(e.target.checked)}
-                            disabled={!isActive}
+                            onChange={e => {
+                              if (disbursementTracker && !e.target.checked) return
+                              setEnableProgressivePayment(e.target.checked)
+                            }}
+                            disabled={!isActive || Boolean(disbursementTracker)}
                           />
                         }
                         label={
@@ -2052,7 +2067,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
                               Progressive payment
                             </Typography>
                             <Typography variant='caption' color='text.secondary'>
-                              Unlock approved amount in stages
+                              {disbursementTracker
+                                ? 'Locked while disbursement tracking is active'
+                                : 'Unlock approved amount in stages'}
                             </Typography>
                           </Box>
                         }
@@ -2499,6 +2516,13 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
               {id ? (
                 <>
+                  <Divider />
+                  <LeadDisbursementProgressPanel
+                    tracker={disbursementTracker}
+                    enableProgressivePayment={enableProgressivePayment}
+                    expanded={disbursementPanelOpen}
+                    onExpandedChange={setDisbursementPanelOpen}
+                  />
                   <Divider />
                   <Accordion
                     disableGutters
