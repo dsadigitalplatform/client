@@ -108,11 +108,11 @@ export async function updateLoanCase(id: string, body: UpdateLoanCaseInput) {
   return data as { ok: true }
 }
 
-export async function updateCaseStage(caseId: string, newStageId: string) {
+export async function updateCaseStage(caseId: string, newStageId: string, stageSubmittedDate: string) {
   const res = await fetch(`/api/loan-cases/${caseId}/stage`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ newStageId })
+    body: JSON.stringify({ newStageId, stageSubmittedDate })
   })
 
   const data = await res.json().catch(() => ({}))

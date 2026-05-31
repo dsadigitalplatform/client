@@ -27,16 +27,8 @@ import { updateProfile } from '../services/profileService'
 import { useProfile } from '../hooks/useProfile'
 import type { UpdateProfileInput } from '../profile.types'
 
-const COUNTRY_CODE_OPTIONS = [
-  { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: '+1', iso: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: '+44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+971', iso: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-  { code: '+65', iso: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
-] as const
-
-const isValidCountryCode = (value: string) => /^\+[0-9]{1,4}$/.test(value)
+import CountryCodeField from '@/components/CountryCodeField'
+import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
 const isValidMobile = (value: string) => /^[0-9]{9,10}$/.test(value)
 
 const ProfileForm = () => {
@@ -71,7 +63,7 @@ const ProfileForm = () => {
 
     if (name.trim().length < 2) errors.name = 'Enter at least 2 characters'
 
-    if (countryCode && !isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
+    if (countryCode && !isValidCountryCode(countryCode)) errors.countryCode = COUNTRY_CODE_VALIDATION_MESSAGE
 
     if (mobile && !isValidMobile(mobile)) errors.mobile = 'Enter a 9 or 10-digit mobile number'
 
@@ -162,26 +154,16 @@ const ProfileForm = () => {
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl fullWidth error={Boolean(fieldErrors.countryCode)}>
-              <InputLabel id='profile-country-code'>Country Code</InputLabel>
-              <Select
-                labelId='profile-country-code'
-                label='Country Code'
-                value={countryCode}
-                onChange={e => setCountryCode(String(e.target.value))}
-              >
-                {COUNTRY_CODE_OPTIONS.map(option => (
-                  <MenuItem key={option.code} value={option.code}>
-                    {option.flag} {option.name} ({option.code})
-                  </MenuItem>
-                ))}
-              </Select>
-              {fieldErrors.countryCode ? (
-                <Typography variant='caption' color='error'>
-                  {fieldErrors.countryCode}
-                </Typography>
-              ) : null}
-            </FormControl>
+            <CountryCodeField
+              labelId='profile-country-code'
+              value={countryCode}
+              onChange={setCountryCode}
+              error={Boolean(fieldErrors.countryCode) || (countryCode.length > 0 && !isValidCountryCode(countryCode))}
+              helperText={
+                fieldErrors.countryCode ||
+                (countryCode.length > 0 && !isValidCountryCode(countryCode) ? COUNTRY_CODE_VALIDATION_MESSAGE : ' ')
+              }
+            />
             <TextField
               fullWidth
               label='Mobile Number'

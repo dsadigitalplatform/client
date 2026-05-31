@@ -114,6 +114,12 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             <MenuItem href='/associates' icon={<i className='ri-user-star-line' />}>
               Associate
             </MenuItem>
+            <MenuItem href='/advocates' icon={<i className='ri-scales-3-line' />}>
+              Advocate
+            </MenuItem>
+            <MenuItem href='/corporates' icon={<i className='ri-building-2-line' />}>
+              Corporate
+            </MenuItem>
             <MenuItem href='/loan-types' icon={<i className='ri-file-list-3-line' />}>
               Loan Types
             </MenuItem>

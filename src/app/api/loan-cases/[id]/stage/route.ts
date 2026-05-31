@@ -6,6 +6,8 @@ import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
+import { parseStageSubmittedDate, todayStageSubmittedDateIso } from '@features/loan-cases/utils/stageSubmittedDate'
+
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 
@@ -140,6 +142,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const body = await request.json().catch(() => ({}))
   const stageId = String(body?.newStageId || body?.stageId || '')
+  const stageSubmittedParsed = parseStageSubmittedDate(body?.stageSubmittedDate ?? todayStageSubmittedDateIso())
+
+  if (!stageSubmittedParsed) {
+    return NextResponse.json({ error: 'validation_error', details: { stageSubmittedDate: 'Stage date is required' } }, { status: 400 })
+  }
 
   if (!ObjectId.isValid(stageId)) return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
 
@@ -179,7 +186,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
       fromStageId: currentStageId ? currentStageId.toHexString() : null,
       fromStageName: fromStage ? String((fromStage as any).name || '') : null,
       toStageId: nextStageObjId.toHexString(),
-      toStageName: toStage ? String((toStage as any).name || '') : null
+      toStageName: toStage ? String((toStage as any).name || '') : null,
+      stageSubmittedDate: stageSubmittedParsed.isoDate
     }
   })
 

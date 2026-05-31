@@ -84,8 +84,8 @@ const usersValidator = {
       name: { bsonType: 'string' },
       avatarUrl: { bsonType: 'string' },
       image: { bsonType: ['string', 'null'] },
-      countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,4}$' },
-      mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{9,10}$' },
+      countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,3}$' },
+      mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{8,10}$' },
       notifyMe: { bsonType: 'bool' },
       isSuperAdmin: { bsonType: 'bool' },
       status: { enum: ['active', 'suspended'] },
@@ -278,7 +278,7 @@ const customersValidator = {
       tenantId: { bsonType: 'objectId' },
       fullName: { bsonType: 'string', minLength: 2 },
       countryCode: { bsonType: 'string' },
-      mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       isNRI: { bsonType: 'bool' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       dob: { bsonType: ['date', 'null'] },
@@ -293,8 +293,8 @@ const customersValidator = {
           bsonType: 'object',
           required: ['countryCode', 'mobile', 'type'],
           properties: {
-            countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,4}$' },
-            mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+            countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,3}$' },
+            mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
             type: { enum: ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER'] }
           },
           additionalProperties: true
@@ -327,7 +327,7 @@ const associatesValidator = {
       companyName: { bsonType: 'string', minLength: 2 },
       associateTypeId: { bsonType: 'objectId' },
       countryCode: { bsonType: 'string' },
-      mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       payout: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
       code: { bsonType: 'string', minLength: 3 },
@@ -346,6 +346,29 @@ ensureIndex('associates', { tenantId: 1 }, { name: 'idx_associates_tenantId' })
 ensureIndex('associates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_associate_mobile' })
 ensureIndex('associates', { tenantId: 1, code: 1 }, { unique: true, name: 'uniq_tenant_associate_code' })
 ensureIndex('associates', { tenantId: 1, associateTypeId: 1 }, { name: 'idx_associates_tenant_associateTypeId' })
+
+const advocatesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'name', 'mobile', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      name: { bsonType: 'string', minLength: 2 },
+      countryCode: { bsonType: 'string' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
+      email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
+      address: { bsonType: ['string', 'null'] },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('advocates', advocatesValidator)
+ensureIndex('advocates', { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
+ensureIndex('advocates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_advocate_mobile' })
 
 const loanTypesValidator = {
   $jsonSchema: {
@@ -411,6 +434,28 @@ ensureCollection('associateTypes', associateTypesValidator)
 ensureIndex('associateTypes', { tenantId: 1 }, { name: 'idx_associateTypes_tenantId' })
 ensureIndex('associateTypes', { tenantId: 1, name: 1 }, { unique: true, name: 'uniq_tenant_associateType_name' })
 
+const corporatesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'code', 'codeNormalized', 'name', 'isActive', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      code: { bsonType: 'string', minLength: 1 },
+      codeNormalized: { bsonType: 'string', minLength: 1 },
+      name: { bsonType: 'string', minLength: 2 },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('corporates', corporatesValidator)
+ensureIndex('corporates', { tenantId: 1 }, { name: 'idx_corporates_tenantId' })
+ensureIndex('corporates', { tenantId: 1, codeNormalized: 1 }, { unique: true, name: 'uniq_tenant_corporate_code' })
+
 const loanStatusPipelineStagesValidator = {
   $jsonSchema: {
     bsonType: 'object',
@@ -472,13 +517,16 @@ const loanCasesValidator = {
       stageId: { bsonType: 'objectId' },
       bankName: { bsonType: ['string', 'null'] },
       requestedAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      approvedAmount: { bsonType: ['number', 'null'], minimum: 0 },
       eligibleAmount: { bsonType: ['number', 'null'], minimum: 0 },
       interestRate: { bsonType: ['number', 'null'], minimum: 0 },
       tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
       emi: { bsonType: ['number', 'null'], minimum: 0 },
       assignedAgentId: { bsonType: ['objectId', 'null'] },
-      leadSource: { enum: ['DIRECT', 'ASSOCIATE'] },
+      leadSource: { enum: ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] },
       associateId: { bsonType: ['objectId', 'null'] },
+      advocateId: { bsonType: ['objectId', 'null'] },
+      corporateId: { bsonType: ['objectId', 'null'] },
       documents: {
         bsonType: 'array',
         items: {
@@ -511,7 +559,8 @@ const loanCasesValidator = {
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
       isLocked: { bsonType: 'bool' },
-      isActive: { bsonType: 'bool' }
+      isActive: { bsonType: 'bool' },
+      enableProgressivePayment: { bsonType: 'bool' }
     },
     additionalProperties: true
   }

@@ -5,14 +5,11 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
 
 function isValidName(v: unknown) {
   return typeof v === 'string' && v.trim().length >= 2
-}
-
-function isValidCountryCode(v: unknown) {
-  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
 }
 
 function isValidMobile(v: unknown) {

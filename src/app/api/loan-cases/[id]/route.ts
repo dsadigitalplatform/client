@@ -7,12 +7,14 @@ import { ObjectId } from 'mongodb'
 
 import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
 
+import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
+
 import { authOptions } from '@/lib/auth'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
-const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE'] as const
+const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
 
 const AUDIT_ACTIONS = {
   leadLoanTypeChanged: 'LEAD_LOAN_TYPE_CHANGED',
@@ -263,6 +265,18 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         .findOne({ _id: (row as any).associateId, tenantId: tenantIdObj }, { projection: { associateName: 1, code: 1 } })
     : null
 
+  const advocate = (row as any).advocateId
+    ? await db
+        .collection('advocates')
+        .findOne({ _id: (row as any).advocateId, tenantId: tenantIdObj }, { projection: { name: 1, countryCode: 1, mobile: 1 } })
+    : null
+
+  const corporate = (row as any).corporateId
+    ? await db
+        .collection('corporates')
+        .findOne({ _id: (row as any).corporateId, tenantId: tenantIdObj }, { projection: { name: 1, code: 1 } })
+    : null
+
   const leadSource: LeadSource = isLeadSource((row as any).leadSource) ? (row as any).leadSource : 'DIRECT'
 
   const data = {
@@ -272,7 +286,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     loanTypeId: String((row as any).loanTypeId),
     loanTypeName: loanType ? String((loanType as any).name || '') : '',
     bankName: (row as any).bankName ?? null,
+    corporateId: (row as any).corporateId ? String((row as any).corporateId) : null,
+    corporateName: corporate ? String((corporate as any).name || '') : null,
+    corporateCode: corporate ? String((corporate as any).code || '') : null,
     requestedAmount: (row as any).requestedAmount ?? null,
+    approvedAmount: (row as any).approvedAmount ?? null,
     eligibleAmount: (row as any).eligibleAmount ?? null,
     interestRate: (row as any).interestRate ?? null,
     tenureMonths: (row as any).tenureMonths ?? null,
@@ -284,6 +302,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     associateId: (row as any).associateId ? String((row as any).associateId) : null,
     associateName: associate ? String((associate as any).associateName || '') : null,
     associateCode: associate ? String((associate as any).code || '') : null,
+    advocateId: (row as any).advocateId ? String((row as any).advocateId) : null,
+    advocateName: advocate ? String((advocate as any).name || '') : null,
+    advocateMobile: advocate
+      ? [[(advocate as any).countryCode, (advocate as any).mobile].filter(Boolean).join(' ')].filter(Boolean).join('')
+      : null,
     stageId: String((row as any).stageId),
     stageName: stage ? String((stage as any).name || '') : '',
     documents: Array.isArray((row as any).documents)
@@ -295,6 +318,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       : [],
     isLocked: Boolean((row as any).isLocked),
     isActive: (row as any).isActive !== false,
+    enableProgressivePayment: Boolean((row as any).enableProgressivePayment),
     updatedAt: (row as any).updatedAt ? new Date((row as any).updatedAt).toISOString() : null,
     createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
     remarks: normalizeLoanCaseRemarks((row as any).remarks)
@@ -332,6 +356,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     | null = null
   const incomingLeadSource = body.leadSource !== undefined ? String(body.leadSource) : undefined
   const incomingAssociateId = body.associateId !== undefined ? (body.associateId == null ? null : String(body.associateId)) : undefined
+  const incomingAdvocateId = body.advocateId !== undefined ? (body.advocateId == null ? null : String(body.advocateId)) : undefined
+  const incomingCorporateId = body.corporateId !== undefined ? (body.corporateId == null ? null : String(body.corporateId)) : undefined
   const remarkToAdd = body.remarkToAdd === undefined ? undefined : String(body.remarkToAdd ?? '').trim()
 
   if (body.nextFollowUpDate !== undefined) {
@@ -408,14 +434,39 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.bankName !== undefined)
     patch.bankName = body.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
 
+  if (incomingCorporateId !== undefined) {
+    if (!incomingCorporateId || incomingCorporateId.trim().length === 0) {
+      patch.corporateId = null
+    } else if (!ObjectId.isValid(incomingCorporateId)) {
+      errors.corporateId = 'Invalid corporate'
+    } else {
+      const corporateObjId = new ObjectId(incomingCorporateId)
+
+      const corporate = await db
+        .collection('corporates')
+        .findOne({ _id: corporateObjId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+
+      if (!corporate) errors.corporateId = 'Corporate not found'
+      else patch.corporateId = corporateObjId
+    }
+  }
+
   if (body.requestedAmount !== undefined) patch.requestedAmount = body.requestedAmount == null ? null : Number(body.requestedAmount)
+  if (body.approvedAmount !== undefined) patch.approvedAmount = body.approvedAmount == null ? null : Number(body.approvedAmount)
+  if (body.enableProgressivePayment !== undefined) patch.enableProgressivePayment = Boolean(body.enableProgressivePayment)
   if (body.eligibleAmount !== undefined) patch.eligibleAmount = body.eligibleAmount == null ? null : Number(body.eligibleAmount)
   if (body.interestRate !== undefined) patch.interestRate = body.interestRate == null ? null : Number(body.interestRate)
   if (body.tenureMonths !== undefined) patch.tenureMonths = body.tenureMonths == null ? null : Number(body.tenureMonths)
   if (body.emi !== undefined) patch.emi = body.emi == null ? null : Number(body.emi)
 
+  let stageSubmittedDateIso: string | null = null
+
   if (body.stageId != null) {
     const stageId = String(body.stageId || '')
+    const stageSubmittedParsed = parseStageSubmittedDate(body?.stageSubmittedDate)
+
+    if (!stageSubmittedParsed) errors.stageSubmittedDate = 'Stage date is required'
+    else stageSubmittedDateIso = stageSubmittedParsed.isoDate
 
     if (!ObjectId.isValid(stageId)) {
       errors.stageId = 'Stage is required'
@@ -466,8 +517,32 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
       ? ((existing as any).leadSource as LeadSource)
       : 'DIRECT'
 
+  if (incomingAdvocateId !== undefined) {
+    if (!incomingAdvocateId || incomingAdvocateId.trim().length === 0) {
+      patch.advocateId = null
+    } else if (!ObjectId.isValid(incomingAdvocateId)) {
+      errors.advocateId = 'Invalid advocate'
+    } else {
+      const advocateObjId = new ObjectId(incomingAdvocateId)
+
+      const advocate = await db
+        .collection('advocates')
+        .findOne({ _id: advocateObjId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+
+      if (!advocate) errors.advocateId = 'Advocate not found'
+      else patch.advocateId = advocateObjId
+    }
+  }
+
   if (incomingAssociateId !== undefined || incomingLeadSource !== undefined) {
-    if (nextLeadSource === 'ASSOCIATE') {
+    const effectiveLeadSource =
+      patch.leadSource !== undefined
+        ? (patch.leadSource as LeadSource)
+        : incomingLeadSource === 'ASSOCIATE' || incomingLeadSource === 'DIRECT'
+          ? (incomingLeadSource as LeadSource)
+          : nextLeadSource
+
+    if (effectiveLeadSource === 'ASSOCIATE') {
       const nextAssociateId = incomingAssociateId ?? ((existing as any).associateId ? String((existing as any).associateId) : null)
 
       if (!nextAssociateId) {
@@ -486,6 +561,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
       }
     } else {
       patch.associateId = null
+      if (patch.leadSource === undefined && incomingLeadSource === 'DIRECT') patch.leadSource = 'DIRECT'
     }
   }
 
@@ -493,6 +569,29 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     const v = patch.requestedAmount
 
     if (!(typeof v === 'number' && Number.isFinite(v) && v > 0)) errors.requestedAmount = 'Loan amount must be greater than 0'
+  }
+
+  if (
+    patch.approvedAmount !== undefined &&
+    patch.approvedAmount != null &&
+    !(typeof patch.approvedAmount === 'number' && Number.isFinite(patch.approvedAmount) && patch.approvedAmount >= 0)
+  )
+    errors.approvedAmount = 'Approved amount must be numeric'
+
+  const progressivePaymentEnabled =
+    patch.enableProgressivePayment !== undefined
+      ? patch.enableProgressivePayment
+      : Boolean((existing as any).enableProgressivePayment)
+
+  if (progressivePaymentEnabled && patch.approvedAmount !== undefined) {
+    const existingApproved = (existing as any).approvedAmount ?? null
+    const nextApproved = patch.approvedAmount
+
+    if (nextApproved !== existingApproved) {
+      errors.approvedAmount = 'Approved amount cannot be changed when progressive payment is enabled'
+    } else {
+      delete patch.approvedAmount
+    }
   }
 
   if (patch.emi !== undefined && patch.emi != null && !(typeof patch.emi === 'number' && Number.isFinite(patch.emi)))
@@ -684,7 +783,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
         fromStageId: previousStageId ? previousStageId.toHexString() : null,
         fromStageName: fromStage ? String((fromStage as any).name || '') : null,
         toStageId: nextStageId ? nextStageId.toHexString() : null,
-        toStageName: toStage ? String((toStage as any).name || '') : null
+        toStageName: toStage ? String((toStage as any).name || '') : null,
+        ...(stageSubmittedDateIso ? { stageSubmittedDate: stageSubmittedDateIso } : {})
       }
     })
   }

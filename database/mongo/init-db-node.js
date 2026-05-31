@@ -106,8 +106,8 @@ async function main() {
         name: { bsonType: 'string' },
         avatarUrl: { bsonType: 'string' },
         image: { bsonType: ['string', 'null'] },
-        countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,4}$' },
-        mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{9,10}$' },
+        countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,3}$' },
+        mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{8,10}$' },
         notifyMe: { bsonType: 'bool' },
         isSuperAdmin: { bsonType: 'bool' },
         status: { enum: ['active', 'suspended'] },
@@ -238,7 +238,7 @@ async function main() {
         tenantId: { bsonType: 'objectId' },
         fullName: { bsonType: 'string', minLength: 2 },
         countryCode: { bsonType: 'string' },
-        mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+        mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
         isNRI: { bsonType: 'bool' },
         email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
         dob: { bsonType: ['date', 'null'] },
@@ -253,8 +253,8 @@ async function main() {
             bsonType: 'object',
             required: ['countryCode', 'mobile', 'type'],
             properties: {
-              countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,4}$' },
-              mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+              countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,3}$' },
+              mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
               type: { enum: ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER'] }
             },
             additionalProperties: true
@@ -290,7 +290,7 @@ async function main() {
         companyName: { bsonType: 'string', minLength: 2 },
         associateTypeId: { bsonType: 'objectId' },
         countryCode: { bsonType: 'string' },
-        mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+        mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
         email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
         payout: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
         code: { bsonType: 'string', minLength: 3 },
@@ -317,6 +317,33 @@ async function main() {
     { unique: true, name: 'uniq_tenant_associate_code' }
   )
   await ensureIndex(db.collection('associates'), { tenantId: 1, associateTypeId: 1 }, { name: 'idx_associates_tenant_associateTypeId' })
+
+  const advocatesValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'name', 'mobile', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        name: { bsonType: 'string', minLength: 2 },
+        countryCode: { bsonType: 'string' },
+        mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
+        email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
+        address: { bsonType: ['string', 'null'] },
+        createdBy: { bsonType: ['objectId', 'null'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+
+  await ensureCollection(db, 'advocates', advocatesValidator)
+  await ensureIndex(db.collection('advocates'), { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
+  await ensureIndex(
+    db.collection('advocates'),
+    { tenantId: 1, mobile: 1 },
+    { unique: true, name: 'uniq_tenant_advocate_mobile' }
+  )
 
   const loanTypesValidator = {
     $jsonSchema: {

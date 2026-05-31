@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
@@ -21,6 +22,8 @@ import Avatar from '@mui/material/Avatar'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Fab from '@mui/material/Fab'
+import Snackbar from '@mui/material/Snackbar'
+import Alert from '@mui/material/Alert'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
@@ -30,8 +33,18 @@ import AssociatesCreateForm from '@features/associates/components/AssociatesCrea
 const AssociatesList = () => {
     const { associates, loading, search, setSearch, refresh } = useAssociates()
     const [openAdd, setOpenAdd] = useState(false)
+    const [successOpen, setSuccessOpen] = useState(false)
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+    useEffect(() => {
+        if (searchParams.get('created') === '1') {
+            setSuccessOpen(true)
+            router.replace('/associates')
+        }
+    }, [searchParams, router])
 
     const handleExport = () => {
         const rows = [
@@ -127,15 +140,43 @@ const AssociatesList = () => {
                     </Box>
                     <AssociatesCreateForm
                         showTitle={false}
-                        redirectOnSuccess
                         onSuccess={() => {
                             setOpenAdd(false)
                             refresh()
+                            setSuccessOpen(true)
                         }}
                         onCancel={() => setOpenAdd(false)}
                     />
                 </Box>
             </Drawer>
+            <Snackbar
+                open={successOpen}
+                autoHideDuration={3000}
+                onClose={() => setSuccessOpen(false)}
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+                <Alert
+                    onClose={() => setSuccessOpen(false)}
+                    severity='success'
+                    variant='filled'
+                    icon={<i className='ri-checkbox-circle-line' />}
+                    sx={{
+                        width: '100%',
+                        color: 'text.primary',
+                        backgroundColor: 'rgb(var(--mui-palette-background-paperChannel) / 0.7)',
+                        backdropFilter: 'blur(12px)',
+                        borderRadius: 2.5,
+                        border: '1px solid',
+                        borderColor: 'rgb(var(--mui-palette-success-mainChannel) / 0.4)',
+                        boxShadow: '0 12px 30px rgb(0 0 0 / 0.12)',
+                        '& .MuiAlert-icon': {
+                            color: 'var(--mui-palette-success-main)'
+                        }
+                    }}
+                >
+                    Associate added successfully
+                </Alert>
+            </Snackbar>
             {isMobile ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     {loading ? (

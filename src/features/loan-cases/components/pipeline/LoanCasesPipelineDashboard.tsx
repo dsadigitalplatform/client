@@ -25,6 +25,8 @@ import { useSession } from 'next-auth/react'
 
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 
+import dayjs from 'dayjs'
+
 import { getLoanCases, updateCaseStage } from '@features/loan-cases/services/loanCasesService'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
@@ -316,7 +318,7 @@ const LoanCasesPipelineDashboard = () => {
       })
 
       try {
-        const res = await updateCaseStage(caseId, toStageId)
+        const res = await updateCaseStage(caseId, toStageId, dayjs().format('YYYY-MM-DD'))
 
         if (res?.updatedAt) {
           setBoard(prev => ({

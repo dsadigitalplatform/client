@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -9,23 +9,13 @@ import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
-import Select from '@mui/material/Select'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-const COUNTRY_CODE_OPTIONS = [
-    { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
-    { code: '+1', iso: 'US', name: 'United States', flag: '🇺🇸' },
-    { code: '+44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-    { code: '+971', iso: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-    { code: '+65', iso: 'SG', name: 'Singapore', flag: '🇸🇬' },
-    { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
-] as const
+import CountryCodeField from '@/components/CountryCodeField'
+import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
 
 type Props = {
     open: boolean
@@ -61,16 +51,12 @@ export default function OrganisationSetupSupportDialog({ open, onClose, defaultF
         setSuccess(null)
     }, [open, defaultFullName, defaultEmail])
 
-    const selectedCountry = useMemo(() => {
-        return COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0]
-    }, [countryCode])
-
     const isValidName = fullName.trim().length >= 2
-    const isValidCountryCode = /^\+[0-9]{1,4}$/.test(countryCode)
+    const countryCodeValid = isValidCountryCode(countryCode)
     const isValidMobile = /^[0-9]{9,10}$/.test(mobile)
     const isValidEmail = EMAIL_RE.test(email.trim())
     const isValidDescription = description.trim().length >= 10
-    const canSubmit = isValidName && isValidCountryCode && isValidMobile && isValidEmail && isValidDescription && !submitting
+    const canSubmit = isValidName && countryCodeValid && isValidMobile && isValidEmail && isValidDescription && !submitting
 
     const handleSubmit = async () => {
         if (!canSubmit) return
@@ -137,30 +123,14 @@ export default function OrganisationSetupSupportDialog({ open, onClose, defaultF
                     helperText={fullName.length > 0 && !isValidName ? 'Enter at least 2 characters' : ' '}
                 />
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 2 } }}>
-                    <FormControl fullWidth sx={{ width: { xs: '100%', sm: 190 } }}>
-                        <InputLabel id='support-country-code-label'>Country Code</InputLabel>
-                        <Select
-                            labelId='support-country-code-label'
-                            label='Country Code'
-                            value={countryCode}
-                            onChange={e => setCountryCode(String(e.target.value))}
-                            renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
-                        >
-                            {COUNTRY_CODE_OPTIONS.map(option => (
-                                <MenuItem key={`${option.iso}-${option.code}`} value={option.code}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <span>{option.flag}</span>
-                                            <Typography variant='body2'>{option.name}</Typography>
-                                        </Box>
-                                        <Typography variant='body2' color='text.secondary'>
-                                            {option.code}
-                                        </Typography>
-                                    </Box>
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                    <CountryCodeField
+                        labelId='support-country-code-label'
+                        value={countryCode}
+                        onChange={setCountryCode}
+                        error={countryCode.length > 0 && !countryCodeValid}
+                        helperText={countryCode.length > 0 && !countryCodeValid ? COUNTRY_CODE_VALIDATION_MESSAGE : ' '}
+                        sx={{ width: { xs: '100%', sm: 220 } }}
+                    />
                     <TextField
                         label='Contact Number'
                         value={mobile}

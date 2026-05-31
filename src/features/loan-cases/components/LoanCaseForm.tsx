@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react'
 import dayjs, { type Dayjs } from 'dayjs'
 
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import Accordion from '@mui/material/Accordion'
@@ -31,6 +32,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Grid from '@mui/material/Grid'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
@@ -38,6 +40,8 @@ import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
+import Switch from '@mui/material/Switch'
+import Collapse from '@mui/material/Collapse'
 import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
@@ -65,6 +69,10 @@ import { createAppointment } from '@features/appointments/services/appointments'
 import LeadAppointmentsDashboard from '@features/appointments/components/LeadAppointmentsDashboard'
 import { getAssociates } from '@features/associates/services/associatesService'
 import type { Associate } from '@features/associates/associates.types'
+import { getAdvocates } from '@features/advocates/services/advocatesService'
+import type { Advocate } from '@features/advocates/advocates.types'
+import { getCorporates } from '@features/corporates/services/corporatesService'
+import type { Corporate } from '@features/corporates/corporates.types'
 import {
   createLoanCase,
   getLoanCaseBankNames,
@@ -84,10 +92,13 @@ import type {
   LoanCaseDocument,
   LoanCaseRemark,
   LoanCaseDocumentStatus,
-  TenantUserOption
+  TenantUserOption,
+  UpdateLoanCaseInput
 } from '@features/loan-cases/loan-cases.types'
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 
 type StageOption = { id: string; name: string; order: number }
+
 type DraftAppointment = {
   id: string
   scheduledAt: string
@@ -123,6 +134,75 @@ const CREATE_CUSTOMER_OPTION: Customer = {
   source: 'OTHER',
   requestedLeadAmountTotal: 0,
   createdAt: null
+}
+
+type LeadFormSectionProps = {
+  icon: string
+  title: string
+  subtitle?: string
+  accent?: 'primary' | 'info' | 'success' | 'warning' | 'secondary'
+  action?: ReactNode
+  children: ReactNode
+}
+
+function LeadFormSection({ icon, title, subtitle, accent = 'primary', action, children }: LeadFormSectionProps) {
+  const accentMain = `var(--mui-palette-${accent}-main)`
+  const accentChannel = `var(--mui-palette-${accent}-mainChannel)`
+
+  return (
+    <Paper
+      variant='outlined'
+      sx={{
+        borderRadius: 3,
+        overflow: 'hidden',
+        borderColor: 'divider',
+        bgcolor: 'background.paper'
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 1.5,
+          px: { xs: 2, sm: 2.5 },
+          py: { xs: 1.75, sm: 2 },
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: `rgb(${accentChannel} / 0.06)`
+        }}
+      >
+        <Avatar
+          sx={{
+            width: 40,
+            height: 40,
+            flexShrink: 0,
+            bgcolor: `rgb(${accentChannel} / 0.14)`,
+            color: accentMain,
+            border: '1px solid',
+            borderColor: `rgb(${accentChannel} / 0.24)`
+          }}
+        >
+          <Box component='i' className={icon} sx={{ fontSize: 20, lineHeight: 1 }} />
+        </Avatar>
+        <Box sx={{ minWidth: 0, flex: 1, pt: 0.25 }}>
+          <Typography variant='subtitle1' sx={{ fontWeight: 700, lineHeight: 1.25 }}>
+            {title}
+          </Typography>
+          {subtitle ? (
+            <Typography variant='body2' color='text.secondary' sx={{ mt: 0.35 }}>
+              {subtitle}
+            </Typography>
+          ) : null}
+        </Box>
+        {action ? <Box sx={{ flexShrink: 0, alignSelf: 'center' }}>{action}</Box> : null}
+      </Box>
+      <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
+        <Grid container rowSpacing={{ xs: 2.5, sm: 2.5 }} columnSpacing={{ xs: 2, sm: 2.5 }}>
+          {children}
+        </Grid>
+      </Box>
+    </Paper>
+  )
 }
 
 function getAuditVisualMeta(action: string) {
@@ -190,6 +270,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
   const [associates, setAssociates] = useState<Associate[]>([])
+  const [advocates, setAdvocates] = useState<Advocate[]>([])
+  const [corporates, setCorporates] = useState<Corporate[]>([])
 
   const [loading, setLoading] = useState(Boolean(caseId))
   const [submitting, setSubmitting] = useState(false)
@@ -207,6 +289,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [id, setId] = useState<string | null>(caseId ?? null)
   const [isLocked, setIsLocked] = useState(false)
   const [isActive, setIsActive] = useState<boolean>(true)
+  const [enableProgressivePayment, setEnableProgressivePayment] = useState<boolean>(false)
 
   const { customers, loading: customersLoading, setSearch, refresh: refreshCustomers } = useCustomers()
 
@@ -215,14 +298,20 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [customerId, setCustomerId] = useState<string>('')
   const [loanTypeId, setLoanTypeId] = useState<string>('')
   const [stageId, setStageId] = useState<string>('')
+  const [stageSubmittedDate, setStageSubmittedDate] = useState(() => dayjs().format('YYYY-MM-DD'))
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
   const [leadSource, setLeadSource] = useState<LeadSource>('DIRECT')
   const [associateId, setAssociateId] = useState<string>('')
   const [associateFallbackLabel, setAssociateFallbackLabel] = useState<string>('')
+  const [advocateId, setAdvocateId] = useState<string>('')
+  const [advocateFallbackLabel, setAdvocateFallbackLabel] = useState<string>('')
 
   const [bankName, setBankName] = useState<string>('')
   const [bankNameOptions, setBankNameOptions] = useState<string[]>([])
+  const [corporateId, setCorporateId] = useState<string>('')
+  const [corporateFallbackLabel, setCorporateFallbackLabel] = useState<string>('')
   const [requestedAmount, setRequestedAmount] = useState<string>('')
+  const [approvedAmount, setApprovedAmount] = useState<string>('')
   const [eligibleAmount, setEligibleAmount] = useState<string>('')
   const [interestRate, setInterestRate] = useState<string>('')
   const [tenureMonths, setTenureMonths] = useState<string>('')
@@ -257,7 +346,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [remarkInput, setRemarkInput] = useState('')
   const [addingRemark, setAddingRemark] = useState(false)
   const [remarksError, setRemarksError] = useState<string | null>(null)
+  const [discardChangesOpen, setDiscardChangesOpen] = useState(false)
+  const [baselineReady, setBaselineReady] = useState(false)
   const duplicateCheckSeqRef = useRef(0)
+  const baselineSnapshotRef = useRef<string | null>(null)
+  const pendingNavigationRef = useRef<(() => void) | null>(null)
 
   const apptScheduledAtValue = useMemo(() => {
     if (!apptScheduledAt) return null
@@ -266,13 +359,30 @@ const LoanCaseForm = ({ caseId }: Props) => {
     return d.isValid() ? d : null
   }, [apptScheduledAt])
 
+  const stageSubmittedDateValue = useMemo(() => {
+    if (!stageSubmittedDate) return null
+    const d = dayjs(stageSubmittedDate, 'YYYY-MM-DD', true)
+
+    return d.isValid() ? d : null
+  }, [stageSubmittedDate])
+
   const selectedLoanType = useMemo(() => loanTypes.find(l => l.id === loanTypeId) ?? null, [loanTypes, loanTypeId])
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
 
+  const advocateOptions = useMemo(
+    () => advocates.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [advocates]
+  )
+
   const associateOptions = useMemo(
     () => associates.filter(a => a.isActive).sort((a, b) => a.associateName.localeCompare(b.associateName)),
     [associates]
+  )
+
+  const corporateOptions = useMemo(
+    () => corporates.filter(c => c.isActive).sort((a, b) => a.name.localeCompare(b.name)),
+    [corporates]
   )
 
   const assignedAgentLabel = useMemo(() => {
@@ -283,6 +393,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
     return agent?.name || agent?.email || 'Assigned Agent'
   }, [assignedAgentId, userOptions])
 
+  const selectedAdvocateLabel = useMemo(() => {
+    if (!advocateId) return ''
+
+    const match = advocateOptions.find(a => a.id === advocateId)
+
+    if (match) return `${match.name} (${[match.countryCode, match.mobile].filter(Boolean).join(' ')})`
+
+    return advocateFallbackLabel
+  }, [advocateFallbackLabel, advocateId, advocateOptions])
+
   const selectedAssociateLabel = useMemo(() => {
     if (!associateId) return ''
 
@@ -292,6 +412,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     return associateFallbackLabel
   }, [associateFallbackLabel, associateId, associateOptions])
+
+  const selectedCorporateLabel = useMemo(() => {
+    if (!corporateId) return ''
+
+    const match = corporateOptions.find(c => c.id === corporateId) ?? corporates.find(c => c.id === corporateId)
+
+    if (match) return `${match.name} (${match.code})`
+
+    return corporateFallbackLabel
+  }, [corporateFallbackLabel, corporateId, corporateOptions, corporates])
 
   const selectedCustomerLabel = useMemo(() => {
     if (customerValue?.fullName) return customerValue.fullName
@@ -325,6 +455,112 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const canOpenAppointmentDialog = Boolean(customerId && (id ? true : assignedAgentId))
   const appointmentUiLocked = !id && isLocked
   const sessionUserId = (session as any)?.userId as string | undefined
+
+  const formSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        customerId,
+        loanTypeId,
+        stageId,
+        stageSubmittedDate,
+        assignedAgentId,
+        leadSource,
+        associateId,
+        advocateId,
+        corporateId,
+        bankName: bankName.trim(),
+        requestedAmount,
+        approvedAmount,
+        eligibleAmount,
+        interestRate,
+        tenureMonths,
+        emi,
+        enableProgressivePayment,
+        documents: documents
+          .map(d => ({ documentId: d.documentId, status: d.status }))
+          .sort((a, b) => a.documentId.localeCompare(b.documentId)),
+        remarks: remarks.map(r => ({
+          text: r.text,
+          updatedByUserId: r.updatedByUserId,
+          updatedByName: r.updatedByName,
+          updatedByEmail: r.updatedByEmail,
+          updatedAt: r.updatedAt
+        })),
+        remarkInput: remarkInput.trim(),
+        draftAppointments: draftAppointments.map(a => ({
+          id: a.id,
+          scheduledAt: a.scheduledAt,
+          followUpType: a.followUpType,
+          outcomeComments: a.outcomeComments
+        }))
+      }),
+    [
+      assignedAgentId,
+      associateId,
+      advocateId,
+      corporateId,
+      bankName,
+      customerId,
+      documents,
+      draftAppointments,
+      approvedAmount,
+      eligibleAmount,
+      emi,
+      enableProgressivePayment,
+      interestRate,
+      leadSource,
+      loanTypeId,
+      remarkInput,
+      remarks,
+      requestedAmount,
+      stageId,
+      stageSubmittedDate,
+      tenureMonths
+    ]
+  )
+
+  const isDirty =
+    isActive && !loading && baselineReady && baselineSnapshotRef.current !== formSnapshot
+
+  const attemptNavigation = useCallback(
+    (action: () => void) => {
+      if (!isDirty) {
+        action()
+
+        return
+      }
+
+      pendingNavigationRef.current = action
+      setDiscardChangesOpen(true)
+    },
+    [isDirty]
+  )
+
+  useUnsavedChangesGuard({
+    isDirty,
+    enabled: isActive && !loading && baselineReady,
+    onNavigateAttempt: attemptNavigation
+  })
+
+  const navigateToLeadList = useCallback(() => {
+    attemptNavigation(() => router.push('/loan-cases'))
+  }, [attemptNavigation, router])
+
+  useEffect(() => {
+    baselineSnapshotRef.current = null
+    setBaselineReady(false)
+  }, [caseId])
+
+  useEffect(() => {
+    if (loading) return
+    if (caseId && !id) return
+    if (!caseId && !stageId) return
+
+    if (baselineSnapshotRef.current === null) {
+      baselineSnapshotRef.current = formSnapshot
+      setBaselineReady(true)
+    }
+  }, [caseId, formSnapshot, id, loading, stageId])
 
   useEffect(() => {
     if (caseId) return
@@ -455,17 +691,21 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     void (async () => {
       try {
-        const [loanTypesData, stagesData, usersData, associatesData] = await Promise.all([
+        const [loanTypesData, stagesData, usersData, associatesData, advocatesData, corporatesData] = await Promise.all([
           getLoanTypes(),
           getLoanStatusPipelineStages(),
           getTenantUsers(),
-          getAssociates()
+          getAssociates(),
+          getAdvocates(),
+          getCorporates()
         ])
 
         setLoanTypes(loanTypesData as any)
         setStages(stagesData as any)
         setUsers(usersData as any)
         setAssociates(associatesData as any)
+        setAdvocates(advocatesData as any)
+        setCorporates(corporatesData as any)
       } catch (e: any) {
         setError(e?.message || 'Failed to load reference data')
       }
@@ -502,13 +742,30 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setLoanTypeId(data.loanTypeId)
         setStageId(data.stageId)
         setAssignedAgentId(data.assignedAgentId || '')
-        setLeadSource(data.leadSource || 'DIRECT')
+        setLeadSource(data.leadSource === 'ASSOCIATE' ? 'ASSOCIATE' : 'DIRECT')
         setAssociateId(data.associateId || '')
         setAssociateFallbackLabel(
           data.associateName ? `${data.associateName}${data.associateCode ? ` (${data.associateCode})` : ''}` : ''
         )
+        setAdvocateId(data.advocateId || '')
+        setAdvocateFallbackLabel(
+          data.advocateName
+            ? `${data.advocateName}${data.advocateMobile ? ` (${data.advocateMobile})` : ''}`
+            : ''
+        )
         setBankName(data.bankName || '')
+        setCorporateId(data.corporateId || '')
+        setCorporateFallbackLabel(
+          data.corporateName ? `${data.corporateName}${data.corporateCode ? ` (${data.corporateCode})` : ''}` : ''
+        )
         setRequestedAmount(data.requestedAmount != null ? String(data.requestedAmount) : '')
+        setApprovedAmount(
+          data.approvedAmount != null
+            ? String(data.approvedAmount)
+            : data.requestedAmount != null
+              ? String(data.requestedAmount)
+              : ''
+        )
         setEligibleAmount(data.eligibleAmount != null ? String(data.eligibleAmount) : '')
         setInterestRate(data.interestRate != null ? String(data.interestRate) : '')
         setTenureMonths(data.tenureMonths != null ? String(data.tenureMonths) : '')
@@ -517,6 +774,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setRemarks(Array.isArray(data.remarks) ? data.remarks : [])
         setIsLocked(Boolean(data.isLocked))
         setIsActive(Boolean(data.isActive))
+        setEnableProgressivePayment(Boolean(data.enableProgressivePayment))
       } catch (e: any) {
         setError(e?.message || 'Failed to load loan case')
       } finally {
@@ -795,6 +1053,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const validate = () => {
     const next: Record<string, string> = {}
     const requested = parseNumber(requestedAmount)
+    const approved = approvedAmount.trim().length === 0 ? null : parseNumber(approvedAmount)
     const eligible = eligibleAmount.trim().length === 0 ? null : parseNumber(eligibleAmount)
     const rate = interestRate.trim().length === 0 ? null : parseNumber(interestRate)
     const tenure = tenureMonths.trim().length === 0 ? null : parseNumber(tenureMonths)
@@ -803,7 +1062,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
     if (!customerId) next.customerId = 'Customer is required'
     if (!loanTypeId) next.loanTypeId = 'Loan type is required'
     if (!stageId) next.stageId = 'Stage is required'
+    if (!stageSubmittedDateValue) next.stageSubmittedDate = 'Stage date is required'
     if (!(typeof requested === 'number' && requested > 0)) next.requestedAmount = 'Loan amount must be greater than 0'
+    if (approved != null && typeof approved !== 'number') next.approvedAmount = 'Approved amount must be numeric'
     if (emiN != null && typeof emiN !== 'number') next.emi = 'EMI must be numeric'
     if (rate != null && typeof rate !== 'number') next.interestRate = 'Interest rate must be numeric'
     if (tenure != null && typeof tenure !== 'number') next.tenureMonths = 'Tenure must be numeric'
@@ -815,6 +1076,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
       if (!isValid) next.assignedAgentId = 'Assigned agent must belong to tenant'
     }
 
+    if (advocateId && !advocateOptions.some(a => a.id === advocateId)) next.advocateId = 'Advocate not found'
+
+    if (corporateId && !corporates.some(c => c.id === corporateId)) next.corporateId = 'Corporate not found'
+
     if (leadSource === 'ASSOCIATE') {
       if (!associateId) next.associateId = 'Associate is required'
       else if (!associateOptions.some(a => a.id === associateId)) next.associateId = 'Associate must be active'
@@ -824,7 +1089,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     setFieldErrors(next)
 
-    return { ok: Object.keys(next).length === 0, parsed: { requested, eligible, rate, tenure, emiN } }
+    return { ok: Object.keys(next).length === 0, parsed: { requested, approved, eligible, rate, tenure, emiN } }
   }
 
   const handleDelete = async () => {
@@ -854,16 +1119,22 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     try {
       const resolvedAssociateId = leadSource === 'ASSOCIATE' ? (associateId || null) : null
+      const resolvedAdvocateId = advocateId || null
+      const resolvedCorporateId = corporateId || null
 
       const payloadBase: CreateLoanCaseInput = {
         customerId,
         loanTypeId,
         stageId,
+        stageSubmittedDate: stageSubmittedDateValue!.format('YYYY-MM-DD'),
         assignedAgentId: assignedAgentId || null,
-        leadSource,
+        leadSource: leadSource === 'ASSOCIATE' ? 'ASSOCIATE' : 'DIRECT',
         associateId: resolvedAssociateId,
+        advocateId: resolvedAdvocateId,
+        corporateId: resolvedCorporateId,
         bankName: bankName.trim().length === 0 ? null : bankName.trim(),
         requestedAmount: parsed.requested as number,
+        approvedAmount: parsed.approved ?? (parsed.requested as number),
         eligibleAmount: parsed.eligible,
         interestRate: parsed.rate,
         tenureMonths: parsed.tenure,
@@ -918,10 +1189,17 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setRedirectTarget('/loan-cases')
         setRedirectOpen(true)
       } else {
-        await updateLoanCase(id, {
+        const updatePayload: UpdateLoanCaseInput = {
           ...payloadBase,
+          enableProgressivePayment,
           documents: documents.map(d => ({ documentId: d.documentId, status: d.status }))
-        })
+        }
+
+        if (enableProgressivePayment) {
+          delete updatePayload.approvedAmount
+        }
+
+        await updateLoanCase(id, updatePayload)
 
         setSuccessMsg('Lead updated successfully')
         setRedirectTarget('/loan-cases')
@@ -974,7 +1252,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           }}
           action={
             isMobile ? (
-              <IconButton onClick={() => router.push('/loan-cases')} aria-label='Back to lead manager'>
+              <IconButton onClick={navigateToLeadList} aria-label='Back to lead manager'>
                 <i className='ri-close-line' />
               </IconButton>
             ) : null
@@ -1012,61 +1290,116 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 </Typography>
               </Alert>
 
-              {/* Read-only details summary */}
-              <Card variant="outlined" sx={{ mb: 3, backgroundColor: 'grey.50' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <i className="ri-information-line" />
-                    Lead Details (Read Only)
-                  </Typography>
-
-                  <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Customer</Typography>
-                      <Typography variant="body1">{customerValue?.fullName || 'N/A'}</Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Loan Type</Typography>
-                      <Typography variant="body1">{loanTypes.find(lt => lt.id === loanTypeId)?.name || 'N/A'}</Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Bank/NBFC</Typography>
-                      <Typography variant="body1">{bankName || 'N/A'}</Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Requested Amount</Typography>
-                      <Typography variant="body1">{requestedAmount ? `₹${Number(requestedAmount).toLocaleString('en-IN')}` : 'N/A'}</Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Stage</Typography>
-                      <Typography variant="body1">{stages.find(s => s.id === stageId)?.name || 'N/A'}</Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Assigned Agent</Typography>
-                      <Typography variant="body1">
-                        {users.find(u => u.id === assignedAgentId)?.name ||
-                          users.find(u => u.id === assignedAgentId)?.email ||
-                          'N/A'}
-                      </Typography>
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Lead Source</Typography>
-                      <Typography variant="body1">{leadSource === 'ASSOCIATE' ? 'Associate' : 'Direct'}</Typography>
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <Typography variant="body2" fontWeight="bold" color="text.secondary">Associate</Typography>
-                      <Typography variant="body1">
-                        {leadSource === 'ASSOCIATE' ? (selectedAssociateLabel || associateFallbackLabel || 'N/A') : 'N/A'}
-                      </Typography>
-                    </Grid>
+              <Stack spacing={{ xs: 2.5, sm: 3 }} sx={{ mb: 3 }}>
+                <LeadFormSection
+                  icon='ri-user-search-line'
+                  title='Customer & product'
+                  subtitle='Read-only snapshot'
+                  accent='primary'
+                >
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Customer
+                    </Typography>
+                    <Typography variant='body1'>{customerValue?.fullName || 'N/A'}</Typography>
                   </Grid>
-                </CardContent>
-              </Card>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Loan Type
+                    </Typography>
+                    <Typography variant='body1'>{loanTypes.find(lt => lt.id === loanTypeId)?.name || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Bank / NBFC
+                    </Typography>
+                    <Typography variant='body1'>{bankName || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Corporate
+                    </Typography>
+                    <Typography variant='body1'>{selectedCorporateLabel || 'N/A'}</Typography>
+                  </Grid>
+                </LeadFormSection>
+
+                <LeadFormSection
+                  icon='ri-money-rupee-circle-line'
+                  title='Loan amounts & terms'
+                  accent='success'
+                >
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Requested
+                    </Typography>
+                    <Typography variant='body1'>
+                      {requestedAmount ? `₹${Number(requestedAmount).toLocaleString('en-IN')}` : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Approved
+                    </Typography>
+                    <Typography variant='body1'>
+                      {approvedAmount ? `₹${Number(approvedAmount).toLocaleString('en-IN')}` : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Eligible
+                    </Typography>
+                    <Typography variant='body1'>
+                      {eligibleAmount ? `₹${Number(eligibleAmount).toLocaleString('en-IN')}` : 'N/A'}
+                    </Typography>
+                  </Grid>
+                </LeadFormSection>
+
+                <LeadFormSection icon='ri-team-line' title='Team & referrals' accent='info'>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Lead source
+                    </Typography>
+                    <Typography variant='body1'>{leadSource === 'ASSOCIATE' ? 'Associate' : 'Direct'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Assigned agent
+                    </Typography>
+                    <Typography variant='body1'>
+                      {users.find(u => u.id === assignedAgentId)?.name ||
+                        users.find(u => u.id === assignedAgentId)?.email ||
+                        'N/A'}
+                    </Typography>
+                  </Grid>
+                  {leadSource === 'ASSOCIATE' ? (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                        Associate
+                      </Typography>
+                      <Typography variant='body1'>
+                        {selectedAssociateLabel || associateFallbackLabel || 'N/A'}
+                      </Typography>
+                    </Grid>
+                  ) : null}
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Advocate
+                    </Typography>
+                    <Typography variant='body1'>
+                      {selectedAdvocateLabel || advocateFallbackLabel || 'N/A'}
+                    </Typography>
+                  </Grid>
+                </LeadFormSection>
+
+                <LeadFormSection icon='ri-git-merge-line' title='Pipeline status' accent='warning'>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Typography variant='body2' fontWeight={600} color='text.secondary'>
+                      Stage
+                    </Typography>
+                    <Typography variant='body1'>{stages.find(s => s.id === stageId)?.name || 'N/A'}</Typography>
+                  </Grid>
+                </LeadFormSection>
+              </Stack>
 
               <Divider sx={{ mb: 2 }} />
               <Accordion
@@ -1210,12 +1543,13 @@ const LoanCaseForm = ({ caseId }: Props) => {
               </Accordion>
             </>
           ) : (
-            <Stack spacing={isMobile ? 3.5 : 3.5}>
-
-
-              <Divider />
-
-              <Grid container rowSpacing={{ xs: 3, sm: 3 }} columnSpacing={{ xs: 2, sm: 3 }}>
+            <Stack spacing={{ xs: 2.5, sm: 3 }}>
+              <LeadFormSection
+                icon='ri-user-search-line'
+                title='Customer & product'
+                subtitle='Applicant, loan product, and lending institution'
+                accent='primary'
+              >
                 <Grid size={{ xs: 12 }}>
                   <Autocomplete
                     options={customerOptions}
@@ -1293,7 +1627,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12 }}>
                   <FormControl fullWidth size='small' error={!!fieldErrors.loanTypeId}>
                     <InputLabel id='loan-case-loan-type'>Loan Type</InputLabel>
                     <Select
@@ -1349,6 +1683,47 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
+                  <FormControl fullWidth size='small' error={!!fieldErrors.corporateId}>
+                    <InputLabel id='loan-case-corporate'>Corporate</InputLabel>
+                    <Select
+                      labelId='loan-case-corporate'
+                      label='Corporate'
+                      value={corporateId}
+                      onChange={e => setCorporateId(String(e.target.value))}
+                      disabled={!isActive}
+                      renderValue={v =>
+                        v ? selectedCorporateLabel || corporateOptions.find(c => c.id === v)?.name || 'Select' : 'None'
+                      }
+                    >
+                      <MenuItem value=''>None</MenuItem>
+                      {corporateOptions.length === 0 ? (
+                        <MenuItem value='__none__' disabled>
+                          No corporates available
+                        </MenuItem>
+                      ) : (
+                        corporateOptions.map(c => (
+                          <MenuItem key={c.id} value={c.id}>
+                            {c.name} ({c.code})
+                          </MenuItem>
+                        ))
+                      )}
+                    </Select>
+                    {fieldErrors.corporateId ? (
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                        {fieldErrors.corporateId}
+                      </Typography>
+                    ) : null}
+                  </FormControl>
+                </Grid>
+              </LeadFormSection>
+
+              <LeadFormSection
+                icon='ri-money-rupee-circle-line'
+                title='Loan amounts & terms'
+                subtitle='Requested figures, eligibility, and repayment structure'
+                accent='success'
+              >
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     label='Loan Amount Requested'
                     value={requestedAmount}
@@ -1363,7 +1738,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                   <TextField
                     label='Eligible Amount'
                     value={eligibleAmount}
@@ -1378,7 +1753,26 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <TextField
+                    label='Approved Amount'
+                    value={approvedAmount}
+                    onChange={e => setApprovedAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                    fullWidth
+                    size='small'
+                    disabled={enableProgressivePayment}
+                    error={!!fieldErrors.approvedAmount}
+                    helperText={
+                      fieldErrors.approvedAmount ||
+                      (enableProgressivePayment ? 'Locked while progressive payment is enabled' : undefined)
+                    }
+                    InputProps={{
+                      startAdornment: <InputAdornment position='start'>₹</InputAdornment>
+                    }}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 4, md: 4 }}>
                   <TextField
                     label='Interest Rate'
                     value={interestRate}
@@ -1393,7 +1787,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 4, md: 4 }}>
                   <TextField
                     label='Tenure'
                     value={tenureMonths}
@@ -1408,7 +1802,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 4, md: 4 }}>
                   <TextField
                     label='EMI'
                     value={emi}
@@ -1421,6 +1815,65 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       startAdornment: <InputAdornment position='start'>₹</InputAdornment>
                     }}
                   />
+                </Grid>
+              </LeadFormSection>
+
+              <LeadFormSection
+                icon='ri-team-line'
+                title='Team & referrals'
+                subtitle='Ownership, advocate, and associate referral'
+                accent='info'
+              >
+                <Grid size={{ xs: 12 }}>
+                  <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 0.75, fontWeight: 600 }}>
+                    Lead source
+                  </Typography>
+                  <ToggleButtonGroup
+                    value={leadSource}
+                    exclusive
+                    onChange={(_, value) => {
+                      if (!value) return
+                      setLeadSource(value)
+
+                      if (value === 'DIRECT') {
+                        setAssociateId('')
+                        setFieldErrors(prev => {
+                          const next = { ...prev }
+
+                          delete next.associateId
+
+                          return next
+                        })
+                      }
+                    }}
+                    sx={{
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      gap: { xs: 1, sm: 0 },
+                      '& .MuiToggleButtonGroup-grouped': {
+                        flex: { sm: 1 },
+                        width: { xs: '100%', sm: 'auto' },
+                        borderRadius: '8px !important',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        py: { xs: 1.1, sm: 1.25 },
+                        '&:not(:first-of-type)': {
+                          marginLeft: { xs: 0, sm: -1 },
+                          borderLeft: { xs: '1px solid', sm: '1px solid' },
+                          borderColor: 'divider'
+                        }
+                      }
+                    }}
+                  >
+                    <ToggleButton value='DIRECT'>Direct</ToggleButton>
+                    <ToggleButton value='ASSOCIATE'>Associate</ToggleButton>
+                  </ToggleButtonGroup>
+                  {fieldErrors.leadSource ? (
+                    <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                      {fieldErrors.leadSource}
+                    </Typography>
+                  ) : null}
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -1448,68 +1901,42 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl fullWidth size='small' error={!!fieldErrors.stageId}>
-                    <InputLabel id='loan-case-stage'>Stage</InputLabel>
+                  <FormControl fullWidth size='small' error={!!fieldErrors.advocateId}>
+                    <InputLabel id='loan-case-advocate'>Advocate</InputLabel>
                     <Select
-                      labelId='loan-case-stage'
-                      label='Stage'
-                      value={stageId}
-                      onChange={e => setStageId(String(e.target.value))}
+                      labelId='loan-case-advocate'
+                      label='Advocate'
+                      value={advocateId}
+                      onChange={e => setAdvocateId(String(e.target.value))}
+                      renderValue={v =>
+                        v
+                          ? selectedAdvocateLabel || advocateOptions.find(a => a.id === v)?.name || 'Select'
+                          : 'None'
+                      }
                     >
-                      {stageOptions.map(s => (
-                        <MenuItem key={s.id} value={s.id}>
-                          {s.name}
+                      <MenuItem value=''>None</MenuItem>
+                      {advocateOptions.length === 0 ? (
+                        <MenuItem value='__none__' disabled>
+                          No advocates available
                         </MenuItem>
-                      ))}
+                      ) : (
+                        advocateOptions.map(a => (
+                          <MenuItem key={a.id} value={a.id}>
+                            {a.name} ({[a.countryCode, a.mobile].filter(Boolean).join(' ')})
+                          </MenuItem>
+                        ))
+                      )}
                     </Select>
-                    {fieldErrors.stageId ? (
+                    {fieldErrors.advocateId ? (
                       <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
-                        {fieldErrors.stageId}
+                        {fieldErrors.advocateId}
                       </Typography>
                     ) : null}
                   </FormControl>
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
-                  <Typography variant='subtitle1' sx={{ fontWeight: 700, mb: 1 }}>
-                    Lead Source
-                  </Typography>
-                  <ToggleButtonGroup
-                    value={leadSource}
-                    exclusive
-                    onChange={(_, value) => {
-                      if (!value) return
-                      setLeadSource(value)
-
-                      if (value === 'DIRECT') {
-                        setAssociateId('')
-                        setFieldErrors(prev => {
-                          const next = { ...prev }
-
-                          delete next.associateId
-
-                          return next
-                        })
-                      }
-                    }}
-                    sx={{ width: '100%' }}
-                  >
-                    <ToggleButton value='DIRECT' sx={{ flex: 1 }}>
-                      Direct
-                    </ToggleButton>
-                    <ToggleButton value='ASSOCIATE' sx={{ flex: 1 }}>
-                      Associate
-                    </ToggleButton>
-                  </ToggleButtonGroup>
-                  {fieldErrors.leadSource ? (
-                    <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
-                      {fieldErrors.leadSource}
-                    </Typography>
-                  ) : null}
-                </Grid>
-
-                {leadSource === 'ASSOCIATE' ? (
-                  <Grid size={{ xs: 12, sm: 6 }}>
+                  <Collapse in={leadSource === 'ASSOCIATE'} unmountOnExit>
                     <FormControl fullWidth size='small' error={!!fieldErrors.associateId}>
                       <InputLabel id='loan-case-associate'>Associate</InputLabel>
                       <Select
@@ -1517,7 +1944,9 @@ const LoanCaseForm = ({ caseId }: Props) => {
                         label='Associate'
                         value={associateId}
                         onChange={e => setAssociateId(String(e.target.value))}
-                        renderValue={v => selectedAssociateLabel || associateOptions.find(a => a.id === v)?.associateName || 'Select'}
+                        renderValue={v =>
+                          selectedAssociateLabel || associateOptions.find(a => a.id === v)?.associateName || 'Select'
+                        }
                       >
                         {associateOptions.length === 0 ? (
                           <MenuItem value='' disabled>
@@ -1537,26 +1966,112 @@ const LoanCaseForm = ({ caseId }: Props) => {
                         </Typography>
                       ) : null}
                     </FormControl>
+                  </Collapse>
+                </Grid>
+              </LeadFormSection>
+
+              <LeadFormSection
+                icon='ri-git-merge-line'
+                title='Pipeline status'
+                subtitle='Current stage, submission date, and payment mode'
+                accent='warning'
+              >
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <FormControl fullWidth size='small' error={!!fieldErrors.stageId}>
+                    <InputLabel id='loan-case-stage'>Stage</InputLabel>
+                    <Select
+                      labelId='loan-case-stage'
+                      label='Stage'
+                      value={stageId}
+                      onChange={e => {
+                        setStageId(String(e.target.value))
+                        setStageSubmittedDate(dayjs().format('YYYY-MM-DD'))
+                      }}
+                    >
+                      {stageOptions.map(s => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {fieldErrors.stageId ? (
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                        {fieldErrors.stageId}
+                      </Typography>
+                    ) : null}
+                  </FormControl>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DatePicker
+                      label='Stage date'
+                      value={stageSubmittedDateValue}
+                      onChange={(v: Dayjs | null) =>
+                        setStageSubmittedDate(v && v.isValid() ? v.format('YYYY-MM-DD') : '')
+                      }
+                      format='DD MMM YYYY'
+                      slotProps={{
+                        textField: {
+                          size: 'small',
+                          fullWidth: true,
+                          required: true,
+                          error: !!fieldErrors.stageSubmittedDate,
+                          helperText: fieldErrors.stageSubmittedDate || 'Date when this stage was submitted',
+                          InputLabelProps: { shrink: true }
+                        }
+                      }}
+                    />
+                  </LocalizationProvider>
+                </Grid>
+
+                {id ? (
+                  <Grid size={{ xs: 12, md: 4 }} sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Paper
+                      variant='outlined'
+                      sx={{
+                        width: '100%',
+                        px: 2,
+                        py: 1.25,
+                        borderRadius: 2,
+                        borderStyle: 'dashed',
+                        bgcolor: 'action.hover'
+                      }}
+                    >
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={enableProgressivePayment}
+                            onChange={e => setEnableProgressivePayment(e.target.checked)}
+                            disabled={!isActive}
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                              Progressive payment
+                            </Typography>
+                            <Typography variant='caption' color='text.secondary'>
+                              Unlock approved amount in stages
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ m: 0, alignItems: 'flex-start', '& .MuiSwitch-root': { mt: 0.25 } }}
+                      />
+                    </Paper>
                   </Grid>
                 ) : null}
-              </Grid>
+              </LeadFormSection>
 
-              <Divider />
-
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
-                <Box>
-                  <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                    Appointments
-                  </Typography>
-                  {!isMobile ? (
-                    <Typography variant='body2' color='text.secondary'>
-                      {id ? 'Add appointments and follow-ups right here' : 'Add at least one appointment before saving this lead'}
-                    </Typography>
-                  ) : null}
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {!id || !hasExistingAppointments ? (
+              <LeadFormSection
+                icon='ri-calendar-event-line'
+                title='Appointments'
+                subtitle={
+                  id ? 'Follow-ups and scheduled touchpoints' : 'At least one appointment required before save'
+                }
+                accent='secondary'
+                action={
+                  !id || !hasExistingAppointments ? (
                       isMobile ? (
                         <Badge
                           badgeContent={id ? 0 : draftAppointments.length}
@@ -1647,19 +2162,18 @@ const LoanCaseForm = ({ caseId }: Props) => {
                           </Button>
                         </Badge>
                       )
-                    ) : null}
-                  </Box>
-                </Box>
-              </Box>
-
-              {fieldErrors.appointments ? (
-                <Alert severity='error' sx={{ mt: 0.5 }}>
+                ) : null
+                }
+              >
+                <Grid size={{ xs: 12 }}>
+                  {fieldErrors.appointments ? (
+                <Alert severity='error' sx={{ mb: 1.5 }}>
                   {fieldErrors.appointments}
                 </Alert>
-              ) : null}
+                  ) : null}
 
-              {!id ? (
-                <Paper variant='outlined' sx={{ borderRadius: 2.5, p: { xs: 2, sm: 2.5 } }}>
+                  {!id ? (
+                    <Box sx={{ width: '100%' }}>
                   {draftAppointments.length === 0 ? (
                     <Box
                       sx={{
@@ -1776,19 +2290,17 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       </Paper>
                     )
                   ) : null}
-                </Paper>
-              ) : (
-                <Box sx={{ mt: 1.5 }}>
-                  <LeadAppointmentsDashboard
-                    leadId={id}
-                    embedded
-                    refreshKey={appointmentsRefreshKey}
-                    onLoaded={count => setHasExistingAppointments(count > 0)}
-                  />
-                </Box>
-              )}
-
-              <Divider />
+                    </Box>
+                  ) : (
+                    <LeadAppointmentsDashboard
+                      leadId={id}
+                      embedded
+                      refreshKey={appointmentsRefreshKey}
+                      onLoaded={count => setHasExistingAppointments(count > 0)}
+                    />
+                  )}
+                </Grid>
+              </LeadFormSection>
 
               <Accordion
                 disableGutters
@@ -2156,7 +2668,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   Delete
                 </Button>
               )}
-              <Button variant='outlined' disabled={submitting} onClick={() => router.push('/loan-cases')} fullWidth={isMobile}>
+              <Button variant='outlined' disabled={submitting} onClick={navigateToLeadList} fullWidth={isMobile}>
                 Cancel
               </Button>
             </Box>
@@ -2180,7 +2692,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           }}
         >
           <Box sx={{ p: 1.5, display: 'flex', gap: 1.5 }}>
-            <Button variant='outlined' disabled={submitting} onClick={() => router.push('/loan-cases')} fullWidth>
+            <Button variant='outlined' disabled={submitting} onClick={navigateToLeadList} fullWidth>
               Cancel
             </Button>
             {id && isActive && (
@@ -2488,6 +3000,37 @@ const LoanCaseForm = ({ caseId }: Props) => {
             disabled={submitting}
           >
             Yes, continue
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={discardChangesOpen} onClose={() => setDiscardChangesOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle>Unsaved changes</DialogTitle>
+        <DialogContent>
+          <Typography>You have unsaved changes. If you leave now, your data will be lost.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant='text'
+            onClick={() => {
+              setDiscardChangesOpen(false)
+              pendingNavigationRef.current = null
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant='contained'
+            color='warning'
+            onClick={() => {
+              setDiscardChangesOpen(false)
+              const action = pendingNavigationRef.current
+
+              pendingNavigationRef.current = null
+              action?.()
+            }}
+          >
+            Continue
           </Button>
         </DialogActions>
       </Dialog>
