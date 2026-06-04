@@ -70,6 +70,7 @@ export async function GET() {
   if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any)?.currentTenantId || '')
   const currentTenantId = resolveCurrentTenantId(session as any, cookieTenantId)
 
   if (currentTenantId && ObjectId.isValid(currentTenantId)) {

@@ -52,6 +52,12 @@ const formatCompactINR = (amount: number) =>
     maximumFractionDigits: 1
   }).format(Number.isFinite(amount) ? amount : 0)
 
+const formatAxisAmount = (value: number) => {
+  const safe = Number.isFinite(value) ? value : 0
+
+  return `₹${new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(safe)}`
+}
+
 function aggregateBreakdown(
   leads: LoanCaseListItem[],
   pickLabel: (c: LoanCaseListItem) => string

@@ -155,11 +155,11 @@ export default function BreakdownApexChart({
     },
     yaxis: {
       labels: {
+        maxWidth: horizontal ? 160 : undefined,
         style: {
           colors: horizontal ? 'var(--mui-palette-text-primary)' : 'var(--mui-palette-text-secondary)',
           fontSize: '11px',
-          fontWeight: horizontal ? 600 : 400,
-          maxWidth: horizontal ? 160 : undefined
+          fontWeight: horizontal ? 600 : 400
         },
         ...(horizontal
           ? {}

@@ -1,10 +1,8 @@
 import 'server-only'
 
-import type { Session } from 'next-auth'
-
 import { getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 
-type SessionWithTenant = Session & {
+export type SessionWithTenant = {
   userId?: string
   currentTenantId?: string
   isDemoMode?: boolean
