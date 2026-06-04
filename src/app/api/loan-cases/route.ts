@@ -9,7 +9,14 @@ import { upsertCaseFollowUpReminder } from '@features/reminders/services/reminde
 
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
 import {
+  buildDisbursementTrackerLookupStage,
+  buildProgressivePaymentReadyToTrackMatchStage,
+  buildProgressivePaymentTrackingActiveMatchStage,
+  isProgressivePaymentListFilterMode
+} from '@features/loan-cases/utils/progressivePaymentListFilter'
+import {
   buildStagedDateAuditExistsMatchStage,
+  buildStagedDateAuditFlattenStage,
   buildStagedDateAuditLookupStage
 } from '@features/loan-cases/utils/stageAuditDate'
 
@@ -199,6 +206,7 @@ export async function GET(request: Request) {
   const showInactive = url.searchParams.get('showInactive') === 'true'
   const stagedDateFrom = url.searchParams.get('stagedDateFrom') || ''
   const stagedDateTo = url.searchParams.get('stagedDateTo') || ''
+  const progressivePaymentFilter = url.searchParams.get('progressivePaymentFilter') || ''
   const bankNameOptions = url.searchParams.get('bankNameOptions') === 'true'
   const tenantIdHex = tenantIdObj.toHexString()
 
@@ -239,7 +247,7 @@ export async function GET(request: Request) {
     baseFilter.isActive = { $ne: false }
   }
 
-  if (stageId) {
+  if (stageId && !hasStagedDateFilter) {
     if (!ObjectId.isValid(stageId)) return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
     const stageObjId = new ObjectId(stageId)
 
@@ -249,6 +257,10 @@ export async function GET(request: Request) {
         $or: [{ stageId: stageObjId }, { stageId }]
       }
     ]
+  }
+
+  if (stageId && hasStagedDateFilter && !ObjectId.isValid(stageId)) {
+    return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
   }
 
   if (assignedAgentId) {
@@ -338,8 +350,23 @@ export async function GET(request: Request) {
         stagedDateTo || undefined,
         stageId || undefined
       ),
-      buildStagedDateAuditExistsMatchStage()
+      buildStagedDateAuditExistsMatchStage(),
+      buildStagedDateAuditFlattenStage()
     )
+  }
+
+  if (progressivePaymentFilter) {
+    if (!isProgressivePaymentListFilterMode(progressivePaymentFilter)) {
+      return NextResponse.json({ error: 'invalid_progressivePaymentFilter' }, { status: 400 })
+    }
+
+    listPipeline.push(buildDisbursementTrackerLookupStage(tenantIdObj, tenantIdHex))
+
+    if (progressivePaymentFilter === 'ready_to_track') {
+      listPipeline.push(buildProgressivePaymentReadyToTrackMatchStage())
+    } else {
+      listPipeline.push(buildProgressivePaymentTrackingActiveMatchStage())
+    }
   }
 
   listPipeline.push({ $sort: { updatedAt: -1 } }, { $limit: 200 })
@@ -493,7 +520,19 @@ export async function GET(request: Request) {
           stageName: { $ifNull: ['$stage.name', '$stageName'] },
           assignedAgentName: { $ifNull: ['$assignedAgent.name', '$assignedAgentName'] },
           assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] },
-          remarks: { $ifNull: ['$remarks', []] }
+          remarks: { $ifNull: ['$remarks', []] },
+          auditMatchedStageName: hasStagedDateFilter
+            ? {
+                $trim: {
+                  input: {
+                    $toString: { $ifNull: ['$auditMatch.matchedStageName', ''] }
+                  }
+                }
+              }
+            : null,
+          auditMatchedStagedDate: hasStagedDateFilter
+            ? { $ifNull: ['$auditMatch.effectiveStagedDate', null] }
+            : null
         }
       }
     ])
@@ -509,6 +548,8 @@ export async function GET(request: Request) {
     requestedAmount: (r as any).requestedAmount ?? null,
     stageId: String((r as any).stageId || ''),
     stageName: String((r as any).stageName || ''),
+    auditMatchedStageName: hasStagedDateFilter ? String((r as any).auditMatchedStageName || '') || null : null,
+    auditMatchedStagedDate: hasStagedDateFilter ? String((r as any).auditMatchedStagedDate || '') || null : null,
     assignedAgentId: (r as any).assignedAgentId ? String((r as any).assignedAgentId) : null,
     assignedAgentName: (r as any).assignedAgentName ?? null,
     assignedAgentEmail: (r as any).assignedAgentEmail ?? null,

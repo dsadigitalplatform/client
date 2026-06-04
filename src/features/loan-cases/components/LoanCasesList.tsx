@@ -6,21 +6,29 @@ import Link from 'next/link'
 
 import { useSession } from 'next-auth/react'
 
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
+import Collapse from '@mui/material/Collapse'
+import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
+import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import Tooltip from '@mui/material/Tooltip'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
+import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
@@ -34,6 +42,162 @@ import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/serv
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
 
 type StageOption = { id: string; name: string; order: number }
+
+type ProgressivePaymentFilterValue = '' | 'ready_to_track' | 'tracking_active'
+
+const PROGRESSIVE_PAYMENT_FILTER_OPTIONS: Array<{
+  value: ProgressivePaymentFilterValue
+  label: string
+  hint: string
+}> = [
+  { value: '', label: 'All leads', hint: 'No progressive disbursement filter' },
+  { value: 'ready_to_track', label: 'Ready to start', hint: 'Enabled on lead · tracker not created yet' },
+  { value: 'tracking_active', label: 'Tracking active', hint: 'Enabled on lead · disbursement tracker exists' }
+]
+
+const stageChipColor = (name: string) => {
+  const n = name.toLowerCase()
+
+  if (n.includes('approved')) return 'success' as const
+  if (n.includes('rejected')) return 'error' as const
+  if (n.includes('pending')) return 'warning' as const
+  if (n.includes('login')) return 'info' as const
+
+  return 'default' as const
+}
+
+const formatStagedDateLabel = (isoDate: string | null | undefined) => {
+  if (!isoDate) return '—'
+
+  const [y, m, d] = isoDate.split('-').map(Number)
+
+  if (!y || !m || !d) return isoDate
+
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
+}
+
+const STAGE_AUDIT_SECTION_WIDTH = 236
+
+type StageMiniRow = { id: string; label: string; primary: string; secondary?: string | null }
+
+function StageAuditSection({ rows }: { rows: StageMiniRow[] }) {
+  return (
+    <Box
+      sx={{
+        width: { xs: '100%', md: STAGE_AUDIT_SECTION_WIDTH },
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        borderRadius: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        overflow: 'hidden'
+      }}
+    >
+      {rows.map((row, index) => (
+        <Box
+          key={row.id}
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: '58px minmax(0, 1fr)',
+            columnGap: 1,
+            alignItems: 'start',
+            px: 1,
+            py: 0.75,
+            borderTop: index > 0 ? '1px solid' : 'none',
+            borderColor: 'divider'
+          }}
+        >
+          <Typography
+            variant='caption'
+            color='text.secondary'
+            sx={{ fontWeight: 600, lineHeight: 1.45, whiteSpace: 'nowrap', pt: 0.125 }}
+          >
+            {row.label}
+          </Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant='body2'
+              sx={{
+                fontWeight: 600,
+                fontSize: '0.8125rem',
+                lineHeight: 1.4,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical'
+              }}
+            >
+              {row.primary}
+            </Typography>
+            {row.secondary ? (
+              <Typography
+                variant='caption'
+                color='text.secondary'
+                sx={{
+                  display: 'block',
+                  mt: 0.25,
+                  lineHeight: 1.35,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {row.secondary}
+              </Typography>
+            ) : null}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+function StageCell({
+  currentStageName,
+  auditMatchedStageName,
+  auditMatchedStagedDate,
+  showAuditMatch
+}: {
+  currentStageName: string
+  auditMatchedStageName?: string | null
+  auditMatchedStagedDate?: string | null
+  showAuditMatch: boolean
+}) {
+  const current = currentStageName || 'Stage'
+  const matched = auditMatchedStageName?.trim() || current
+  const stagedDate = auditMatchedStagedDate?.trim() || ''
+  const dateLabel = stagedDate ? formatStagedDateLabel(stagedDate) : null
+  const stageMoved = matched.toLowerCase() !== current.toLowerCase()
+
+  if (!showAuditMatch) {
+    return (
+      <Chip
+        size='small'
+        label={current}
+        color={stageChipColor(current)}
+        variant='outlined'
+        sx={{ maxWidth: '100%' }}
+      />
+    )
+  }
+
+  const rows: StageMiniRow[] = stageMoved
+    ? [
+        { id: 'range', label: 'In range', primary: matched, secondary: dateLabel ? `Staged ${dateLabel}` : null },
+        { id: 'now', label: 'Now', primary: current }
+      ]
+    : [
+        { id: 'stage', label: 'Stage', primary: current, secondary: dateLabel ? `Staged ${dateLabel}` : null }
+      ]
+
+  return <StageAuditSection rows={rows} />
+}
 
 const LoanCasesList = () => {
   const { data: session } = useSession()
@@ -50,6 +214,7 @@ const LoanCasesList = () => {
   const [showInactive, setShowInactive] = useState<boolean>(false)
   const [stagedDateFrom, setStagedDateFrom] = useState<string>('')
   const [stagedDateTo, setStagedDateTo] = useState<string>('')
+  const [progressivePaymentFilter, setProgressivePaymentFilter] = useState<ProgressivePaymentFilterValue>('')
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
@@ -64,12 +229,16 @@ const LoanCasesList = () => {
       bankName: bankName || undefined,
       showInactive: showInactive || undefined,
       stagedDateFrom: stagedDateFrom || undefined,
-      stagedDateTo: stagedDateTo || undefined
+      stagedDateTo: stagedDateTo || undefined,
+      progressivePaymentFilter: progressivePaymentFilter || undefined
     }),
-    [bankName, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo]
+    [bankName, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo, progressivePaymentFilter]
   )
 
+  const isAuditSearchActive = Boolean(stagedDateFrom || stagedDateTo)
+
   const { cases, loading } = useLoanCases(filters)
+
   const sortedCases = useMemo(() => {
     const list = cases.slice()
 
@@ -97,6 +266,7 @@ const LoanCasesList = () => {
 
   const stageOptions = useMemo(() => stages.slice().sort((a, b) => (a.order || 0) - (b.order || 0)), [stages])
   const userOptions = useMemo(() => users.slice().sort((a, b) => a.name.localeCompare(b.name)), [users])
+  const auditStageLabel = stageId ? stageOptions.find(s => s.id === stageId)?.name || 'Selected stage' : 'Any stage'
 
   const hasActiveFilters =
     Boolean(stageId) ||
@@ -104,7 +274,15 @@ const LoanCasesList = () => {
     Boolean(stagedDateFrom) ||
     Boolean(stagedDateTo) ||
     showInactive ||
+    Boolean(progressivePaymentFilter) ||
     assignedAgentId !== defaultAssignedAgentId
+
+  const progressiveFilterMeta = PROGRESSIVE_PAYMENT_FILTER_OPTIONS.find(o => o.value === progressivePaymentFilter)
+
+  const clearAuditSearch = () => {
+    setStagedDateFrom('')
+    setStagedDateTo('')
+  }
 
   useEffect(() => {
 
@@ -166,17 +344,6 @@ const LoanCasesList = () => {
     return date.toLocaleString()
   }
 
-  const stageChipColor = (name: string) => {
-    const n = name.toLowerCase()
-
-    if (n.includes('approved')) return 'success' as const
-    if (n.includes('rejected')) return 'error' as const
-    if (n.includes('pending')) return 'warning' as const
-    if (n.includes('login')) return 'info' as const
-
-    return 'default' as const
-  }
-
   return (
     <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
       <Box
@@ -222,7 +389,7 @@ const LoanCasesList = () => {
           gridTemplateColumns: {
             xs: '1fr',
             sm: 'repeat(2, minmax(0, 1fr))',
-            md: 'repeat(4, minmax(0, 1fr)) auto auto'
+            md: isAuditSearchActive ? 'repeat(3, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))'
           },
           gap: 2,
           alignItems: 'center'
@@ -266,24 +433,26 @@ const LoanCasesList = () => {
             ))}
           </Select>
         </FormControl>
-        <FormControl size='small' fullWidth>
-          <InputLabel id='loan-cases-stage-filter'>Stage</InputLabel>
-          <Select
-            labelId='loan-cases-stage-filter'
-            label='Stage'
-            value={stageId}
-            onChange={e => {
-              setStageId(String(e.target.value))
-            }}
-          >
-            <MenuItem value=''>All Stages</MenuItem>
-            {stageOptions.map(s => (
-              <MenuItem key={s.id} value={s.id}>
-                {s.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {!isAuditSearchActive ? (
+          <FormControl size='small' fullWidth>
+            <InputLabel id='loan-cases-stage-filter'>Current stage</InputLabel>
+            <Select
+              labelId='loan-cases-stage-filter'
+              label='Current stage'
+              value={stageId}
+              onChange={e => {
+                setStageId(String(e.target.value))
+              }}
+            >
+              <MenuItem value=''>All stages</MenuItem>
+              {stageOptions.map(s => (
+                <MenuItem key={s.id} value={s.id}>
+                  {s.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : null}
         <FormControl size='small' fullWidth>
           <InputLabel id='loan-cases-sort-by'>Sort by</InputLabel>
           <Select
@@ -301,69 +470,257 @@ const LoanCasesList = () => {
             <MenuItem value='customerName_asc'>Customer Name (A-Z)</MenuItem>
           </Select>
         </FormControl>
+      </Box>
 
+      <Paper
+        variant='outlined'
+        sx={{
+          p: { xs: 1.5, sm: 2 },
+          borderRadius: 3,
+          borderColor: progressivePaymentFilter ? 'primary.main' : 'divider',
+          borderWidth: progressivePaymentFilter ? 2 : 1,
+          bgcolor: progressivePaymentFilter
+            ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.05)'
+            : 'background.paper',
+          transition: 'border-color 0.2s ease, background-color 0.2s ease'
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
+            alignItems: { xs: 'stretch', lg: 'center' },
+            justifyContent: 'space-between',
+            gap: { xs: 1.5, lg: 2 }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, minWidth: 0 }}>
+            <Box
+              sx={{
+                mt: 0.25,
+                width: 32,
+                height: 32,
+                borderRadius: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                bgcolor: progressivePaymentFilter
+                  ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.14)'
+                  : 'action.hover',
+                color: progressivePaymentFilter ? 'primary.main' : 'text.secondary'
+              }}
+            >
+              <i className='ri-hand-coin-line' style={{ fontSize: 18 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant='subtitle2' sx={{ fontWeight: 700 }}>
+                Progressive disbursement
+              </Typography>
+              <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.25 }}>
+                {progressiveFilterMeta?.hint ?? 'Filter by whether disbursement tracking has started on the lead'}
+              </Typography>
+            </Box>
+          </Box>
 
+          <ToggleButtonGroup
+            exclusive
+            size='small'
+            value={progressivePaymentFilter}
+            onChange={(_, value: ProgressivePaymentFilterValue | null) => {
+              setProgressivePaymentFilter(value ?? '')
+            }}
+            aria-label='Progressive disbursement filter'
+            sx={{
+              alignSelf: { xs: 'stretch', lg: 'center' },
+              flexShrink: 0,
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+              width: { xs: '100%', lg: 'auto' },
+              '& .MuiToggleButtonGroup-grouped': {
+                border: '1px solid',
+                borderColor: 'divider',
+                mx: 0,
+                px: { xs: 1, sm: 1.75 },
+                py: 0.85,
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.8125rem',
+                lineHeight: 1.3,
+                whiteSpace: { xs: 'normal', sm: 'nowrap' }
+              },
+              '& .Mui-selected': {
+                bgcolor: 'rgba(var(--mui-palette-primary-mainChannel) / 0.12) !important',
+                color: 'primary.main',
+                borderColor: 'primary.main !important'
+              }
+            }}
+          >
+            {PROGRESSIVE_PAYMENT_FILTER_OPTIONS.map(option => (
+              <ToggleButton key={option.value || 'all'} value={option.value}>
+                {option.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Box>
+      </Paper>
+
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          justifyContent: 'space-between',
+          gap: 1.5
+        }}
+      >
         <FormControlLabel
           control={
-            <Switch
-              checked={showInactive}
-              onChange={e => setShowInactive(e.target.checked)}
-              size='small'
-            />
+            <Switch checked={showInactive} onChange={e => setShowInactive(e.target.checked)} size='small' />
           }
-          label='Show inactive'
-          sx={{ mt: 0, ml: 0, justifyContent: { xs: 'space-between', md: 'flex-start' }, width: { xs: '100%', md: 'auto' } }}
+          label='Show inactive leads'
+          sx={{ m: 0, width: { xs: '100%', sm: 'auto' } }}
         />
         <Button
           variant='text'
           color='secondary'
           disabled={!hasActiveFilters}
           fullWidth={isMobile}
-          sx={{ justifySelf: { md: 'start' } }}
+          sx={{ alignSelf: { sm: 'center' }, minWidth: { sm: 120 } }}
           onClick={() => {
             setStageId('')
             setBankName('')
             setStagedDateFrom('')
             setStagedDateTo('')
             setShowInactive(false)
+            setProgressivePaymentFilter('')
             setHasAgentFilterOverride(false)
             setAssignedAgentId(defaultAssignedAgentId)
           }}
         >
-          Clear Filters
+          Clear all filters
         </Button>
       </Box>
 
-      <Box
+      <Paper
+        variant='outlined'
         sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(2, minmax(0, 1fr)) auto' },
-          gap: 2,
-          alignItems: 'center'
+          p: { xs: 1.5, sm: 2 },
+          borderRadius: 3,
+          borderColor: isAuditSearchActive ? 'info.main' : 'divider',
+          borderWidth: isAuditSearchActive ? 2 : 1,
+          bgcolor: isAuditSearchActive ? 'rgba(var(--mui-palette-info-mainChannel) / 0.06)' : 'background.paper',
+          transition: 'border-color 0.2s ease, background-color 0.2s ease'
         }}
       >
-        <TextField
-          size='small'
-          label='Staged date from'
-          type='date'
-          value={stagedDateFrom}
-          onChange={e => setStagedDateFrom(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          fullWidth
-        />
-        <TextField
-          size='small'
-          label='Staged date to'
-          type='date'
-          value={stagedDateTo}
-          onChange={e => setStagedDateTo(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          fullWidth
-        />
-        <Typography variant='caption' color='text.secondary' sx={{ display: { xs: 'none', md: 'block' } }}>
-          Matches any stage change in this date range using stage date from audit history, or submitted date when empty.
-        </Typography>
-      </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            justifyContent: 'space-between',
+            gap: 1
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+            <Box
+              sx={{
+                mt: 0.25,
+                width: 32,
+                height: 32,
+                borderRadius: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                bgcolor: isAuditSearchActive
+                  ? 'rgba(var(--mui-palette-info-mainChannel) / 0.16)'
+                  : 'action.hover',
+                color: isAuditSearchActive ? 'info.main' : 'text.secondary'
+              }}
+            >
+              <i className='ri-history-line' style={{ fontSize: 18 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant='subtitle2' sx={{ fontWeight: 700 }}>
+                Search audit history
+              </Typography>
+              <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.25 }}>
+                Find leads that reached a stage on a given date. Results still show each lead&apos;s current stage.
+              </Typography>
+            </Box>
+          </Box>
+          {isAuditSearchActive ? (
+            <Button size='small' variant='text' color='inherit' onClick={clearAuditSearch} sx={{ alignSelf: { xs: 'stretch', sm: 'center' } }}>
+              Clear audit search
+            </Button>
+          ) : null}
+        </Box>
+
+        <Divider sx={{ my: 1.5 }} />
+
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' },
+            gap: 2,
+            alignItems: 'start'
+          }}
+        >
+          <TextField
+            size='small'
+            label='Staged from'
+            type='date'
+            value={stagedDateFrom}
+            onChange={e => setStagedDateFrom(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            size='small'
+            label='Staged to'
+            type='date'
+            value={stagedDateTo}
+            onChange={e => setStagedDateTo(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <Tooltip
+            title={isAuditSearchActive ? 'Filters audit records by the stage the lead moved into' : 'Available once you set a staged date'}
+            placement='top'
+          >
+            <FormControl size='small' fullWidth disabled={!isAuditSearchActive}>
+              <InputLabel id='loan-cases-audit-stage-filter'>Stage reached</InputLabel>
+              <Select
+                labelId='loan-cases-audit-stage-filter'
+                label='Stage reached'
+                value={stageId}
+                onChange={e => {
+                  setStageId(String(e.target.value))
+                }}
+              >
+                <MenuItem value=''>Any stage</MenuItem>
+                {stageOptions.map(s => (
+                  <MenuItem key={s.id} value={s.id}>
+                    {s.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Tooltip>
+        </Box>
+
+        <Collapse in={isAuditSearchActive}>
+          <Alert severity='info' icon={<i className='ri-information-line' />} sx={{ mt: 2, borderRadius: 2 }}>
+            Showing leads with audit match
+            {stageId ? ` for “${auditStageLabel}”` : ''}
+            {stagedDateFrom || stagedDateTo
+              ? ` between ${stagedDateFrom ? formatStagedDateLabel(stagedDateFrom) : '…'} and ${stagedDateTo ? formatStagedDateLabel(stagedDateTo) : '…'}`
+              : ''}
+            . Matched stage is from history; Current is the latest pipeline stage.
+          </Alert>
+        </Collapse>
+      </Paper>
 
       {isMobile ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -428,8 +785,8 @@ const LoanCasesList = () => {
                       }}
                     />
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ minWidth: 0 }}>
                       <MuiLink
                         component={Link}
                         href={`/loan-cases/${c.id}`}
@@ -453,13 +810,22 @@ const LoanCasesList = () => {
                         {c.loanTypeName || 'Loan Type'} {c.bankName ? `• ${c.bankName}` : ''}
                       </Typography>
                     </Box>
-                    <Chip
-                      size='small'
-                      label={c.stageName || 'Stage'}
-                      color={stageChipColor(c.stageName || '')}
-                      variant='outlined'
-                      sx={{ height: 24 }}
-                    />
+                    {isAuditSearchActive ? (
+                      <StageCell
+                        currentStageName={c.stageName || 'Stage'}
+                        auditMatchedStageName={c.auditMatchedStageName}
+                        auditMatchedStagedDate={c.auditMatchedStagedDate}
+                        showAuditMatch
+                      />
+                    ) : (
+                      <Chip
+                        size='small'
+                        label={c.stageName || 'Stage'}
+                        color={stageChipColor(c.stageName || '')}
+                        variant='outlined'
+                        sx={{ alignSelf: 'flex-start', height: 24 }}
+                      />
+                    )}
                   </Box>
 
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, gap: 1.5 }}>
@@ -494,7 +860,27 @@ const LoanCasesList = () => {
       ) : (
         <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
           <CardContent sx={{ p: 0 }}>
-            <Table size='small'>
+            <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
+            <Table
+              size='small'
+              sx={{
+                tableLayout: isAuditSearchActive ? 'fixed' : 'auto',
+                minWidth: isAuditSearchActive ? 1080 : undefined
+              }}
+            >
+              {isAuditSearchActive ? (
+                <colgroup>
+                  <col style={{ width: 52 }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: 96 }} />
+                  <col style={{ width: STAGE_AUDIT_SECTION_WIDTH + 16 }} />
+                  <col style={{ width: 128 }} />
+                  <col />
+                  <col style={{ width: 148 }} />
+                </colgroup>
+              ) : null}
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 60 }}>#</TableCell>
@@ -502,8 +888,10 @@ const LoanCasesList = () => {
                   <TableCell>Loan Type</TableCell>
                   <TableCell>Bank</TableCell>
                   <TableCell align='right'>Requested</TableCell>
-                  <TableCell>Stage</TableCell>
-                  <TableCell>Assigned Agent</TableCell>
+                  <TableCell sx={{ width: isAuditSearchActive ? STAGE_AUDIT_SECTION_WIDTH + 16 : undefined }}>
+                    {isAuditSearchActive ? 'Stage history' : 'Stage'}
+                  </TableCell>
+                  <TableCell sx={{ width: isAuditSearchActive ? 128 : undefined }}>Assigned Agent</TableCell>
                   <TableCell>Remarks</TableCell>
                   <TableCell>Last Updated</TableCell>
                 </TableRow>
@@ -570,15 +958,34 @@ const LoanCasesList = () => {
                       <TableCell align='right'>
                         {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
                       </TableCell>
-                      <TableCell>
-                        <Chip
-                          size='small'
-                          label={c.stageName || 'Stage'}
-                          color={stageChipColor(c.stageName || '')}
-                          variant='outlined'
+                      <TableCell
+                        sx={{
+                          verticalAlign: 'top',
+                          py: isAuditSearchActive ? 1.25 : undefined,
+                          width: isAuditSearchActive ? STAGE_AUDIT_SECTION_WIDTH + 16 : undefined,
+                          maxWidth: isAuditSearchActive ? STAGE_AUDIT_SECTION_WIDTH + 16 : undefined,
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <StageCell
+                          currentStageName={c.stageName || 'Stage'}
+                          auditMatchedStageName={c.auditMatchedStageName}
+                          auditMatchedStagedDate={c.auditMatchedStagedDate}
+                          showAuditMatch={isAuditSearchActive}
                         />
                       </TableCell>
-                      <TableCell>{c.assignedAgentName || c.assignedAgentEmail || '—'}</TableCell>
+                      <TableCell
+                        sx={{
+                          verticalAlign: 'top',
+                          width: isAuditSearchActive ? 128 : undefined,
+                          maxWidth: isAuditSearchActive ? 128 : undefined,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {c.assignedAgentName || c.assignedAgentEmail || '—'}
+                      </TableCell>
                       <TableCell sx={{ minWidth: 280 }}>
                         {c.remarks && c.remarks.length > 0 ? (
                           <Box>
@@ -604,6 +1011,7 @@ const LoanCasesList = () => {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       )}

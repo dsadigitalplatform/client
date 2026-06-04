@@ -28,6 +28,9 @@ export type LoanCaseListItem = {
   requestedAmount: number | null
   stageId: string
   stageName: string
+  /** Present when list is filtered by staged date via audit history. */
+  auditMatchedStageName?: string | null
+  auditMatchedStagedDate?: string | null
   assignedAgentId: string | null
   assignedAgentName: string | null
   assignedAgentEmail: string | null

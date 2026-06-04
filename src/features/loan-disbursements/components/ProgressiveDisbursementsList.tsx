@@ -329,9 +329,6 @@ export default function ProgressiveDisbursementsList() {
               {formatINR(summary.totalDisbursed)}
             </Typography>
           </Box>
-          <Typography variant='body2' color='text.secondary' sx={{ maxWidth: 360 }}>
-            Amounts update automatically after each disbursement entry. Over-disbursement is blocked at the API.
-          </Typography>
         </CardContent>
       </Card>
 

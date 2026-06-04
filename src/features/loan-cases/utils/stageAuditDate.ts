@@ -170,8 +170,44 @@ export function buildStagedDateAuditLookupStage(
         $expr: buildStagedDateRangeExpr(stagedDateFrom, stagedDateTo)
       }
     },
+    {
+      $addFields: {
+        matchedStageId: {
+          $cond: {
+            if: {
+              $or: [
+                { $eq: ['$action', 'LEAD_CREATED'] },
+                { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
+              ]
+            },
+            then: '$metadata.stageId',
+            else: '$metadata.toStageId'
+          }
+        },
+        matchedStageName: {
+          $cond: {
+            if: {
+              $or: [
+                { $eq: ['$action', 'LEAD_CREATED'] },
+                { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
+              ]
+            },
+            then: '$metadata.stageName',
+            else: '$metadata.toStageName'
+          }
+        }
+      }
+    },
+    { $sort: { effectiveStagedDate: -1, createdAt: -1 } },
     { $limit: 1 },
-    { $project: { _id: 1 } }
+    {
+      $project: {
+        _id: 1,
+        effectiveStagedDate: 1,
+        matchedStageId: 1,
+        matchedStageName: 1
+      }
+    }
   ]
 
   return {
@@ -190,6 +226,15 @@ export function buildStagedDateAuditExistsMatchStage() {
       $expr: {
         $gt: [{ $size: { $ifNull: ['$stagedDateAudits', []] } }, 0]
       }
+    }
+  }
+}
+
+/** Flattens the first staged-date audit match onto the lead document for list projection. */
+export function buildStagedDateAuditFlattenStage() {
+  return {
+    $addFields: {
+      auditMatch: { $arrayElemAt: ['$stagedDateAudits', 0] }
     }
   }
 }

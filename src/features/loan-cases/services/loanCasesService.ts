@@ -17,6 +17,7 @@ export type GetLoanCasesParams = {
   showInactive?: boolean
   stagedDateFrom?: string
   stagedDateTo?: string
+  progressivePaymentFilter?: 'ready_to_track' | 'tracking_active'
 }
 
 export async function getLoanCases(params: GetLoanCasesParams = {}) {
@@ -30,6 +31,7 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
   if (params.stagedDateFrom) url.searchParams.set('stagedDateFrom', params.stagedDateFrom)
   if (params.stagedDateTo) url.searchParams.set('stagedDateTo', params.stagedDateTo)
+  if (params.progressivePaymentFilter) url.searchParams.set('progressivePaymentFilter', params.progressivePaymentFilter)
 
   const res = await fetch(url.toString(), { cache: 'no-store' })
 

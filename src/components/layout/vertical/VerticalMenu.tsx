@@ -106,7 +106,7 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
           )}
           {hasTenant && (
             <MenuItem href='/progressive-disbursements' icon={<i className='ri-funds-line' />}>
-              Progressive Disbursements
+              Disbursements
             </MenuItem>
           )}
         </SubMenu>
