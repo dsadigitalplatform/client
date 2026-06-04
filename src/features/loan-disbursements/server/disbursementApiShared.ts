@@ -11,6 +11,7 @@ import {
 } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 import { getDb } from '@/lib/mongodb'
+import { resolveCurrentTenantId } from '@/lib/tenantSession'
 
 export type TenantRole = 'OWNER' | 'ADMIN' | 'USER'
 
@@ -45,11 +46,12 @@ function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 }
 
-export async function getTenantContext(session: { userId?: string; user?: { email?: string }; currentTenantId?: string }) {
+export async function getTenantContext(
+  session: { userId?: string; user?: { email?: string }; currentTenantId?: string; isDemoMode?: boolean }
+) {
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String(session?.currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
+  const currentTenantId = resolveCurrentTenantId(session, cookieTenantId)
 
   if (!currentTenantId) return { error: NextResponse.json({ error: 'tenant_required' }, { status: 400 }) }
   if (!ObjectId.isValid(currentTenantId)) return { error: NextResponse.json({ error: 'invalid_tenant' }, { status: 400 }) }

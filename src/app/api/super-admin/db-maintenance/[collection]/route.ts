@@ -56,7 +56,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ collection
   const createdByIdRaw = body?.createdById
   const createdById = createdByIdRaw == null ? null : String(createdByIdRaw).trim()
 
-  const result = await deleteDbMaintenanceDocuments({ collection, ids, createdById })
+  try {
+    const result = await deleteDbMaintenanceDocuments({ collection, ids, createdById })
 
-  return NextResponse.json(result)
+    return NextResponse.json(result)
+  } catch (e: any) {
+    const status = typeof e?.status === 'number' ? e.status : 400
+
+    return NextResponse.json({ error: e?.message || 'failed' }, { status })
+  }
 }

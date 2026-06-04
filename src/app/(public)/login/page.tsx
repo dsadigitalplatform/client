@@ -10,6 +10,7 @@ import Login from '@views/Login'
 // Server Action Imports
 import { getServerMode } from '@core/utils/serverHelpers'
 import { authOptions } from '@/lib/auth'
+import { isDemoLoginEnabled } from '@/lib/demoLogin'
 
 export const metadata: Metadata = {
   title: 'Login',
@@ -37,5 +38,11 @@ export default async function LoginPage(props: {
   const mode = await getServerMode()
 
 
-  return <Login mode={mode} callbackUrl={typeof callbackUrl === 'string' ? callbackUrl : undefined} />
+  return (
+    <Login
+      mode={mode}
+      callbackUrl={typeof callbackUrl === 'string' ? callbackUrl : undefined}
+      demoLoginEnabled={isDemoLoginEnabled()}
+    />
+  )
 }

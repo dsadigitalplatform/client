@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -28,6 +29,8 @@ import { useTheme } from '@mui/material/styles'
 import { dbMaintenanceService } from '../services/dbMaintenanceService'
 import {
   DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS,
+  DB_MAINTENANCE_UI_HIDDEN_GROUPS,
+  isDbMaintenanceCollectionDeletable,
   type DbMaintenanceCollectionInfo,
   type DbMaintenanceCreatorOption,
   type DbMaintenanceDocumentPreview,
@@ -35,7 +38,9 @@ import {
   type DbMaintenanceTenantPurgeResult
 } from '../db-maintenance.types'
 
-const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Platform', 'Other'] as const
+const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Other'] as const
+
+const hiddenUiGroups = new Set<string>(DB_MAINTENANCE_UI_HIDDEN_GROUPS)
 
 function supportsCreatorFilterCollection(name: string) {
   return (DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS as readonly string[]).includes(name)
@@ -112,6 +117,10 @@ export const DbMaintenanceView = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const selectedInfo = useMemo(() => collections.find(c => c.name === selected) || null, [collections, selected])
+  const selectedCollectionDeletable = useMemo(
+    () => (selectedInfo ? selectedInfo.deletable : selected ? isDbMaintenanceCollectionDeletable(selected) : false),
+    [selectedInfo, selected]
+  )
   const selectedIds = useMemo(() => Object.keys(recordSelections).filter(k => recordSelections[k]), [recordSelections])
   const selectedTenant = useMemo(() => tenants.find(t => t.id === selectedTenantId) || null, [tenants, selectedTenantId])
   const supportsCreatorFilter = supportsCreatorFilterCollection(selected)
@@ -122,6 +131,9 @@ export const DbMaintenanceView = () => {
 
     collections.forEach(c => {
       const group = c.group || 'Other'
+
+      if (hiddenUiGroups.has(group)) return
+
       const list = byGroup.get(group) || []
 
       list.push(c)
@@ -165,6 +177,7 @@ export const DbMaintenanceView = () => {
 
       setTenants(list)
       if (selectedTenantId && !list.some(t => t.id === selectedTenantId)) setSelectedTenantId('')
+      if (!selectedTenantId && list.length > 0) setSelectedTenantId(list[0].id)
     } catch (e: any) {
       setTenantError(e?.message || 'Failed to load tenants')
     } finally {
@@ -427,11 +440,16 @@ export const DbMaintenanceView = () => {
 
   return (
     <Box className='flex flex-col gap-4'>
+      <Alert severity='info' sx={{ borderRadius: 2 }}>
+        Deletions are limited to the demo organisation configured in <code>DEMO_TENANT_ID</code>. Platform data is managed via tenant
+        purge only and is not shown here.
+      </Alert>
+
       <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 2 }}>
           <Typography variant='h6'>Tools</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Database maintenance tools for super admins.
+            Database maintenance tools for super admins. Only demo tenant data can be deleted.
           </Typography>
         </CardContent>
       </Card>
@@ -441,7 +459,8 @@ export const DbMaintenanceView = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant='h6'>Tenant Maintenance</Typography>
             <Typography variant='body2' color='text.secondary'>
-              Purge all records for a tenant. Users are removed only if they are not super admins and not part of other tenants.
+              Purge all operational data for the demo organisation only. The demo tenant record is kept. Users are removed only if they are
+              not super admins and not part of other tenants.
             </Typography>
           </Box>
 
@@ -515,7 +534,7 @@ export const DbMaintenanceView = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
               <Typography variant='h6'>Collections</Typography>
               <Typography variant='body2' color='text.secondary'>
-                Select a collection and clear all documents.
+                Select a collection and clear demo tenant documents only.
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
@@ -534,10 +553,10 @@ export const DbMaintenanceView = () => {
                 color='error'
                 variant='contained'
                 onClick={openConfirm}
-                disabled={!selected || loading || clearing}
+                disabled={!selected || !selectedCollectionDeletable || loading || clearing}
                 fullWidth={isMobile}
               >
-                Clear Selected
+                Clear Demo Data
               </Button>
             </Box>
           </Box>
@@ -656,7 +675,8 @@ export const DbMaintenanceView = () => {
           {selectedInfo && (
             <Typography variant='body2' color='text.secondary'>
               Selected: {selectedCollectionLabel} ({selectedInfo.name})
-              {selectedInfo.exists ? ` — ${selectedInfo.documentCount} documents` : ' — collection not created yet'}
+              {selectedInfo.exists ? ` — ${selectedInfo.documentCount} demo documents` : ' — collection not created yet'}
+              {!selectedCollectionDeletable ? ' — clear/delete disabled (platform collection)' : ''}
             </Typography>
           )}
         </CardContent>
@@ -667,7 +687,7 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Clear Collection</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all documents in: <strong>{selected || '-'}</strong>
+            This will permanently delete all <strong>demo tenant</strong> documents in: <strong>{selected || '-'}</strong>
           </Typography>
           <Typography variant='body2' color='text.secondary'>
             Type the collection name to confirm.
@@ -766,7 +786,13 @@ export const DbMaintenanceView = () => {
                 color='error'
                 variant='contained'
                 onClick={openDeleteSelectedConfirm}
-                disabled={selectedIds.length === 0 || recordsLoading || deletingSelected || deletingByUser}
+                disabled={
+                  !selectedCollectionDeletable ||
+                  selectedIds.length === 0 ||
+                  recordsLoading ||
+                  deletingSelected ||
+                  deletingByUser
+                }
                 fullWidth={isMobile}
               >
                 Delete Selected
@@ -776,7 +802,13 @@ export const DbMaintenanceView = () => {
                   color='error'
                   variant='outlined'
                   onClick={openDeleteByUserConfirm}
-                  disabled={!selectedCreatedById || recordsLoading || deletingSelected || deletingByUser}
+                  disabled={
+                    !selectedCollectionDeletable ||
+                    !selectedCreatedById ||
+                    recordsLoading ||
+                    deletingSelected ||
+                    deletingByUser
+                  }
                   fullWidth={isMobile}
                 >
                   Delete By User

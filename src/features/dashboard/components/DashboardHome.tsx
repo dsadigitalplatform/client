@@ -2,22 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
+import { useTheme } from '@mui/material/styles'
+
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
-
-import type { ApexOptions } from 'apexcharts'
-
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
-import Table from '@mui/material/Table'
-import TableBody from '@mui/material/TableBody'
-import TableCell from '@mui/material/TableCell'
-import TableContainer from '@mui/material/TableContainer'
-import TableHead from '@mui/material/TableHead'
-import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
@@ -25,7 +17,6 @@ import SnackbarContent from '@mui/material/SnackbarContent'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
 import Chip from '@mui/material/Chip'
-import { useTheme } from '@mui/material/styles'
 import { useSession } from 'next-auth/react'
 
 import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
@@ -34,9 +25,28 @@ import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/serv
 import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
 import OrganisationSetupSupportDialog from '@features/support/components/OrganisationSetupSupportDialog'
+import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
+import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import DashboardHero from '@features/dashboard/components/DashboardHero'
+import {
+    filterByDashboardPeriod,
+    formatDashboardPeriodLabel,
+    DASHBOARD_PERIOD_DEFAULT_MONTHS,
+    type DashboardTimePeriod
+} from '@features/dashboard/utils/timelineBuckets'
+import DashboardStatCard from '@features/dashboard/components/DashboardStatCard'
+import DisbursementInsightsSection from '@features/dashboard/components/DisbursementInsightsSection'
+import BreakdownApexChart, { type BreakdownPoint } from '@features/dashboard/components/BreakdownApexChart'
+import {
+    BreakdownChartControls,
+    type BreakdownChartType,
+    type BreakdownMetric,
+    type BreakdownSortOrder,
+    type TopLimit
+} from '@features/dashboard/components/DashboardChartToolbar'
+import DashboardAnalyticsSection from '@features/dashboard/components/DashboardAnalyticsSection'
 
 const DONUT_SIZE = 64
-const AppReactApexCharts = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const formatINR = (amount: number) => {
     const safe = Number.isFinite(amount) ? amount : 0
@@ -56,19 +66,6 @@ type DonutSegment = {
     label: string
     value: number
     color: string
-}
-
-type AmountBreakdownPoint = {
-    label: string
-    value: number
-}
-
-type TimelineMode = 'WEEK' | 'MONTH' | 'YEAR'
-
-type TimelinePoint = {
-    label: string
-    value: number
-    sortKey: number
 }
 
 const SegmentedDonut = ({
@@ -138,173 +135,26 @@ const SegmentedDonut = ({
     )
 }
 
-const formatCompactINR = (amount: number) => {
-    const safe = Number.isFinite(amount) ? amount : 0
+const sortPipelineBreakdown = (
+    rows: BreakdownPoint[],
+    metric: BreakdownMetric,
+    top: TopLimit,
+    sort: BreakdownSortOrder
+) => {
+    const key = metric === 'amount' ? 'value' : 'count'
+    const sorted =
+        sort === 'pipeline'
+            ? rows.slice()
+            : rows.slice().sort((a, b) => {
+                  if (sort === 'name') return a.label.localeCompare(b.label)
+                  if (sort === 'asc') return a[key] - b[key]
 
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        notation: 'compact',
-        maximumFractionDigits: 1
-    }).format(safe)
-}
+                  return b[key] - a[key]
+              })
 
-const formatAxisAmount = (value: number) => {
-    const safe = Number.isFinite(value) ? value : 0
+    if (top === 0) return sorted
 
-    return `₹${new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(safe)}`
-}
-
-const BAR_PALETTE_LIGHT = ['#7C6CF8', '#21A8FF', '#46C95A', '#F4A261', '#EF476F', '#6C757D']
-const BAR_PALETTE_DARK = ['#A493FF', '#73C8FF', '#78E08F', '#FFC385', '#FF89A0', '#B5BDC6']
-
-const AmountBarTrendApexChart = ({
-    points,
-    darkMode,
-    trendColor
-}: {
-    points: AmountBreakdownPoint[]
-    darkMode: boolean
-    trendColor: string
-}) => {
-    const palette = darkMode ? BAR_PALETTE_DARK : BAR_PALETTE_LIGHT
-    const categories = points.map(p => p.label)
-    const amounts = points.map(p => Number(p.value || 0))
-
-    const options: ApexOptions = {
-        chart: {
-            type: 'line',
-            stacked: false,
-            toolbar: { show: false },
-            parentHeightOffset: 0,
-            fontFamily: 'inherit'
-        },
-        stroke: {
-            width: [0, 2.5],
-            curve: 'smooth'
-        },
-        markers: {
-            size: 3.5,
-            colors: [trendColor],
-            strokeWidth: 0,
-            hover: { sizeOffset: 2 }
-        },
-        colors: ['#7C6CF8', trendColor],
-        fill: {
-            opacity: [0.95, 1]
-        },
-        legend: { show: false },
-        dataLabels: { enabled: false },
-        plotOptions: {
-            bar: {
-                horizontal: false,
-                distributed: true,
-                columnWidth: '52%',
-                borderRadius: 8
-            }
-        },
-        grid: {
-            borderColor: darkMode ? 'rgb(var(--mui-palette-dividerChannel) / 0.35)' : 'rgb(var(--mui-palette-dividerChannel) / 0.6)',
-            strokeDashArray: 4,
-            xaxis: { lines: { show: true } },
-            yaxis: { lines: { show: false } },
-            padding: { left: 0, right: 8, top: 0, bottom: -8 }
-        },
-        xaxis: {
-            categories,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: {
-                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '10px', fontWeight: '500' },
-                rotate: -18,
-                trim: true,
-                hideOverlappingLabels: true
-            },
-            tooltip: { enabled: false }
-        },
-        yaxis: {
-            labels: {
-                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
-                formatter: value => formatAxisAmount(Number(value))
-            }
-        },
-        tooltip: {
-            shared: true,
-            intersect: false,
-            x: { show: true },
-            y: {
-                formatter: value => formatINR(Number(value || 0))
-            }
-        }
-    }
-
-    return (
-        <AppReactApexCharts
-            type='line'
-            height={220}
-            options={{ ...options, colors: [...palette, trendColor] }}
-            series={[
-                { name: 'Amount', type: 'bar', data: amounts },
-                { name: 'Trend', type: 'line', data: amounts }
-            ]}
-        />
-    )
-}
-
-const TimelineApexChart = ({ points, darkMode }: { points: TimelinePoint[]; darkMode: boolean }) => {
-    const labels = points.map(p => p.label)
-    const values = points.map(p => Number(p.value || 0))
-
-    const options: ApexOptions = {
-        chart: {
-            type: 'area',
-            toolbar: { show: false },
-            parentHeightOffset: 0,
-            fontFamily: 'inherit'
-        },
-        colors: ['#00A6FB'],
-        stroke: { curve: 'smooth', width: 2.8 },
-        fill: {
-            type: 'gradient',
-            gradient: {
-                shade: darkMode ? 'dark' : 'light',
-                type: 'vertical',
-                shadeIntensity: 0.25,
-                opacityFrom: 0.4,
-                opacityTo: 0.05,
-                stops: [0, 95, 100]
-            }
-        },
-        dataLabels: { enabled: false },
-        markers: { size: 3, strokeWidth: 0, hover: { sizeOffset: 2 } },
-        grid: {
-            borderColor: darkMode ? 'rgb(var(--mui-palette-dividerChannel) / 0.35)' : 'rgb(var(--mui-palette-dividerChannel) / 0.6)',
-            strokeDashArray: 4,
-            padding: { left: 4, right: 4, top: 0, bottom: -6 }
-        },
-        xaxis: {
-            categories: labels,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: {
-                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
-                rotate: 0,
-                hideOverlappingLabels: true
-            }
-        },
-        yaxis: {
-            labels: {
-                style: { colors: 'var(--mui-palette-text-secondary)', fontSize: '11px' },
-                formatter: value => formatAxisAmount(Number(value))
-            }
-        },
-        tooltip: {
-            y: { formatter: value => formatINR(Number(value || 0)) }
-        },
-        legend: { show: false }
-    }
-
-    return <AppReactApexCharts type='area' height={220} options={options} series={[{ name: 'Loan Amount', data: values }]} />
+    return sorted.slice(0, top)
 }
 
 const DashboardHome = () => {
@@ -314,6 +164,11 @@ const DashboardHome = () => {
     const searchParams = useSearchParams()
     const isSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
     const sessionUserId = String((session as any)?.userId || '')
+    const sessionUserName = String((session as any)?.user?.name || '')
+    const [tenantRole, setTenantRole] = useState<'OWNER' | 'ADMIN' | 'USER' | undefined>(undefined)
+    const [tenantUsers, setTenantUsers] = useState<TenantUserOption[]>([])
+    const [viewingAgentId, setViewingAgentId] = useState('')
+    const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
     const [hasMembership, setHasMembership] = useState(false)
     const [checking, setChecking] = useState(true)
     const [welcomeOpen, setWelcomeOpen] = useState(false)
@@ -335,6 +190,14 @@ const DashboardHome = () => {
     const [actionToast, setActionToast] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
     const [supportOpen, setSupportOpen] = useState(false)
     const [supportAutoShown, setSupportAutoShown] = useState(false)
+    const [pipelineChartType, setPipelineChartType] = useState<BreakdownChartType>('horizontal')
+    const [pipelineMetric, setPipelineMetric] = useState<BreakdownMetric>('count')
+    const [pipelineTop, setPipelineTop] = useState<TopLimit>(8)
+    const [pipelineSort, setPipelineSort] = useState<BreakdownSortOrder>('pipeline')
+    const [dashboardPeriod, setDashboardPeriod] = useState<DashboardTimePeriod>({
+        mode: 'months',
+        months: DASHBOARD_PERIOD_DEFAULT_MONTHS
+    })
 
     useEffect(() => {
         let active = true
@@ -400,6 +263,52 @@ const DashboardHome = () => {
         }
     }, [])
 
+    const isAdminView = tenantRole === 'ADMIN' || tenantRole === 'OWNER'
+    const effectiveAssignedAgentId = isAdminView ? viewingAgentId || undefined : sessionUserId
+    const isViewingAllAgents = isAdminView && !viewingAgentId
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const [usersData, tenantRes] = await Promise.all([
+                    getTenantUsers(),
+                    fetch('/api/session/tenant', { cache: 'no-store' })
+                ])
+                const tenantData = await tenantRes.json().catch(() => ({}))
+
+                setTenantUsers(Array.isArray(usersData) ? usersData : [])
+                setTenantRole(
+                    typeof tenantData?.role === 'string' ? (tenantData.role as 'OWNER' | 'ADMIN' | 'USER') : undefined
+                )
+            } catch {
+                // ignore
+            }
+        })()
+    }, [])
+
+    useEffect(() => {
+        if (!sessionUserId) return
+
+        if (!isAdminView) {
+            if (viewingAgentId === sessionUserId) return
+            setViewingAgentId(sessionUserId)
+
+            return
+        }
+
+        if (hasAgentFilterOverride) return
+        if (viewingAgentId) return
+
+        const sorted = tenantUsers.slice().sort((a, b) => a.name.localeCompare(b.name))
+
+        if (sorted.some(u => u.id === sessionUserId)) {
+            setViewingAgentId(sessionUserId)
+
+            return
+        }
+
+        if (sorted.length > 0) setViewingAgentId(sorted[0].id)
+    }, [hasAgentFilterOverride, isAdminView, sessionUserId, tenantUsers, viewingAgentId])
 
     useEffect(() => {
         const w = searchParams.get('welcome')
@@ -439,7 +348,9 @@ const DashboardHome = () => {
             setMyLeadsLoading(true)
 
             try {
-                const items = await getLoanCases({ assignedAgentId: sessionUserId })
+                const items = await getLoanCases(
+                    effectiveAssignedAgentId ? { assignedAgentId: effectiveAssignedAgentId } : undefined
+                )
 
                 if (active) setMyLeads(items)
             } finally {
@@ -452,7 +363,7 @@ const DashboardHome = () => {
         return () => {
             active = false
         }
-    }, [currentTenantId, sessionUserId])
+    }, [currentTenantId, effectiveAssignedAgentId, sessionUserId])
 
     useEffect(() => {
         let active = true
@@ -475,7 +386,11 @@ const DashboardHome = () => {
                 const now = new Date()
                 const endOfTwoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-                const items = await listAppointments({ organizerId: sessionUserId, dateFrom: now, dateTo: endOfTwoWeeks })
+                const items = await listAppointments({
+                    ...(effectiveAssignedAgentId ? { organizerId: effectiveAssignedAgentId } : {}),
+                    dateFrom: now,
+                    dateTo: endOfTwoWeeks
+                })
 
                 const filtered = items.filter(a => {
                     if (!a?.scheduledAt) return false
@@ -507,7 +422,7 @@ const DashboardHome = () => {
         return () => {
             active = false
         }
-    }, [currentTenantId, sessionUserId])
+    }, [currentTenantId, effectiveAssignedAgentId, sessionUserId])
 
     const reminderTypeSegments = useMemo(() => {
         const meta: Array<DonutSegment & { key: string }> = [
@@ -541,7 +456,11 @@ const DashboardHome = () => {
             try {
                 const now = new Date()
                 const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
-                const items = await listAppointments({ organizerId: sessionUserId, dateFrom: now, dateTo: end })
+                const items = await listAppointments({
+                    ...(effectiveAssignedAgentId ? { organizerId: effectiveAssignedAgentId } : {}),
+                    dateFrom: now,
+                    dateTo: end
+                })
 
                 const upcoming = items
                     .filter(a => {
@@ -566,7 +485,7 @@ const DashboardHome = () => {
         return () => {
             active = false
         }
-    }, [currentTenantId, sessionUserId])
+    }, [currentTenantId, effectiveAssignedAgentId, sessionUserId])
 
     useEffect(() => {
         let active = true
@@ -613,7 +532,6 @@ const DashboardHome = () => {
 
     const showWelcomeCta = isSuperAdmin && !hasMembership && !checking
     const hasTenant = Boolean(currentTenantId)
-    const isDarkMode = theme.palette.mode === 'dark'
 
     useEffect(() => {
         if (checking || isSuperAdmin || hasMembership || supportAutoShown) return
@@ -643,19 +561,27 @@ const DashboardHome = () => {
         return finalStage?.id || null
     }, [stages])
 
+    const periodFilteredLeads = useMemo(
+        () =>
+            filterByDashboardPeriod(myLeads, c => (c.updatedAt ? new Date(c.updatedAt) : null), dashboardPeriod),
+        [myLeads, dashboardPeriod]
+    )
+
+    const dashboardPeriodLabel = useMemo(() => formatDashboardPeriodLabel(dashboardPeriod), [dashboardPeriod])
+
     const widgetMetrics = useMemo(() => {
-        const totalLeads = myLeads.length
-        const disbursements = Array.from(myLeads).filter(c => disbursementStageIds.has(c.stageId)).length
-        const activeCases = finalStageId ? myLeads.filter(c => c.stageId !== finalStageId).length : totalLeads
+        const totalLeads = periodFilteredLeads.length
+        const disbursements = Array.from(periodFilteredLeads).filter(c => disbursementStageIds.has(c.stageId)).length
+        const activeCases = finalStageId ? periodFilteredLeads.filter(c => c.stageId !== finalStageId).length : totalLeads
 
         return { totalLeads, activeCases, disbursements }
-    }, [myLeads, disbursementStageIds, finalStageId])
+    }, [periodFilteredLeads, disbursementStageIds, finalStageId])
 
     const activeCases = useMemo(() => {
-        if (!finalStageId) return myLeads
+        if (!finalStageId) return periodFilteredLeads
 
-        return myLeads.filter(c => c.stageId !== finalStageId)
-    }, [myLeads, finalStageId])
+        return periodFilteredLeads.filter(c => c.stageId !== finalStageId)
+    }, [periodFilteredLeads, finalStageId])
 
     const activeCasesValue = useMemo(() => {
         return activeCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
@@ -664,127 +590,12 @@ const DashboardHome = () => {
     const closedCases = useMemo(() => {
         if (!finalStageId) return []
 
-        return myLeads.filter(c => c.stageId === finalStageId)
-    }, [myLeads, finalStageId])
+        return periodFilteredLeads.filter(c => c.stageId === finalStageId)
+    }, [periodFilteredLeads, finalStageId])
 
     const closedCasesValue = useMemo(() => {
         return closedCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
     }, [closedCases])
-
-    const bankWiseSums = useMemo<AmountBreakdownPoint[]>(() => {
-        const byBank = new Map<string, number>()
-
-        myLeads.forEach(c => {
-            const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
-
-            if (amount <= 0) return
-
-            const label = String(c.bankName || '').trim() || 'Unspecified bank'
-
-            byBank.set(label, (byBank.get(label) || 0) + amount)
-        })
-
-        return Array.from(byBank.entries())
-            .map(([label, value]) => ({ label, value }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 6)
-    }, [myLeads])
-
-    const loanTypeWiseSums = useMemo<AmountBreakdownPoint[]>(() => {
-        const byLoanType = new Map<string, number>()
-
-        myLeads.forEach(c => {
-            const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
-
-            if (amount <= 0) return
-
-            const label = String(c.loanTypeName || '').trim() || 'Unspecified loan type'
-
-            byLoanType.set(label, (byLoanType.get(label) || 0) + amount)
-        })
-
-        return Array.from(byLoanType.entries())
-            .map(([label, value]) => ({ label, value }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 6)
-    }, [myLeads])
-
-    const timelineSummary = useMemo<{ mode: TimelineMode; points: TimelinePoint[] }>(() => {
-        const dated = myLeads
-            .map(c => {
-                const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
-                const date = c.updatedAt ? new Date(c.updatedAt) : null
-
-                if (!date || !Number.isFinite(date.getTime()) || amount <= 0) return null
-
-                return { date, amount }
-            })
-            .filter(Boolean) as Array<{ date: Date; amount: number }>
-
-        if (dated.length === 0) return { mode: 'WEEK', points: [] }
-
-        const minTs = Math.min(...dated.map(r => r.date.getTime()))
-        const maxTs = Math.max(...dated.map(r => r.date.getTime()))
-        const spanDays = Math.max(1, Math.ceil((maxTs - minTs) / (1000 * 60 * 60 * 24)))
-
-        const mode: TimelineMode =
-            dated.length <= 20 || spanDays <= 70 ? 'WEEK' : dated.length <= 120 || spanDays <= 500 ? 'MONTH' : 'YEAR'
-
-        const buckets = new Map<string, TimelinePoint>()
-
-        dated.forEach(r => {
-            const d = new Date(r.date)
-            let key = ''
-            let label = ''
-            let sortKey = 0
-
-            if (mode === 'WEEK') {
-                const day = d.getDay()
-                const diff = day === 0 ? -6 : 1 - day
-
-                d.setDate(d.getDate() + diff)
-                d.setHours(0, 0, 0, 0)
-                key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
-                label = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(d)
-                sortKey = d.getTime()
-            } else if (mode === 'MONTH') {
-                d.setDate(1)
-                d.setHours(0, 0, 0, 0)
-                key = `${d.getFullYear()}-${d.getMonth() + 1}`
-                label = new Intl.DateTimeFormat('en-IN', { month: 'short', year: '2-digit' }).format(d)
-                sortKey = d.getTime()
-            } else {
-                d.setMonth(0, 1)
-                d.setHours(0, 0, 0, 0)
-                key = `${d.getFullYear()}`
-                label = String(d.getFullYear())
-                sortKey = d.getTime()
-            }
-
-            const prev = buckets.get(key)
-
-            if (prev) {
-                prev.value += r.amount
-            } else {
-                buckets.set(key, { label, value: r.amount, sortKey })
-            }
-        })
-
-        const sorted = Array.from(buckets.values()).sort((a, b) => a.sortKey - b.sortKey)
-        const maxPoints = mode === 'WEEK' ? 10 : mode === 'MONTH' ? 12 : 8
-
-        return { mode, points: sorted.slice(-maxPoints) }
-    }, [myLeads])
-
-    const bankWiseTotal = useMemo(() => bankWiseSums.reduce((sum, row) => sum + row.value, 0), [bankWiseSums])
-    const loanTypeWiseTotal = useMemo(() => loanTypeWiseSums.reduce((sum, row) => sum + row.value, 0), [loanTypeWiseSums])
-
-    const timelineTotal = useMemo(
-        () => timelineSummary.points.reduce((sum, row) => sum + row.value, 0),
-        [timelineSummary.points]
-    )
-
-    const timelineModeLabel = timelineSummary.mode === 'WEEK' ? 'Weekly' : timelineSummary.mode === 'MONTH' ? 'Monthly' : 'Yearly'
 
     const activeCustomersCount = useMemo(() => {
         const ids = new Set<string>()
@@ -795,6 +606,11 @@ const DashboardHome = () => {
 
         return ids.size
     }, [activeCases])
+
+    const progressiveLeadsCount = useMemo(
+        () => periodFilteredLeads.filter(c => Boolean(c.enableProgressivePayment)).length,
+        [periodFilteredLeads]
+    )
 
     const activeStageSummary = useMemo(() => {
         if (activeCases.length === 0) return []
@@ -839,6 +655,23 @@ const DashboardHome = () => {
 
         return [...orderedRows, ...extraRows]
     }, [activeCases, stages])
+
+    const pipelineBreakdownRows = useMemo<BreakdownPoint[]>(
+        () =>
+            activeStageSummary.map(s => ({
+                label: s.stageName,
+                value: s.totalValue,
+                count: s.count
+            })),
+        [activeStageSummary]
+    )
+
+    const pipelineDisplay = useMemo(
+        () => sortPipelineBreakdown(pipelineBreakdownRows, pipelineMetric, pipelineTop, pipelineSort),
+        [pipelineBreakdownRows, pipelineMetric, pipelineTop, pipelineSort]
+    )
+
+    const pipelineLeadingStage = pipelineDisplay[0]
 
     const meetingTitle = (m: AppointmentListItem) => {
         if (m?.customerName) return m.customerName
@@ -919,11 +752,22 @@ const DashboardHome = () => {
     }
 
     return (
-        <Box className='flex flex-col gap-4'>
-            <Typography variant='h4'>Dashboard</Typography>
-            <Typography color='text.secondary'>
-                {tenantName ? `Welcome to ${tenantName}` : 'Welcome to your dashboard.'}
-            </Typography>
+        <Box className='flex flex-col' sx={{ gap: 3 }}>
+            <DashboardHero
+                tenantName={tenantName}
+                userName={sessionUserName}
+                tenantRole={tenantRole}
+                agents={tenantUsers}
+                viewingAgentId={viewingAgentId}
+                onAgentChange={id => {
+                    setHasAgentFilterOverride(true)
+                    setViewingAgentId(id)
+                }}
+                isViewingAllAgents={isViewingAllAgents}
+                period={hasTenant ? dashboardPeriod : undefined}
+                onPeriodChange={hasTenant ? setDashboardPeriod : undefined}
+                periodDisabled={myLeadsLoading}
+            />
             {showWelcomeCta && (
                 <Box className='mt-4 flex flex-col gap-2'>
                     <Typography variant='h6'>Welcome!</Typography>
@@ -944,118 +788,74 @@ const DashboardHome = () => {
             <Box
                 sx={{
                     display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(5, 1fr)' },
                     gap: 2
                 }}
             >
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    My follow-ups
-                                </Typography>
-                                <Typography variant='h5' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (remindersLoading ? '...' : remindersNextTwoWeeks) : '—'}
-                                </Typography>
-                                <Typography variant='body2' color={remindersError ? 'error' : 'text.secondary'}>
-                                    {!hasTenant
-                                        ? 'Select an organization to view follow-ups'
-                                        : remindersError
-                                            ? remindersError
-                                            : 'In next 2 weeks'}
-                                </Typography>
+                <DashboardStatCard
+                    label='Follow-ups (2 weeks)'
+                    value={hasTenant ? (remindersLoading ? '…' : remindersNextTwoWeeks) : '—'}
+                    hint={
+                        !hasTenant
+                            ? 'Select an organisation'
+                            : remindersError || 'Scheduled touchpoints'
+                    }
+                    icon='ri-calendar-schedule-line'
+                    accent='info'
+                    loading={hasTenant && remindersLoading}
+                    footer={
+                        hasTenant && !remindersError ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <SegmentedDonut segments={reminderTypeSegments} axisLabel='Follow-ups by type' />
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <SegmentedDonut
-                                    segments={reminderTypeSegments}
-                                    axisLabel='Follow-ups by type in the next 2 weeks'
-                                />
-                            </Box>
-                        </Box>
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                            <Box>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Active customers
-                                </Typography>
-                                <Typography variant='h5' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : activeCustomersCount.toLocaleString()) : '—'}
-                                </Typography>
-                            </Box>
-                            <Avatar
-                                sx={{
-                                    width: 42,
-                                    height: 42,
-                                    bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                                    color: 'var(--mui-palette-primary-main)'
-                                }}
-                            >
-                                <i className='ri-user-3-line' />
-                            </Avatar>
-                        </Box>
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                            <Box>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Active loan value
-                                </Typography>
-                                <Typography variant='h5' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(activeCasesValue)) : '—'}
-                                </Typography>
-                            </Box>
-                            <Avatar
-                                sx={{
-                                    width: 42,
-                                    height: 42,
-                                    bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)',
-                                    color: 'var(--mui-palette-success-main)'
-                                }}
-                            >
-                                <i className='ri-hand-coin-line' />
-                            </Avatar>
-                        </Box>
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                            <Box>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Closed loan value
-                                </Typography>
-                                <Typography variant='h5' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(closedCasesValue)) : '—'}
-                                </Typography>
-                            </Box>
-                            <Avatar
-                                sx={{
-                                    width: 42,
-                                    height: 42,
-                                    bgcolor: 'rgb(var(--mui-palette-info-mainChannel) / 0.12)',
-                                    color: 'var(--mui-palette-info-main)'
-                                }}
-                            >
-                                <i className='ri-checkbox-circle-line' />
-                            </Avatar>
-                        </Box>
-                    </CardContent>
-                </Card>
+                        ) : undefined
+                    }
+                />
+                <DashboardStatCard
+                    label='Active customers'
+                    value={hasTenant ? (myLeadsLoading ? '…' : activeCustomersCount.toLocaleString()) : '—'}
+                    hint='Unique borrowers in open cases'
+                    icon='ri-user-3-line'
+                    accent='primary'
+                    loading={hasTenant && myLeadsLoading}
+                />
+                <DashboardStatCard
+                    label='Active pipeline value'
+                    value={hasTenant ? (myLeadsLoading ? '…' : formatINR(activeCasesValue)) : '—'}
+                    hint={`${hasTenant && !myLeadsLoading ? widgetMetrics.activeCases : '—'} open cases`}
+                    icon='ri-hand-coin-line'
+                    accent='success'
+                    loading={hasTenant && myLeadsLoading}
+                    highlight
+                />
+                <DashboardStatCard
+                    label='Closed / disbursed value'
+                    value={hasTenant ? (myLeadsLoading ? '…' : formatINR(closedCasesValue)) : '—'}
+                    hint={`${hasTenant && !myLeadsLoading ? closedCases.length : '—'} closed cases`}
+                    icon='ri-checkbox-circle-line'
+                    accent='info'
+                    loading={hasTenant && myLeadsLoading}
+                />
+                <DashboardStatCard
+                    label='Progressive payment leads'
+                    value={hasTenant ? (myLeadsLoading ? '…' : progressiveLeadsCount) : '—'}
+                    hint='Eligible for staged disbursement'
+                    icon='ri-funds-line'
+                    accent='warning'
+                    loading={hasTenant && myLeadsLoading}
+                />
             </Box>
+
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.4fr 1fr', lg: '2fr 1fr' }, gap: 2 }}>
                 <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
                     <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                             <Box>
-                                <Typography variant='h6'>Meeting Schedule</Typography>
+                                <Typography variant='h6' sx={{ fontWeight: 700 }}>
+                                    Upcoming follow-ups
+                                </Typography>
                                 <Typography variant='body2' color='text.secondary'>
-                                    Upcoming meetings for the next two weeks
+                                    Next two weeks · tap Call or WhatsApp to connect
                                 </Typography>
                             </Box>
                             <IconButton size='small' aria-label='more'>
@@ -1190,224 +990,104 @@ const DashboardHome = () => {
                     </CardContent>
                 </Card>
                 <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 2, mb: 0.5 }}>
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                flexDirection: { xs: 'column', sm: 'row' },
+                                alignItems: { xs: 'stretch', sm: 'flex-start' },
+                                justifyContent: 'space-between',
+                                gap: 2,
+                                mb: 1.5
+                            }}
+                        >
                             <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    My active cases
+                                <Typography variant='h6' sx={{ fontWeight: 700 }}>
+                                    Pipeline by stage
                                 </Typography>
-                                <Typography variant='h5' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : widgetMetrics.activeCases) : '—'}
-                                </Typography>
-                            </Box>
-                            <Box sx={{ textAlign: 'right' }}>
                                 <Typography variant='body2' color='text.secondary'>
-                                    Total value
-                                </Typography>
-                                <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(activeCasesValue)) : '—'}
+                                    {hasTenant && !myLeadsLoading
+                                        ? `${widgetMetrics.activeCases} active cases · ${formatINR(activeCasesValue)}`
+                                        : 'Open cases across your loan status pipeline'}
                                 </Typography>
                             </Box>
+                            <Button
+                                component={Link}
+                                href='/loan-cases/pipeline'
+                                size='small'
+                                variant='outlined'
+                                sx={{ alignSelf: { xs: 'flex-start', sm: 'flex-start' }, flexShrink: 0 }}
+                            >
+                                Pipeline view
+                            </Button>
                         </Box>
-                        <Typography variant='body2' color={stagesError ? 'error' : 'text.secondary'}>
-                            {!hasTenant
-                                ? 'Select an organization to view cases'
-                                : stagesError
-                                    ? stagesError
-                                    : stagesLoading
-                                        ? 'Loading stages'
-                                        : 'Stage-wise breakdown'}
-                        </Typography>
+                        {hasTenant && !stagesError ? (
+                            <Box sx={{ mb: 1.5 }}>
+                                <BreakdownChartControls
+                                    chartType={pipelineChartType}
+                                    onChartType={setPipelineChartType}
+                                    metric={pipelineMetric}
+                                    onMetric={setPipelineMetric}
+                                    topLimit={pipelineTop}
+                                    onTopLimit={setPipelineTop}
+                                    sortOrder={pipelineSort}
+                                    onSortOrder={setPipelineSort}
+                                    sortOptions={['pipeline', 'desc', 'asc', 'name']}
+                                />
+                            </Box>
+                        ) : null}
                         {!hasTenant ? (
-                            <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
-                                Choose an organization to load active cases by stage.
-                            </Typography>
-                        ) : myLeadsLoading || stagesLoading ? (
-                            <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
-                                Loading stage breakdown...
+                            <Typography variant='body2' color='text.secondary'>
+                                Select an organisation to view the pipeline.
                             </Typography>
                         ) : stagesError ? (
-                            <Typography variant='body2' color='error' sx={{ mt: 1 }}>
+                            <Typography variant='body2' color='error'>
                                 {stagesError}
                             </Typography>
-                        ) : activeStageSummary.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
-                                No active cases.
+                        ) : myLeadsLoading || stagesLoading ? (
+                            <Typography variant='body2' color='text.secondary' sx={{ py: 4, textAlign: 'center' }}>
+                                Loading pipeline…
                             </Typography>
-                        ) : (
-                            <TableContainer
-                                sx={{
-                                    mt: 1.25,
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    borderRadius: 2,
-                                    maxHeight: 240
-                                }}
-                            >
-                                <Table size='small' stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Stage</TableCell>
-                                            <TableCell align='right'>Cases</TableCell>
-                                            <TableCell align='right'>Total Value</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {activeStageSummary.map(stage => (
-                                            <TableRow key={`${stage.stageId}-${stage.stageName}`}>
-                                                <TableCell>{stage.stageName}</TableCell>
-                                                <TableCell align='right'>{stage.count}</TableCell>
-                                                <TableCell align='right'>{formatINR(stage.totalValue)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        )}
-                    </CardContent>
-                </Card>
-            </Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.5 }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Bank wise loan sum
-                                </Typography>
-                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(bankWiseTotal)) : '—'}
-                                </Typography>
-                            </Box>
-                            <Avatar
-                                sx={{
-                                    width: 38,
-                                    height: 38,
-                                    bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                                    color: 'var(--mui-palette-primary-main)'
-                                }}
-                            >
-                                <i className='ri-bank-line' />
-                            </Avatar>
-                        </Box>
-                        {!hasTenant ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Select an organization to view bank analytics.
-                            </Typography>
-                        ) : myLeadsLoading ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Loading bank analytics...
-                            </Typography>
-                        ) : bankWiseSums.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                No amount data available.
+                        ) : pipelineDisplay.length === 0 ? (
+                            <Typography variant='body2' color='text.secondary' sx={{ py: 4, textAlign: 'center' }}>
+                                No active cases in the pipeline.
                             </Typography>
                         ) : (
                             <>
-                                <AmountBarTrendApexChart
-                                    points={bankWiseSums}
-                                    trendColor='var(--mui-palette-primary-main)'
-                                    darkMode={isDarkMode}
+                                <BreakdownApexChart
+                                    points={pipelineDisplay}
+                                    chartType={pipelineChartType}
+                                    metric={pipelineMetric}
+                                    accentColor={theme.palette.primary.main}
+                                    darkMode={theme.palette.mode === 'dark'}
                                 />
-                                <Typography variant='caption' color='text.secondary'>
-                                    Top bank: {bankWiseSums[0]?.label} · {formatCompactINR(bankWiseSums[0]?.value || 0)}
-                                </Typography>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.5 }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Loan type wise sum
-                                </Typography>
-                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(loanTypeWiseTotal)) : '—'}
-                                </Typography>
-                            </Box>
-                            <Avatar
-                                sx={{
-                                    width: 38,
-                                    height: 38,
-                                    bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)',
-                                    color: 'var(--mui-palette-success-main)'
-                                }}
-                            >
-                                <i className='ri-file-chart-line' />
-                            </Avatar>
-                        </Box>
-                        {!hasTenant ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Select an organization to view loan type analytics.
-                            </Typography>
-                        ) : myLeadsLoading ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Loading loan type analytics...
-                            </Typography>
-                        ) : loanTypeWiseSums.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                No amount data available.
-                            </Typography>
-                        ) : (
-                            <>
-                                <AmountBarTrendApexChart
-                                    points={loanTypeWiseSums}
-                                    trendColor='var(--mui-palette-success-main)'
-                                    darkMode={isDarkMode}
-                                />
-                                <Typography variant='caption' color='text.secondary'>
-                                    Top loan type: {loanTypeWiseSums[0]?.label} · {formatCompactINR(loanTypeWiseSums[0]?.value || 0)}
-                                </Typography>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 0.75 }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography variant='subtitle2' color='text.secondary'>
-                                    Loan amount timeline
-                                </Typography>
-                                <Typography variant='h6' sx={{ fontWeight: 800 }}>
-                                    {hasTenant ? (myLeadsLoading ? '...' : formatINR(timelineTotal)) : '—'}
-                                </Typography>
-                            </Box>
-                            <Chip size='small' variant='outlined' label={timelineModeLabel} />
-                        </Box>
-                        {!hasTenant ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Select an organization to view timeline analytics.
-                            </Typography>
-                        ) : myLeadsLoading ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Loading timeline analytics...
-                            </Typography>
-                        ) : timelineSummary.points.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                No timeline data available.
-                            </Typography>
-                        ) : (
-                            <>
-                                <TimelineApexChart
-                                    points={timelineSummary.points}
-                                    darkMode={isDarkMode}
-                                />
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                                    <Typography variant='caption' color='text.secondary'>
-                                        {timelineSummary.points[0]?.label}
+                                {pipelineLeadingStage ? (
+                                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
+                                        Leading: {pipelineLeadingStage.label} ·{' '}
+                                        {pipelineMetric === 'amount'
+                                            ? formatINR(pipelineLeadingStage.value)
+                                            : `${pipelineLeadingStage.count} cases`}
+                                        {pipelineBreakdownRows.length > pipelineDisplay.length
+                                            ? ` · ${pipelineBreakdownRows.length - pipelineDisplay.length} more in pipeline`
+                                            : ''}
                                     </Typography>
-                                    <Typography variant='caption' color='text.secondary'>
-                                        {timelineSummary.points[timelineSummary.points.length - 1]?.label}
-                                    </Typography>
-                                </Box>
+                                ) : null}
                             </>
                         )}
                     </CardContent>
                 </Card>
             </Box>
+            <DashboardAnalyticsSection
+                leads={periodFilteredLeads}
+                loading={myLeadsLoading}
+                enabled={hasTenant}
+                globalPeriodLabel={dashboardPeriodLabel}
+            />
+            <DisbursementInsightsSection
+                enabled={hasTenant}
+                assignedAgentId={effectiveAssignedAgentId}
+                period={dashboardPeriod}
+            />
             <Snackbar open={welcomeOpen} autoHideDuration={4000} onClose={() => setWelcomeOpen(false)}>
                 <SnackbarContent
                     sx={{

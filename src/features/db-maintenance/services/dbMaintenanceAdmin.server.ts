@@ -3,6 +3,13 @@ import 'server-only'
 import { ObjectId } from 'mongodb'
 
 import { getDb } from '@/lib/mongodb'
+import {
+  buildDemoTenantScopeFilter,
+  isDbMaintenanceCollectionDeletable,
+  isDbMaintenanceGroupVisibleInUi,
+  mergeWithDemoTenantScopeFilter,
+  resolveDemoTenantForMaintenance
+} from '@/lib/demoTenantMaintenance'
 
 import type {
   DbMaintenanceClearResult,
@@ -77,19 +84,47 @@ export function isAllowedDbMaintenanceCollection(name: unknown): name is string 
 export async function listDbMaintenanceCollections(): Promise<DbMaintenanceCollectionInfo[]> {
   const db = await getDb()
   const out: DbMaintenanceCollectionInfo[] = []
+  let demoTenantId: ObjectId | null = null
+
+  try {
+    const resolved = await resolveDemoTenantForMaintenance()
+
+    demoTenantId = resolved.tenantId
+  } catch {
+    demoTenantId = null
+  }
 
   for (const name of DB_MAINTENANCE_COLLECTIONS) {
     const exists = (await db.listCollections({ name }, { nameOnly: true }).toArray()).length > 0
-    const documentCount = exists ? await db.collection(name).countDocuments({}) : 0
+    const deletable = isDbMaintenanceCollectionDeletable(name)
+    let documentCount = 0
+
+    if (exists) {
+      if (demoTenantId && deletable) {
+        try {
+          const filter = buildDemoTenantScopeFilter(name, demoTenantId)
+
+          documentCount = await db.collection(name).countDocuments(filter)
+        } catch {
+          documentCount = 0
+        }
+      } else {
+        documentCount = await db.collection(name).countDocuments({})
+      }
+    }
 
     const meta = DB_MAINTENANCE_COLLECTION_META[name as (typeof DB_MAINTENANCE_COLLECTIONS)[number]]
+    const group = meta?.group || 'Other'
+
+    if (!isDbMaintenanceGroupVisibleInUi(group)) continue
 
     out.push({
       name,
       label: meta?.label || name,
-      group: meta?.group || 'Other',
+      group,
       exists,
-      documentCount
+      documentCount,
+      deletable
     })
   }
 
@@ -97,6 +132,7 @@ export async function listDbMaintenanceCollections(): Promise<DbMaintenanceColle
 }
 
 export async function clearDbMaintenanceCollection(name: string): Promise<DbMaintenanceClearResult> {
+  const { tenantId } = await resolveDemoTenantForMaintenance()
   const db = await getDb()
 
   const exists = (await db.listCollections({ name }, { nameOnly: true }).toArray()).length > 0
@@ -105,10 +141,11 @@ export async function clearDbMaintenanceCollection(name: string): Promise<DbMain
     return { name, before: 0, deleted: 0, after: 0 }
   }
 
+  const scopeFilter = buildDemoTenantScopeFilter(name, tenantId)
   const coll = db.collection(name)
-  const before = await coll.countDocuments({})
-  const del = await coll.deleteMany({})
-  const after = await coll.countDocuments({})
+  const before = await coll.countDocuments(scopeFilter)
+  const del = await coll.deleteMany(scopeFilter)
+  const after = await coll.countDocuments(scopeFilter)
 
   return { name, before, deleted: del.deletedCount || 0, after }
 }
@@ -145,7 +182,7 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return out
 }
 
-async function deleteAuditLogsForLoanCaseIds(db: any, loanCaseIds: string[]): Promise<number> {
+async function deleteAuditLogsForLoanCaseIds(db: any, loanCaseIds: string[], demoTenantId?: ObjectId): Promise<number> {
   const ids = Array.from(new Set(loanCaseIds.map(v => String(v || '').trim()).filter(Boolean)))
 
   if (ids.length === 0) return 0
@@ -164,7 +201,12 @@ async function deleteAuditLogsForLoanCaseIds(db: any, loanCaseIds: string[]): Pr
       filters.push({ 'metadata.leadId': { $in: objectIds } })
     }
 
-    const q = filters.length === 1 ? filters[0] : { $or: filters }
+    let q: Record<string, unknown> = filters.length === 1 ? filters[0] : { $or: filters }
+
+    if (demoTenantId) {
+      q = { $and: [q, { targetTenantId: demoTenantId }] }
+    }
+
     const res = await db.collection('auditLogs').deleteMany(q)
 
     deletedTotal += res.deletedCount || 0
@@ -179,6 +221,7 @@ export async function listDbMaintenanceDocuments(params: {
   cursor?: string | null
   createdById?: string | null
 }): Promise<{ items: DbMaintenanceDocumentPreview[]; nextCursor: string | null }> {
+  const { tenantId } = await resolveDemoTenantForMaintenance()
   const db = await getDb()
   const collection = params.collection
   const limitRaw = typeof params.limit === 'number' ? params.limit : 50
@@ -195,6 +238,12 @@ export async function listDbMaintenanceDocuments(params: {
 
   if (Object.keys(createdByFilter).length > 0) {
     query.$and = [...(query.$and || []), createdByFilter]
+  }
+
+  if (isDbMaintenanceCollectionDeletable(collection)) {
+    const demoScope = buildDemoTenantScopeFilter(collection, tenantId)
+
+    query.$and = [...(query.$and || []), demoScope]
   }
 
   if (params.cursor && typeof params.cursor === 'string' && params.cursor.trim().length > 0) {
@@ -219,6 +268,7 @@ export async function listDbMaintenanceDocuments(params: {
 }
 
 export async function listDbMaintenanceCreators(params: { collection: string }): Promise<DbMaintenanceCreatorOption[]> {
+  const { tenantId } = await resolveDemoTenantForMaintenance()
   const db = await getDb()
   const collection = params.collection
 
@@ -226,10 +276,14 @@ export async function listDbMaintenanceCreators(params: { collection: string }):
 
   if (!exist) return []
 
+  if (!isDbMaintenanceCollectionDeletable(collection)) return []
+
+  const demoScope = buildDemoTenantScopeFilter(collection, tenantId)
+
   const creatorCounts = await db
     .collection(collection)
     .aggregate([
-      { $match: { createdBy: { $exists: true, $ne: null } } },
+      { $match: { ...demoScope, createdBy: { $exists: true, $ne: null } } },
       { $project: { createdById: { $toString: '$createdBy' } } },
       { $match: { createdById: { $ne: '' } } },
       { $group: { _id: '$createdById', count: { $sum: 1 } } },
@@ -279,6 +333,7 @@ export async function deleteDbMaintenanceDocuments(params: {
   ids: string[]
   createdById?: string | null
 }): Promise<{ deleted: number }> {
+  const { tenantId } = await resolveDemoTenantForMaintenance()
   const db = await getDb()
   const collection = params.collection
   const ids = Array.isArray(params.ids) ? params.ids : []
@@ -287,6 +342,10 @@ export async function deleteDbMaintenanceDocuments(params: {
   const exist = (await db.listCollections({ name: collection }, { nameOnly: true }).toArray()).length > 0
 
   if (!exist) return { deleted: 0 }
+
+  if (!isDbMaintenanceCollectionDeletable(collection)) {
+    throw Object.assign(new Error('collection_not_deletable'), { status: 403 })
+  }
 
   if (unique.length === 0 && !createdById) return { deleted: 0 }
 
@@ -302,7 +361,8 @@ export async function deleteDbMaintenanceDocuments(params: {
   if (ors.length > 0) queryParts.push({ $or: ors })
   if (createdById) queryParts.push(buildCreatedByFilter(createdById))
 
-  const deleteQuery = queryParts.length === 1 ? queryParts[0] : { $and: queryParts }
+  const baseQuery = queryParts.length === 1 ? queryParts[0] : { $and: queryParts }
+  const deleteQuery = mergeWithDemoTenantScopeFilter(collection, tenantId, baseQuery)
   let loanCaseIdsToDelete: string[] = []
 
   if (collection === 'loanCases') {
@@ -314,33 +374,41 @@ export async function deleteDbMaintenanceDocuments(params: {
   const res = await db.collection(collection).deleteMany(deleteQuery)
 
   if (collection === 'loanCases' && loanCaseIdsToDelete.length > 0) {
-    await deleteAuditLogsForLoanCaseIds(db, loanCaseIdsToDelete)
+    await deleteAuditLogsForLoanCaseIds(db, loanCaseIdsToDelete, tenantId)
   }
 
   return { deleted: res.deletedCount || 0 }
 }
 
 export async function listDbMaintenanceTenants(): Promise<DbMaintenanceTenantInfo[]> {
+  const { tenantId, tenantIdHex, tenantName } = await resolveDemoTenantForMaintenance()
   const db = await getDb()
 
-  const docs = await db
-    .collection('tenants')
-    .find(
-      {},
-      {
-        projection: { _id: 1, name: 1, status: 1, type: 1 }
-      }
-    )
-    .sort({ name: 1 })
-    .limit(500)
-    .toArray()
+  const doc =
+    (await db.collection('tenants').findOne(
+      { _id: tenantId },
+      { projection: { _id: 1, name: 1, status: 1, type: 1, isDemo: 1 } }
+    )) || null
 
-  return docs.map(d => ({
-    id: toIdString((d as any)._id),
-    name: typeof (d as any).name === 'string' ? (d as any).name : toIdString((d as any)._id),
-    status: typeof (d as any).status === 'string' ? (d as any).status : undefined,
-    type: typeof (d as any).type === 'string' ? (d as any).type : undefined
-  }))
+  if (!doc) {
+    return [
+      {
+        id: tenantIdHex,
+        name: tenantName || tenantIdHex,
+        status: 'active',
+        type: 'company'
+      }
+    ]
+  }
+
+  return [
+    {
+      id: tenantIdHex,
+      name: typeof (doc as any).name === 'string' ? (doc as any).name : tenantIdHex,
+      status: typeof (doc as any).status === 'string' ? (doc as any).status : undefined,
+      type: typeof (doc as any).type === 'string' ? (doc as any).type : undefined
+    }
+  ]
 }
 
 async function deleteByTenantId(collectionName: string, tenantId: ObjectId): Promise<number> {
@@ -355,15 +423,10 @@ async function deleteByTenantId(collectionName: string, tenantId: ObjectId): Pro
 }
 
 export async function purgeTenantData(tenantIdRaw: string): Promise<DbMaintenanceTenantPurgeResult> {
-  if (!ObjectId.isValid(tenantIdRaw)) {
-    throw new Error('invalid_tenant_id')
-  }
+  const { tenantId, tenantIdHex, tenantName: resolvedTenantName } = await resolveDemoTenantForMaintenance(tenantIdRaw)
 
   const db = await getDb()
-  const tenantId = new ObjectId(tenantIdRaw)
-
-  const tenant = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })
-  const tenantName = tenant && typeof (tenant as any).name === 'string' ? (tenant as any).name : null
+  const tenantName = resolvedTenantName
 
   const membershipDocs = await db
     .collection('memberships')
@@ -416,15 +479,8 @@ export async function purgeTenantData(tenantIdRaw: string): Promise<DbMaintenanc
     deletedByCollection.auditLogs = 0
   }
 
-  const tenantExists = (await db.listCollections({ name: 'tenants' }, { nameOnly: true }).toArray()).length > 0
-
-  if (tenantExists) {
-    const tres = await db.collection('tenants').deleteOne({ _id: tenantId })
-
-    deletedByCollection.tenants = (tres.deletedCount as number) || 0
-  } else {
-    deletedByCollection.tenants = 0
-  }
+  // Keep the demo tenant record so the organisation can be reused after purge.
+  deletedByCollection.tenants = 0
 
   let deletedUsers = 0
   let keptSuperAdmins = 0
@@ -490,7 +546,7 @@ export async function purgeTenantData(tenantIdRaw: string): Promise<DbMaintenanc
   }
 
   return {
-    tenantId: tenantIdRaw,
+    tenantId: tenantIdHex,
     tenantName,
     deletedByCollection,
     deletedUsers,

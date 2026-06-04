@@ -4,6 +4,7 @@ import Google from 'next-auth/providers/google'
 import { ObjectId } from 'mongodb'
 
 import { getDb } from '@/lib/mongodb'
+import { applyDemoSessionToToken, ensureDemoMembership, getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 import { getSuperAdminEmail } from '@/lib/env'
 
 function escapeRegexLiteral(input: string) {
@@ -106,6 +107,18 @@ return `${baseUrl}/post-login`
     },
     async jwt({ token, account, profile, trigger, session }) {
       if (trigger === 'update') {
+        if ((session as any)?.demoMode && isDemoLoginEnabled() && token.userId) {
+          const db = await getDb()
+          const demoTenantId = await ensureDemoMembership(
+            String(token.userId),
+            String((token as any)?.email || '')
+          )
+
+          applyDemoSessionToToken(token as Record<string, unknown>, demoTenantId)
+
+          return token
+        }
+
         if ((session as any)?.currentTenantId) {
           ;(token as any).currentTenantId = (session as any).currentTenantId
         }
@@ -226,6 +239,28 @@ return `${baseUrl}/post-login`
       if (token.userId) {
         const db = await getDb()
 
+        if ((token as any).isDemoMode && isDemoLoginEnabled()) {
+          const demoTenantId = getDemoTenantIdOrNull()
+
+          if (demoTenantId) {
+            await ensureDemoMembership(String(token.userId), String((token as any)?.email || ''))
+            applyDemoSessionToToken(token as Record<string, unknown>, demoTenantId)
+
+            const userDoc = await db
+              .collection('users')
+              .findOne({ _id: new ObjectId(String(token.userId)) }, { projection: { isSuperAdmin: 1, email: 1, name: 1, image: 1 } })
+
+            ;(token as any).isSuperAdmin = Boolean((userDoc as any)?.isSuperAdmin)
+            ;(token as any).email = (userDoc as any)?.email ?? (token as any).email
+            ;(token as any).name = (userDoc as any)?.name ?? (token as any).name
+            ;(token as any).picture = (userDoc as any)?.image ?? (token as any).picture
+
+            return token
+          }
+
+          ;(token as any).isDemoMode = undefined
+        }
+
         const state = await hydrateUserState(db, String(token.userId), token.currentTenantId)
 
         ;(token as any).isSuperAdmin = state.isSuperAdmin
@@ -335,6 +370,7 @@ return `${baseUrl}/post-login`
       ;(session as any).currentTenantId = (token as any).currentTenantId
       ;(session as any).isSuperAdmin = (token as any).isSuperAdmin
       ;(session as any).impersonation = (token as any).impersonation
+      ;(session as any).isDemoMode = (token as any).isDemoMode
 
       if (session.user) {
         ;(session.user as any).isSuperAdmin = (token as any).isSuperAdmin

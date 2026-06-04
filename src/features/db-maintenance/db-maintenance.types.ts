@@ -1,9 +1,25 @@
+/** Groups hidden from the DB maintenance screen (e.g. Platform for demo tenant). */
+export const DB_MAINTENANCE_UI_HIDDEN_GROUPS = ['Platform'] as const
+
+/** Platform collections — not deletable via DB maintenance (demo tenant only). */
+export const DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS = [
+  'users',
+  'authAccounts',
+  'subscriptionPlans',
+  'tenants'
+] as const
+
+export function isDbMaintenanceCollectionDeletable(collection: string): boolean {
+  return !(DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS as readonly string[]).includes(collection)
+}
+
 export type DbMaintenanceCollectionInfo = {
   name: string
   label: string
   group: string
   exists: boolean
   documentCount: number
+  deletable: boolean
 }
 
 export const DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS = [

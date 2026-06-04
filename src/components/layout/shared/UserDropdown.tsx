@@ -101,7 +101,8 @@ const UserDropdown = ({
   const { settings } = useSettings()
   const activeImpersonation = (session as any)?.impersonation
   const isImpersonating = Boolean(activeImpersonation?.active)
-  const canImpersonate = Boolean(isSuperAdmin) && !isImpersonating
+  const isDemoMode = Boolean((session as any)?.isDemoMode)
+  const canImpersonate = Boolean(isSuperAdmin) && !isImpersonating && !isDemoMode
 
   const handleDropdownOpen = () => {
     const next = !open
@@ -275,6 +276,12 @@ const UserDropdown = ({
   }
 
   useEffect(() => {
+    if (isDemoMode) {
+      setCanSwitch(false)
+
+      return
+    }
+
     const checkCount = async () => {
       try {
         const res = await fetch('/api/memberships/by-user', { cache: 'no-store' })
@@ -287,7 +294,7 @@ const UserDropdown = ({
     }
 
     checkCount()
-  }, [])
+  }, [isDemoMode])
 
   useEffect(() => {
     if (tenant?.tenantName || tenant?.role) {

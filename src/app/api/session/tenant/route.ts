@@ -6,7 +6,9 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 import { getDb } from '@/lib/mongodb'
+import { resolveCurrentTenantId } from '@/lib/tenantSession'
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -14,9 +16,23 @@ export async function POST(request: Request) {
   if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const form = await request.formData()
-  const tenantId = String(form.get('tenantId') || '')
+  let tenantId = String(form.get('tenantId') || '')
 
   if (!tenantId) return NextResponse.json({ error: 'tenantId_required' }, { status: 400 })
+
+  if ((session as any).isDemoMode && isDemoLoginEnabled()) {
+    const demoTenantId = getDemoTenantIdOrNull()
+
+    if (!demoTenantId) {
+      return NextResponse.json({ error: 'demo_login_disabled' }, { status: 403 })
+    }
+
+    if (tenantId !== demoTenantId) {
+      return NextResponse.json({ error: 'demo_tenant_only' }, { status: 403 })
+    }
+
+    tenantId = demoTenantId
+  }
 
   const db = await getDb()
 
@@ -54,8 +70,7 @@ export async function GET() {
   if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-  const sessionTenantId = String((session as any).currentTenantId || '')
-  const currentTenantId = cookieTenantId || sessionTenantId
+  const currentTenantId = resolveCurrentTenantId(session as any, cookieTenantId)
 
   if (currentTenantId && ObjectId.isValid(currentTenantId)) {
     const db = await getDb()
