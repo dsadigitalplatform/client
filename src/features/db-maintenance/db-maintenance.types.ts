@@ -1,8 +1,20 @@
 export type DbMaintenanceCollectionInfo = {
   name: string
+  label: string
+  group: string
   exists: boolean
   documentCount: number
 }
+
+export const DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS = [
+  'customers',
+  'associates',
+  'advocates',
+  'banks',
+  'corporates',
+  'loanCases',
+  'appointments'
+] as const
 
 export type DbMaintenanceClearResult = {
   name: string
@@ -13,7 +25,12 @@ export type DbMaintenanceClearResult = {
 
 export type DbMaintenanceDocumentPreview = {
   id: string
+  /** Primary label — use this in the records list. */
+  title: string
+  /** Backward-compatible one-line summary. */
   summary: string
+  /** Extra identifying lines (customer, dates, amounts, refs). */
+  details: string[]
 }
 
 export type DbMaintenanceCreatorOption = {

@@ -372,6 +372,28 @@ ensureCollection('advocates', advocatesValidator)
 ensureIndex('advocates', { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
 ensureIndex('advocates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_advocate_mobile' })
 
+const banksValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'code', 'name', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      code: { bsonType: 'string', minLength: 1 },
+      codeNormalized: { bsonType: 'string' },
+      name: { bsonType: 'string', minLength: 2 },
+      description: { bsonType: ['string', 'null'] },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('banks', banksValidator)
+ensureIndex('banks', { tenantId: 1 }, { name: 'idx_banks_tenantId' })
+ensureIndex('banks', { tenantId: 1, codeNormalized: 1 }, { unique: true, name: 'uniq_tenant_bank_code' })
+
 const loanTypesValidator = {
   $jsonSchema: {
     bsonType: 'object',

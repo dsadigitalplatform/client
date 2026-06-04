@@ -37,7 +37,9 @@ import { useTheme } from '@mui/material/styles'
 import MuiLink from '@mui/material/Link'
 
 import { useLoanCases } from '@features/loan-cases/hooks/useLoanCases'
-import { getLoanCaseBankNames, getTenantUsers } from '@features/loan-cases/services/loanCasesService'
+import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
+import { getBanks } from '@features/banks/services/banksService'
+import type { Bank } from '@features/banks/banks.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
 
@@ -288,15 +290,20 @@ const LoanCasesList = () => {
 
     void (async () => {
       try {
-        const [stagesData, usersData, bankNamesData] = await Promise.all([
+        const [stagesData, usersData, banksData] = await Promise.all([
           getLoanStatusPipelineStages(),
           getTenantUsers(),
-          getLoanCaseBankNames()
+          getBanks()
         ])
 
         setStages(stagesData as any)
         setUsers(usersData as any)
-        setBankNames(Array.isArray(bankNamesData) ? bankNamesData : [])
+        setBankNames(
+          (Array.isArray(banksData) ? banksData : [])
+            .map((b: Bank) => b.name)
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+        )
       } catch {
       }
     })()

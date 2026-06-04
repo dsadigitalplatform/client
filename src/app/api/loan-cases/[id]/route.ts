@@ -14,6 +14,7 @@ import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmitt
 import { authOptions } from '@/lib/auth'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
+import { findBankByName } from '@/app/api/banks/_helpers'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
 const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
@@ -470,8 +471,19 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     }
   }
 
-  if (body.bankName !== undefined)
-    patch.bankName = body.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
+  if (body.bankName !== undefined) {
+    const rawBankName =
+      body.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
+
+    if (rawBankName === null) {
+      patch.bankName = null
+    } else {
+      const bank = await findBankByName(db, tenantIdObj, rawBankName)
+
+      if (!bank) errors.bankName = 'Select a bank from bank master'
+      else patch.bankName = String((bank as { name?: string }).name || rawBankName)
+    }
+  }
 
   if (incomingCorporateId !== undefined) {
     if (!incomingCorporateId || incomingCorporateId.trim().length === 0) {

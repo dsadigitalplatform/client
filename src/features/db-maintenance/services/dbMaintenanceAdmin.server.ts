@@ -12,6 +12,10 @@ import type {
   DbMaintenanceTenantInfo,
   DbMaintenanceTenantPurgeResult
 } from '../db-maintenance.types'
+import {
+  buildDbMaintenanceDocumentPreviews,
+  getDbMaintenanceDocumentProjection
+} from './documentPreview.server'
 
 export const DB_MAINTENANCE_COLLECTIONS = [
   'users',
@@ -22,6 +26,9 @@ export const DB_MAINTENANCE_COLLECTIONS = [
   'subscriptionPlans',
   'customers',
   'associates',
+  'advocates',
+  'banks',
+  'corporates',
   'loanTypes',
   'documentChecklists',
   'loanStatusPipelineStages',
@@ -31,6 +38,31 @@ export const DB_MAINTENANCE_COLLECTIONS = [
   'loanDisbursementTrackers',
   'loanDisbursements'
 ] as const
+
+const DB_MAINTENANCE_COLLECTION_META: Record<
+  (typeof DB_MAINTENANCE_COLLECTIONS)[number],
+  { label: string; group: string }
+> = {
+  users: { label: 'Users', group: 'Platform' },
+  authAccounts: { label: 'Auth accounts', group: 'Platform' },
+  tenants: { label: 'Tenants', group: 'Platform' },
+  memberships: { label: 'Memberships', group: 'Platform' },
+  auditLogs: { label: 'Audit logs', group: 'Platform' },
+  subscriptionPlans: { label: 'Subscription plans', group: 'Platform' },
+  customers: { label: 'Customers', group: 'DSA Master' },
+  associates: { label: 'Associates', group: 'DSA Master' },
+  advocates: { label: 'Advocates', group: 'DSA Master' },
+  banks: { label: 'Banks', group: 'DSA Master' },
+  corporates: { label: 'Corporates', group: 'DSA Master' },
+  loanTypes: { label: 'Loan types', group: 'DSA Master' },
+  documentChecklists: { label: 'Document checklists', group: 'DSA Master' },
+  loanStatusPipelineStages: { label: 'Loan status pipeline', group: 'DSA Master' },
+  loanTypeDocuments: { label: 'Loan type documents', group: 'DSA Master' },
+  loanCases: { label: 'Leads / loan cases', group: 'Leads & operations' },
+  appointments: { label: 'Appointments', group: 'Leads & operations' },
+  loanDisbursementTrackers: { label: 'Disbursement trackers', group: 'Leads & operations' },
+  loanDisbursements: { label: 'Disbursements', group: 'Leads & operations' }
+}
 
 const allowed = new Set<string>(DB_MAINTENANCE_COLLECTIONS)
 
@@ -50,7 +82,15 @@ export async function listDbMaintenanceCollections(): Promise<DbMaintenanceColle
     const exists = (await db.listCollections({ name }, { nameOnly: true }).toArray()).length > 0
     const documentCount = exists ? await db.collection(name).countDocuments({}) : 0
 
-    out.push({ name, exists, documentCount })
+    const meta = DB_MAINTENANCE_COLLECTION_META[name as (typeof DB_MAINTENANCE_COLLECTIONS)[number]]
+
+    out.push({
+      name,
+      label: meta?.label || name,
+      group: meta?.group || 'Other',
+      exists,
+      documentCount
+    })
   }
 
   return out
@@ -79,46 +119,6 @@ function toIdString(v: any): string {
   if (typeof v?.toHexString === 'function') return v.toHexString()
 
   return String(v)
-}
-
-function buildSummary(doc: any): string {
-  if (!doc || typeof doc !== 'object') return ''
-
-  const candidates = [
-    doc.email,
-    doc.name,
-    doc.fullName,
-    doc.mobile,
-    doc.slug,
-    doc.code,
-    doc.status,
-    doc.role,
-    doc.type
-  ]
-    .map(v => (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : ''))
-    .map(s => s.trim())
-    .filter(Boolean)
-
-  if (candidates.length > 0) return candidates.slice(0, 3).join(' • ')
-
-  const keys = Object.keys(doc)
-    .filter(k => k !== '_id')
-    .slice(0, 6)
-
-  if (keys.length === 0) return ''
-
-  const parts = keys.map(k => {
-    const v = (doc as any)[k]
-
-    if (typeof v === 'string') return `${k}: ${v.length > 32 ? `${v.slice(0, 32)}…` : v}`
-    if (typeof v === 'number' || typeof v === 'boolean') return `${k}: ${String(v)}`
-    if (v && typeof v === 'object' && typeof (v as any).toHexString === 'function') return `${k}: ${(v as any).toHexString()}`
-    if (v instanceof Date) return `${k}: ${v.toISOString()}`
-
-    return `${k}: …`
-  })
-
-  return parts.join(' • ')
 }
 
 function buildCreatedByFilter(createdByIdRaw: string): Record<string, any> {
@@ -205,15 +205,12 @@ export async function listDbMaintenanceDocuments(params: {
 
   const docs = await db
     .collection(collection)
-    .find(query, { projection: { _id: 1, email: 1, name: 1, fullName: 1, mobile: 1, slug: 1, code: 1, status: 1, role: 1, type: 1, createdAt: 1 } })
+    .find(query, { projection: getDbMaintenanceDocumentProjection(collection) })
     .sort({ _id: -1 })
     .limit(limit)
     .toArray()
 
-  const items: DbMaintenanceDocumentPreview[] = docs.map(d => ({
-    id: toIdString((d as any)._id),
-    summary: buildSummary(d)
-  }))
+  const items = await buildDbMaintenanceDocumentPreviews(db, collection, docs)
 
   const last = docs.length > 0 ? docs[docs.length - 1] : null
   const nextCursor = last && typeof (last as any)?._id?.toHexString === 'function' ? (last as any)._id.toHexString() : null
@@ -386,12 +383,18 @@ export async function purgeTenantData(tenantIdRaw: string): Promise<DbMaintenanc
   const deletedByCollection: Record<string, number> = {}
 
   deletedByCollection.customers = await deleteByTenantId('customers', tenantId)
+  deletedByCollection.associates = await deleteByTenantId('associates', tenantId)
+  deletedByCollection.advocates = await deleteByTenantId('advocates', tenantId)
+  deletedByCollection.banks = await deleteByTenantId('banks', tenantId)
+  deletedByCollection.corporates = await deleteByTenantId('corporates', tenantId)
   deletedByCollection.loanTypes = await deleteByTenantId('loanTypes', tenantId)
   deletedByCollection.documentChecklists = await deleteByTenantId('documentChecklists', tenantId)
   deletedByCollection.loanStatusPipelineStages = await deleteByTenantId('loanStatusPipelineStages', tenantId)
   deletedByCollection.loanTypeDocuments = await deleteByTenantId('loanTypeDocuments', tenantId)
   deletedByCollection.loanCases = await deleteByTenantId('loanCases', tenantId)
   deletedByCollection.appointments = await deleteByTenantId('appointments', tenantId)
+  deletedByCollection.loanDisbursementTrackers = await deleteByTenantId('loanDisbursementTrackers', tenantId)
+  deletedByCollection.loanDisbursements = await deleteByTenantId('loanDisbursements', tenantId)
 
   const membershipsExists = (await db.listCollections({ name: 'memberships' }, { nameOnly: true }).toArray()).length > 0
 

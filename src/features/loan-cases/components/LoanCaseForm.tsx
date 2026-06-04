@@ -73,10 +73,11 @@ import { getAdvocates } from '@features/advocates/services/advocatesService'
 import type { Advocate } from '@features/advocates/advocates.types'
 import { getCorporates } from '@features/corporates/services/corporatesService'
 import type { Corporate } from '@features/corporates/corporates.types'
+import { getBanks } from '@features/banks/services/banksService'
+import type { Bank } from '@features/banks/banks.types'
 import LeadDisbursementProgressPanel from '@features/loan-cases/components/LeadDisbursementProgressPanel'
 import {
   createLoanCase,
-  getLoanCaseBankNames,
   getLoanCases,
   getLeadAuditHistory,
   getChecklistByLoanType,
@@ -311,7 +312,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [advocateFallbackLabel, setAdvocateFallbackLabel] = useState<string>('')
 
   const [bankName, setBankName] = useState<string>('')
-  const [bankNameOptions, setBankNameOptions] = useState<string[]>([])
+  const [banks, setBanks] = useState<Bank[]>([])
   const [corporateId, setCorporateId] = useState<string>('')
   const [corporateFallbackLabel, setCorporateFallbackLabel] = useState<string>('')
   const [requestedAmount, setRequestedAmount] = useState<string>('')
@@ -388,6 +389,21 @@ const LoanCaseForm = ({ caseId }: Props) => {
     () => corporates.filter(c => c.isActive).sort((a, b) => a.name.localeCompare(b.name)),
     [corporates]
   )
+
+  const bankNameOptions = useMemo(
+    () => banks.map(b => b.name).sort((a, b) => a.localeCompare(b)),
+    [banks]
+  )
+
+  const selectedBankName = useMemo(() => {
+    const trimmed = bankName.trim()
+
+    if (!trimmed) return null
+
+    return bankNameOptions.find(name => name.toLowerCase() === trimmed.toLowerCase()) ?? null
+  }, [bankName, bankNameOptions])
+
+  const bankNameNotInMaster = Boolean(bankName.trim()) && !selectedBankName
 
   const assignedAgentLabel = useMemo(() => {
     if (!assignedAgentId) return 'Unassigned'
@@ -878,11 +894,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     void (async () => {
       try {
-        const bankNames = await getLoanCaseBankNames()
+        const bankRows = await getBanks()
 
-        setBankNameOptions(bankNames)
+        setBanks(bankRows as Bank[])
       } catch {
-        setBankNameOptions([])
+        setBanks([])
       }
     })()
   }, [])
@@ -1085,6 +1101,12 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     if (corporateId && !corporates.some(c => c.id === corporateId)) next.corporateId = 'Corporate not found'
 
+    if (bankName.trim()) {
+      const matchedBank = banks.find(b => b.name.toLowerCase() === bankName.trim().toLowerCase())
+
+      if (!matchedBank) next.bankName = 'Select a bank from bank master'
+    }
+
     if (leadSource === 'ASSOCIATE') {
       if (!associateId) next.associateId = 'Associate is required'
       else if (!associateOptions.some(a => a.id === associateId)) next.associateId = 'Associate must be active'
@@ -1137,7 +1159,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         associateId: resolvedAssociateId,
         advocateId: resolvedAdvocateId,
         corporateId: resolvedCorporateId,
-        bankName: bankName.trim().length === 0 ? null : bankName.trim(),
+        bankName: selectedBankName,
         requestedAmount: parsed.requested as number,
         approvedAmount: parsed.approved ?? (parsed.requested as number),
         eligibleAmount: parsed.eligible,
@@ -1668,19 +1690,26 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <Autocomplete
-                    freeSolo
                     options={bankNameOptions}
-                    value={bankName}
-                    onChange={(_, v) => setBankName(typeof v === 'string' ? v : '')}
-                    inputValue={bankName}
-                    onInputChange={(_, v) => setBankName(v)}
+                    value={selectedBankName}
+                    onChange={(_, v) => setBankName(v || '')}
                     disabled={!isActive}
+                    clearOnBlur
+                    selectOnFocus
+                    handleHomeEndKeys
                     renderInput={params => (
                       <TextField
                         {...params}
                         label='Bank / NBFC'
                         fullWidth
                         size='small'
+                        error={!!fieldErrors.bankName || bankNameNotInMaster}
+                        helperText={
+                          fieldErrors.bankName ||
+                          (bankNameNotInMaster
+                            ? `"${bankName.trim()}" is not in bank master — select a bank`
+                            : 'Select from bank master')
+                        }
                         InputProps={{
                           ...params.InputProps,
                           startAdornment: (

@@ -347,6 +347,32 @@ async function main() {
     { unique: true, name: 'uniq_tenant_advocate_mobile' }
   )
 
+  const banksValidator = {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['tenantId', 'code', 'name', 'createdAt'],
+      properties: {
+        tenantId: { bsonType: 'objectId' },
+        code: { bsonType: 'string', minLength: 1 },
+        codeNormalized: { bsonType: 'string' },
+        name: { bsonType: 'string', minLength: 2 },
+        description: { bsonType: ['string', 'null'] },
+        createdBy: { bsonType: ['objectId', 'null'] },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: ['date', 'null'] }
+      },
+      additionalProperties: true
+    }
+  }
+
+  await ensureCollection(db, 'banks', banksValidator)
+  await ensureIndex(db.collection('banks'), { tenantId: 1 }, { name: 'idx_banks_tenantId' })
+  await ensureIndex(
+    db.collection('banks'),
+    { tenantId: 1, codeNormalized: 1 },
+    { unique: true, name: 'uniq_tenant_bank_code' }
+  )
+
   const loanTypesValidator = {
     $jsonSchema: {
       bsonType: 'object',

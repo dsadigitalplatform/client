@@ -22,6 +22,7 @@ import {
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { findBankByName } from '@/app/api/banks/_helpers'
 
 const AUDIT_ACTIONS = {
   leadCreated: 'LEAD_CREATED'
@@ -212,18 +213,14 @@ export async function GET(request: Request) {
 
   if (bankNameOptions) {
     const rows = await db
-      .collection('loanCases')
-      .aggregate([
-        { $match: { tenantId: { $in: [tenantIdObj, tenantIdHex] }, bankName: { $type: 'string' } } },
-        { $project: { bankName: { $trim: { input: '$bankName' } } } },
-        { $match: { bankName: { $ne: '' } } },
-        { $group: { _id: { $toLower: '$bankName' }, value: { $first: '$bankName' } } },
-        { $sort: { value: 1 } },
-        { $project: { _id: 0, value: 1 } }
-      ])
+      .collection('banks')
+      .find({ tenantId: tenantIdObj }, { projection: { name: 1 } })
+      .sort({ name: 1 })
       .toArray()
 
-    return NextResponse.json({ bankNames: rows.map(r => String((r as any).value || '')) })
+    return NextResponse.json({
+      bankNames: rows.map(r => String((r as { name?: string }).name || '')).filter(Boolean)
+    })
   }
 
   if (stagedDateFrom && !parseStageSubmittedDate(stagedDateFrom)) {
@@ -748,12 +745,27 @@ export async function POST(request: Request) {
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))
   const now = new Date()
 
+  let resolvedBankName: string | null = null
+
+  if (bankName) {
+    const bank = await findBankByName(db, tenantIdObj, bankName)
+
+    if (!bank) {
+      return NextResponse.json(
+        { error: 'validation_error', details: { bankName: 'Select a bank from bank master' } },
+        { status: 400 }
+      )
+    }
+
+    resolvedBankName = String((bank as { name?: string }).name || bankName)
+  }
+
   const doc: any = {
     tenantId: tenantIdObj,
     customerId: new ObjectId(customerId),
     loanTypeId: new ObjectId(loanTypeId),
     stageId: new ObjectId(stageId),
-    bankName,
+    bankName: resolvedBankName,
     requestedAmount,
     approvedAmount,
     eligibleAmount,
