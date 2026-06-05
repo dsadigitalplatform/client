@@ -1,0 +1,5 @@
+export { default as AdvocatesList } from './components/AdvocatesList'
+export { default as AdvocatesCreateForm } from './components/AdvocatesCreateForm'
+export * from './hooks/useAdvocates'
+export * from './services/advocatesService'
+export * from './advocates.types'

@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
 
 type EmploymentType = 'SALARIED' | 'SELF_EMPLOYED'
@@ -17,12 +18,8 @@ function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
 
-function isValidCountryCode(v: unknown) {
-  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
-}
-
 function isValidMobile(v: unknown) {
-  return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
+  return typeof v === 'string' && /^[0-9]{8,10}$/.test(v)
 }
 
 const SECONDARY_CONTACT_TYPES: SecondaryContactType[] = ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER']
@@ -67,7 +64,7 @@ function parseSecondaryContacts(input: unknown) {
     const type = row?.type == null ? '' : String(row.type).trim().toUpperCase()
 
     if (!isValidCountryCode(countryCode)) errors[`secondaryContacts.${index}.countryCode`] = 'Invalid country code'
-    if (!isValidMobile(mobile)) errors[`secondaryContacts.${index}.mobile`] = 'Mobile must be 9 or 10 digits'
+    if (!isValidMobile(mobile)) errors[`secondaryContacts.${index}.mobile`] = 'Mobile must be 8 to 10 digits'
     if (!isValidContactType(type)) errors[`secondaryContacts.${index}.type`] = 'Invalid contact type'
 
     return {
@@ -316,7 +313,7 @@ export async function POST(request: Request) {
 
   if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
   if (!isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
-  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
+  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 8 to 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
   if (!['SALARIED', 'SELF_EMPLOYED'].includes(employmentType)) errors.employmentType = 'Invalid employment type'
   if (!['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'].includes(source)) errors.source = 'Invalid source'

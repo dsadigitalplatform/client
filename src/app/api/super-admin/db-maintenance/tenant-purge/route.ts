@@ -20,6 +20,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ result })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'failed' }, { status: 400 })
+    const status = typeof e?.status === 'number' ? e.status : 400
+
+    return NextResponse.json({ error: e?.message || 'failed' }, { status })
   }
 }

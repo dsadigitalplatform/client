@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -44,6 +44,25 @@ const AssociateDetails = ({ id }: Props) => {
     })
 
     const [confirmOpen, setConfirmOpen] = useState(false)
+
+    const associateEditInitialValues = useMemo(
+        () =>
+            data
+                ? {
+                      associateName: data.associateName,
+                      companyName: data.companyName,
+                      associateTypeId: data.associateTypeId,
+                      countryCode: data.countryCode,
+                      mobile: data.mobile,
+                      email: data.email,
+                      payout: data.payout,
+                      code: data.code,
+                      pan: data.pan,
+                      isActive: data.isActive
+                  }
+                : null,
+        [data]
+    )
 
     const fetchData = useCallback(async () => {
         setLoading(true)
@@ -230,24 +249,14 @@ const AssociateDetails = ({ id }: Props) => {
                                 variant='plain'
                                 submitLabel='Update Associate'
                                 redirectOnSuccess
-                                initialValues={{
-                                    associateName: data.associateName,
-                                    companyName: data.companyName,
-                                    associateTypeId: data.associateTypeId,
-                                    countryCode: data.countryCode,
-                                    mobile: data.mobile,
-                                    email: data.email,
-                                    payout: data.payout,
-                                    code: data.code,
-                                    pan: data.pan,
-                                    isActive: data.isActive
-                                }}
+                                initialValues={associateEditInitialValues ?? undefined}
                                 onSubmitOverride={async payload => {
                                     await updateAssociate(id, payload)
                                 }}
                                 onSuccess={() => {
                                     fetchData()
                                     setEditMode(false)
+                                    setToast({ open: true, msg: 'Associate updated successfully', severity: 'success' })
                                 }}
                                 onCancel={() => setEditMode(false)}
                             />
@@ -289,7 +298,13 @@ const AssociateDetails = ({ id }: Props) => {
                     onClose={() => setToast(v => ({ ...v, open: false }))}
                     severity={toast.severity}
                     variant='filled'
-                    icon={<i className='ri-information-line' />}
+                    icon={
+                        toast.severity === 'success' ? (
+                            <i className='ri-checkbox-circle-line' />
+                        ) : (
+                            <i className='ri-close-circle-line' />
+                        )
+                    }
                     sx={{
                         width: '100%',
                         color: 'text.primary',

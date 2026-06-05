@@ -39,15 +39,13 @@ import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { createCustomer, getCustomerByMobile, updateCustomer } from '@features/customers/services/customersService'
-
-const COUNTRY_CODE_OPTIONS = [
-  { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: '+1', iso: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: '+44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+971', iso: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-  { code: '+65', iso: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
-] as const
+import CountryCodeField from '@/components/CountryCodeField'
+import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
+import {
+  isValidMobileDigits,
+  MOBILE_VALIDATION_MESSAGE,
+  normalizeMobileDigits
+} from '@/lib/mobile'
 
 const SECONDARY_CONTACT_TYPE_OPTIONS = [
   { value: 'ALTERNATE', label: 'Alternate' },
@@ -139,14 +137,31 @@ const CustomersCreateForm = ({
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null)
   const lastLookupMobileRef = useRef('')
+  const didHydrateFromInitialValues = useRef(false)
 
   useEffect(() => {
-    if (!initialValues) return
+    if (!initialValues) {
+      didHydrateFromInitialValues.current = false
+
+      return
+    }
+
+    if (didHydrateFromInitialValues.current) return
+
+    didHydrateFromInitialValues.current = true
+
     if (initialValues.fullName != null) setFullName(initialValues.fullName)
-    if (initialValues.mobile != null) setMobile(initialValues.mobile)
+    if (initialValues.mobile != null) setMobile(normalizeMobileDigits(String(initialValues.mobile)))
     if (initialValues.countryCode != null) setCountryCode(initialValues.countryCode)
     if (initialValues.isNRI != null) setIsNRI(Boolean(initialValues.isNRI))
-    if (initialValues.secondaryContacts !== undefined) setSecondaryContacts(initialValues.secondaryContacts || [])
+    if (initialValues.secondaryContacts !== undefined) {
+      setSecondaryContacts(
+        (initialValues.secondaryContacts || []).map(contact => ({
+          ...contact,
+          mobile: normalizeMobileDigits(String(contact.mobile || ''))
+        }))
+      )
+    }
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.dob != null) setDob(initialValues.dob ? initialValues.dob.slice(0, 10) : '')
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
@@ -165,7 +180,7 @@ const CustomersCreateForm = ({
   useEffect(() => {
     if (initialValues) return
 
-    if (!/^[0-9]{9,10}$/.test(mobile)) {
+    if (!isValidMobileDigits(mobile)) {
       setMatchedCustomerId(null)
       lastLookupMobileRef.current = ''
 
@@ -246,8 +261,7 @@ const CustomersCreateForm = ({
   }, [onSuccess, redirectOpen, redirectTarget, router])
 
   // basic client-side validators
-  const isValidMobile = (v: string) => /^[0-9]{9,10}$/.test(v)
-  const isValidCountryCode = (v: string) => /^\+[0-9]{1,4}$/.test(v)
+  const isValidMobile = isValidMobileDigits
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
   const isValidAadhaar = (digits: string) => digits.length === 0 || digits.length === 12
@@ -270,7 +284,27 @@ const CustomersCreateForm = ({
 
   // input normalizers
   const handleMobile = (v: string) => {
-    setMobile(v.replace(/\D/g, '').slice(0, 10))
+    setMobile(normalizeMobileDigits(v))
+  }
+
+  const collectValidationErrors = () => {
+    const errors: Record<string, string> = {}
+
+    if (!isValidCountryCode(countryCode)) errors.countryCode = COUNTRY_CODE_VALIDATION_MESSAGE
+
+    if (!isValidMobile(mobile)) errors.mobile = MOBILE_VALIDATION_MESSAGE
+
+    secondaryContacts.forEach((contact, index) => {
+      if (!isValidCountryCode(contact.countryCode)) {
+        errors[`secondaryContacts.${index}.countryCode`] = COUNTRY_CODE_VALIDATION_MESSAGE
+      }
+
+      if (!isValidMobile(contact.mobile)) {
+        errors[`secondaryContacts.${index}.mobile`] = MOBILE_VALIDATION_MESSAGE
+      }
+    })
+
+    return errors
   }
 
   const handlePAN = (v: string) => {
@@ -306,7 +340,7 @@ const CustomersCreateForm = ({
   }
 
   const handleSecondaryContactMobile = (index: number, value: string) => {
-    const nextMobile = value.replace(/\D/g, '').slice(0, 10)
+    const nextMobile = normalizeMobileDigits(value)
 
     setSecondaryContacts(prev =>
       prev.map((contact, i) => (i === index ? { ...contact, mobile: nextMobile } : contact))
@@ -327,6 +361,15 @@ const CustomersCreateForm = ({
 
   const handleSubmit = async () => {
     setError(null)
+
+    const validationErrors = collectValidationErrors()
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors)
+
+      return
+    }
+
     setFieldErrors({})
     setSubmitting(true)
 
@@ -506,10 +549,6 @@ const CustomersCreateForm = ({
   const isEditing = Boolean(initialValues || matchedCustomerId)
   const mobileTitle = submitLabel || (isEditing ? 'Update Customer' : 'Add Customer')
 
-  const selectedCountry = useMemo(() => {
-    return COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0]
-  }, [countryCode])
-
   const canAddSecondaryContact = secondaryContacts.length < SECONDARY_CONTACT_LIMIT
 
   return useCard ? (
@@ -593,37 +632,24 @@ const CustomersCreateForm = ({
               gap: { xs: 2, sm: 2 }
             }}
           >
-            <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
-              <InputLabel id='customer-country-code-label'>Country Code</InputLabel>
-              <Select
-                labelId='customer-country-code-label'
-                label='Country Code'
-                value={countryCode}
-                onChange={e => setCountryCode(String(e.target.value))}
-                renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
-              >
-                {COUNTRY_CODE_OPTIONS.map(o => (
-                  <MenuItem key={`${o.iso}-${o.code}`} value={o.code}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <span>{o.flag}</span>
-                        <Typography variant='body2'>{o.name}</Typography>
-                      </Box>
-                      <Typography variant='body2' color='text.secondary'>
-                        {o.code}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <CountryCodeField
+              labelId='customer-country-code-label'
+              value={countryCode}
+              onChange={setCountryCode}
+              error={Boolean(fieldErrors.countryCode) || (countryCode.length > 0 && !isValidCountryCode(countryCode))}
+              helperText={
+                fieldErrors.countryCode ||
+                (countryCode.length > 0 && !isValidCountryCode(countryCode) ? COUNTRY_CODE_VALIDATION_MESSAGE : ' ')
+              }
+              sx={{ width: { xs: '100%', sm: 220 } }}
+            />
             <TextField
               label='Mobile'
               value={mobile}
               onChange={e => handleMobile(e.target.value)}
               error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
               helperText={
-                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 9 or 10-digit mobile number' : ' ')
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? MOBILE_VALIDATION_MESSAGE : ' ')
               }
               fullWidth
               required
@@ -689,18 +715,17 @@ const CustomersCreateForm = ({
                   </TableRow>
                 ) : (
                   secondaryContacts.map((contact, index) => {
-                    const contactCountry =
-                      COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
-
                     const typeError = fieldErrors[`secondaryContacts.${index}.type`]
 
                     const countryError =
                       fieldErrors[`secondaryContacts.${index}.countryCode`] ||
-                      (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+                      (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode)
+                        ? COUNTRY_CODE_VALIDATION_MESSAGE
+                        : '')
 
                     const mobileError =
                       fieldErrors[`secondaryContacts.${index}.mobile`] ||
-                      (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+                      (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? MOBILE_VALIDATION_MESSAGE : '')
 
                     return (
                       <TableRow key={`secondary-contact-${index}`}>
@@ -719,36 +744,14 @@ const CustomersCreateForm = ({
                             {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
                           </FormControl>
                         </TableCell>
-                        <TableCell>
-                          <FormControl size='small' fullWidth error={Boolean(countryError)}>
-                            <Select
-                              value={contact.countryCode}
-                              onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
-                              renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
-                            >
-                              {COUNTRY_CODE_OPTIONS.map(option => (
-                                <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
-                                  <Box
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      width: '100%'
-                                    }}
-                                  >
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <span>{option.flag}</span>
-                                      <Typography variant='body2'>{option.name}</Typography>
-                                    </Box>
-                                    <Typography variant='body2' color='text.secondary'>
-                                      {option.code}
-                                    </Typography>
-                                  </Box>
-                                </MenuItem>
-                              ))}
-                            </Select>
-                            {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
-                          </FormControl>
+                        <TableCell sx={{ minWidth: 240 }}>
+                          <CountryCodeField
+                            labelId={`secondary-contact-country-${index}`}
+                            value={contact.countryCode}
+                            onChange={value => handleSecondaryContactCountryCode(index, value)}
+                            error={Boolean(countryError)}
+                            helperText={countryError || ' '}
+                          />
                         </TableCell>
                         <TableCell>
                           <TextField
@@ -1124,37 +1127,24 @@ const CustomersCreateForm = ({
               gap: { xs: 2, sm: 2 }
             }}
           >
-            <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
-              <InputLabel id='customer-country-code-label-plain'>Country Code</InputLabel>
-              <Select
-                labelId='customer-country-code-label-plain'
-                label='Country Code'
-                value={countryCode}
-                onChange={e => setCountryCode(String(e.target.value))}
-                renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
-              >
-                {COUNTRY_CODE_OPTIONS.map(o => (
-                  <MenuItem key={`${o.iso}-${o.code}-plain`} value={o.code}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <span>{o.flag}</span>
-                        <Typography variant='body2'>{o.name}</Typography>
-                      </Box>
-                      <Typography variant='body2' color='text.secondary'>
-                        {o.code}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <CountryCodeField
+              labelId='customer-country-code-label-plain'
+              value={countryCode}
+              onChange={setCountryCode}
+              error={Boolean(fieldErrors.countryCode) || (countryCode.length > 0 && !isValidCountryCode(countryCode))}
+              helperText={
+                fieldErrors.countryCode ||
+                (countryCode.length > 0 && !isValidCountryCode(countryCode) ? COUNTRY_CODE_VALIDATION_MESSAGE : ' ')
+              }
+              sx={{ width: { xs: '100%', sm: 220 } }}
+            />
             <TextField
               label='Mobile'
               value={mobile}
               onChange={e => handleMobile(e.target.value)}
               error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
               helperText={
-                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? 'Enter a 9 or 10-digit mobile number' : ' ')
+                fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? MOBILE_VALIDATION_MESSAGE : ' ')
               }
               fullWidth
               required
@@ -1210,18 +1200,17 @@ const CustomersCreateForm = ({
                 </Box>
               ) : (
                 secondaryContacts.map((contact, index) => {
-                  const contactCountry =
-                    COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
-
                   const typeError = fieldErrors[`secondaryContacts.${index}.type`]
 
                   const countryError =
                     fieldErrors[`secondaryContacts.${index}.countryCode`] ||
-                    (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+                    (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode)
+                      ? COUNTRY_CODE_VALIDATION_MESSAGE
+                      : '')
 
                   const mobileError =
                     fieldErrors[`secondaryContacts.${index}.mobile`] ||
-                    (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+                    (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? MOBILE_VALIDATION_MESSAGE : '')
 
                   return (
                     <Box
@@ -1266,38 +1255,13 @@ const CustomersCreateForm = ({
                         </Select>
                         {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
                       </FormControl>
-                      <FormControl size='small' fullWidth error={Boolean(countryError)}>
-                        <InputLabel id={`secondary-contact-country-${index}`}>Country Code</InputLabel>
-                        <Select
-                          labelId={`secondary-contact-country-${index}`}
-                          label='Country Code'
-                          value={contact.countryCode}
-                          onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
-                          renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
-                        >
-                          {COUNTRY_CODE_OPTIONS.map(option => (
-                            <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
-                              <Box
-                                sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  width: '100%'
-                                }}
-                              >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <span>{option.flag}</span>
-                                  <Typography variant='body2'>{option.name}</Typography>
-                                </Box>
-                                <Typography variant='body2' color='text.secondary'>
-                                  {option.code}
-                                </Typography>
-                              </Box>
-                            </MenuItem>
-                          ))}
-                        </Select>
-                        {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
-                      </FormControl>
+                      <CountryCodeField
+                        labelId={`secondary-contact-country-${index}`}
+                        value={contact.countryCode}
+                        onChange={value => handleSecondaryContactCountryCode(index, value)}
+                        error={Boolean(countryError)}
+                        helperText={countryError || ' '}
+                      />
                       <TextField
                         size='small'
                         label='Mobile'
@@ -1342,18 +1306,17 @@ const CustomersCreateForm = ({
                     </TableRow>
                   ) : (
                     secondaryContacts.map((contact, index) => {
-                      const contactCountry =
-                        COUNTRY_CODE_OPTIONS.find(option => option.code === contact.countryCode) || COUNTRY_CODE_OPTIONS[0]
-
                       const typeError = fieldErrors[`secondaryContacts.${index}.type`]
 
                       const countryError =
                         fieldErrors[`secondaryContacts.${index}.countryCode`] ||
-                        (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode) ? 'Invalid country code' : '')
+                        (contact.countryCode.length > 0 && !isValidCountryCode(contact.countryCode)
+                          ? COUNTRY_CODE_VALIDATION_MESSAGE
+                          : '')
 
                       const mobileError =
                         fieldErrors[`secondaryContacts.${index}.mobile`] ||
-                        (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? 'Enter a 9 or 10-digit mobile number' : '')
+                        (contact.mobile.length > 0 && !isValidMobile(contact.mobile) ? MOBILE_VALIDATION_MESSAGE : '')
 
                       return (
                         <TableRow key={`secondary-contact-${index}`}>
@@ -1372,36 +1335,14 @@ const CustomersCreateForm = ({
                               {typeError ? <FormHelperText>{typeError}</FormHelperText> : null}
                             </FormControl>
                           </TableCell>
-                          <TableCell>
-                            <FormControl size='small' fullWidth error={Boolean(countryError)}>
-                              <Select
-                                value={contact.countryCode}
-                                onChange={e => handleSecondaryContactCountryCode(index, String(e.target.value))}
-                                renderValue={() => `${contactCountry.flag} ${contactCountry.code}`}
-                              >
-                                {COUNTRY_CODE_OPTIONS.map(option => (
-                                  <MenuItem key={`${option.iso}-${option.code}-secondary`} value={option.code}>
-                                    <Box
-                                      sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        width: '100%'
-                                      }}
-                                    >
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <span>{option.flag}</span>
-                                        <Typography variant='body2'>{option.name}</Typography>
-                                      </Box>
-                                      <Typography variant='body2' color='text.secondary'>
-                                        {option.code}
-                                      </Typography>
-                                    </Box>
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                              {countryError ? <FormHelperText>{countryError}</FormHelperText> : null}
-                            </FormControl>
+                          <TableCell sx={{ minWidth: 240 }}>
+                            <CountryCodeField
+                              labelId={`secondary-contact-country-plain-${index}`}
+                              value={contact.countryCode}
+                              onChange={value => handleSecondaryContactCountryCode(index, value)}
+                              error={Boolean(countryError)}
+                              helperText={countryError || ' '}
+                            />
                           </TableCell>
                           <TableCell>
                             <TextField

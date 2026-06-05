@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -59,6 +59,30 @@ const CustomerDetails = ({ id }: Props) => {
   })
 
   const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const customerEditInitialValues = useMemo(
+    () =>
+      data
+        ? {
+            fullName: data.fullName,
+            countryCode: data.countryCode,
+            mobile: data.mobile,
+            isNRI: data.isNRI,
+            secondaryContacts: data.secondaryContacts,
+            email: data.email,
+            dob: data.dob,
+            pan: data.pan,
+            aadhaarMasked: data.aadhaarMasked,
+            address: data.address,
+            remarks: data.remarks,
+            employmentType: data.employmentType,
+            source: data.source,
+            monthlyIncome: data.monthlyIncome,
+            cibilScore: data.cibilScore
+          }
+        : null,
+    [data]
+  )
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 
@@ -430,23 +454,7 @@ const CustomerDetails = ({ id }: Props) => {
                 variant='plain'
                 submitLabel='Update Customer'
                 redirectOnSuccess
-                initialValues={{
-                  fullName: data.fullName,
-                  countryCode: data.countryCode,
-                  mobile: data.mobile,
-                  isNRI: data.isNRI,
-                  secondaryContacts: data.secondaryContacts,
-                  email: data.email,
-                  dob: data.dob,
-                  pan: data.pan,
-                  aadhaarMasked: data.aadhaarMasked,
-                  address: data.address,
-                  remarks: data.remarks,
-                  employmentType: data.employmentType,
-                  source: data.source,
-                  monthlyIncome: data.monthlyIncome,
-                  cibilScore: data.cibilScore
-                }}
+                initialValues={customerEditInitialValues ?? undefined}
                 onSubmitOverride={async payload => {
                   await updateCustomer(id, payload)
                 }}

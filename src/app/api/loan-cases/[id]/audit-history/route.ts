@@ -32,6 +32,19 @@ function toNullableText(value: unknown) {
   return text.length > 0 ? text : null
 }
 
+function formatStageSubmittedDate(value: unknown) {
+  const raw = toNullableText(value)
+
+  if (!raw) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+
+  const date = new Date(`${raw}T12:00:00.000Z`)
+
+  if (Number.isNaN(date.getTime())) return raw
+
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 function resolveAction(row: any) {
   const direct = String((row as any)?.action || '')
   const requested = toNullableText((row as any)?.metadata?.requestedAction)
@@ -64,6 +77,7 @@ function buildChanges(action: string, metadata: any) {
       { label: 'Customer', from: null, to: null, value: toNullableText(metadata?.customerName) || toNullableText(metadata?.customerId) },
       { label: 'Loan Type', from: null, to: null, value: toNullableText(metadata?.loanTypeName) || toNullableText(metadata?.loanTypeId) },
       { label: 'Status', from: null, to: null, value: toNullableText(metadata?.stageName) || toNullableText(metadata?.stageId) },
+      { label: 'Stage date', from: null, to: null, value: formatStageSubmittedDate(metadata?.stageSubmittedDate) },
       {
         label: 'Assigned Agent',
         from: null,
@@ -110,6 +124,12 @@ function buildChanges(action: string, metadata: any) {
         from: toNullableText(metadata?.fromStageName) || toNullableText(metadata?.fromStageId),
         to: toNullableText(metadata?.toStageName) || toNullableText(metadata?.toStageId),
         value: null
+      },
+      {
+        label: 'Stage date',
+        from: null,
+        to: null,
+        value: formatStageSubmittedDate(metadata?.stageSubmittedDate)
       }
     ].filter(c => c.value || c.from || c.to)
   }

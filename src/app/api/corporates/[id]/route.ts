@@ -1,0 +1,181 @@
+export const dynamic = 'force-dynamic'
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+
+import { getServerSession } from 'next-auth'
+import { ObjectId } from 'mongodb'
+
+import { authOptions } from '@/lib/auth'
+import { getDb } from '@/lib/mongodb'
+import { DUPLICATE_CORPORATE_CODE_ERROR, findDuplicateCorporateCode, normalizeCorporateCode } from '../_helpers'
+
+function isNonEmptyString(v: unknown, min = 1) {
+  return typeof v === 'string' && v.trim().length >= min
+}
+
+async function getRequestContext(session: any) {
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const sessionTenantId = String((session as any).currentTenantId || '')
+  const currentTenantId = cookieTenantId || sessionTenantId
+
+  if (!currentTenantId) return { error: NextResponse.json({ error: 'tenant_required' }, { status: 400 }) }
+  if (!ObjectId.isValid(currentTenantId)) return { error: NextResponse.json({ error: 'invalid_tenant' }, { status: 400 }) }
+
+  const db = await getDb()
+  const tenantIdObj = new ObjectId(currentTenantId)
+  const userId = new ObjectId(session.userId)
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin)
+  let role: 'OWNER' | 'ADMIN' | 'USER' = 'USER'
+
+  if (!isSuperAdmin) {
+    const userEmail = String((session as any)?.user?.email || '')
+
+    const emailFilter =
+      userEmail && userEmail.length > 0
+        ? { email: { $regex: `^${userEmail.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, $options: 'i' } }
+        : undefined
+
+    const orFilters = [{ userId }] as any[]
+
+    if (emailFilter) orFilters.push(emailFilter)
+
+    const membership = await db
+      .collection('memberships')
+      .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
+
+    if (!membership) return { error: NextResponse.json({ error: 'not_member' }, { status: 403 }) }
+    role = String((membership as any).role || 'USER') as 'OWNER' | 'ADMIN' | 'USER'
+  }
+
+  return { db, tenantIdObj, userId, role, isSuperAdmin }
+}
+
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { id } = await ctx.params
+
+  if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role, isSuperAdmin } = context
+  const row = await db.collection('corporates').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
+
+  if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  const createdByRaw = (row as any).createdBy
+
+  const createdById =
+    createdByRaw && typeof createdByRaw === 'object' && typeof createdByRaw.toHexString === 'function'
+      ? createdByRaw.toHexString()
+      : String(createdByRaw || '')
+
+  const canManage = isSuperAdmin || role === 'ADMIN' || role === 'OWNER' || createdById === userId.toHexString()
+
+  const data = {
+    id: String((row as any)._id),
+    code: String((row as any).code || ''),
+    name: String((row as any).name || ''),
+    isActive: Boolean((row as any).isActive),
+    createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
+    canManage
+  }
+
+  return NextResponse.json(data)
+}
+
+export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { id } = await ctx.params
+
+  if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role, isSuperAdmin } = context
+  const body = await request.json().catch(() => ({}))
+
+  const patch: any = {}
+
+  if (body.code != null) patch.code = String(body.code).trim()
+  if (body.name != null) patch.name = String(body.name).trim()
+  if (typeof body?.isActive === 'boolean') patch.isActive = body.isActive
+  patch.updatedAt = new Date()
+
+  const errors: Record<string, string> = {}
+
+  if (patch.code != null && !isNonEmptyString(patch.code)) errors.code = 'Code is required'
+  if (patch.name != null && !isNonEmptyString(patch.name, 2)) errors.name = 'Name must be at least 2 characters'
+  if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
+
+  if (patch.code != null) {
+    const duplicate = await findDuplicateCorporateCode(db, tenantIdObj, patch.code, new ObjectId(id))
+
+    if (duplicate) {
+      return NextResponse.json(DUPLICATE_CORPORATE_CODE_ERROR, { status: 409 })
+    }
+
+    patch.codeNormalized = normalizeCorporateCode(patch.code)
+  }
+
+  try {
+    const userScopedFilter =
+      isSuperAdmin || role === 'ADMIN' || role === 'OWNER'
+        ? {}
+        : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
+
+    const res = await db
+      .collection('corporates')
+      .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { $set: patch })
+
+    if (res.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    if (err && err.code === 11000) {
+      return NextResponse.json(DUPLICATE_CORPORATE_CODE_ERROR, { status: 409 })
+    }
+
+    return NextResponse.json({ error: 'unknown_error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { id } = await ctx.params
+
+  if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
+  const context = await getRequestContext(session as any)
+
+  if ('error' in context) return context.error
+
+  const { db, tenantIdObj, userId, role, isSuperAdmin } = context
+
+  const userScopedFilter =
+    isSuperAdmin || role === 'ADMIN' || role === 'OWNER'
+      ? {}
+      : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
+
+  const res = await db.collection('corporates').updateOne(
+    { _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter },
+    {
+      $set: {
+        isActive: false,
+        updatedAt: new Date()
+      }
+    }
+  )
+
+  if (res.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  return NextResponse.json({ ok: true })
+}

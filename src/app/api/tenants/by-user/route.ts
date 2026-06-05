@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 import { getDb } from '@/lib/mongodb'
 
 type Role = 'OWNER' | 'ADMIN' | 'USER'
@@ -26,10 +27,18 @@ export async function GET() {
 
   if (emailFilter) orFilters.push(emailFilter)
 
-  const memberships = await db
+  let memberships = await db
     .collection('memberships')
     .find({ status: 'active', $or: orFilters }, { projection: { tenantId: 1, role: 1 } })
     .toArray()
+
+  if ((session as any).isDemoMode && isDemoLoginEnabled()) {
+    const demoTenantId = getDemoTenantIdOrNull()
+
+    if (demoTenantId) {
+      memberships = memberships.filter(m => (m.tenantId as ObjectId).toHexString() === demoTenantId)
+    }
+  }
 
   const tenantIds = memberships.map(m => m.tenantId as ObjectId)
 

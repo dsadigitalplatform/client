@@ -6,18 +6,15 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
 
 function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
 
-function isValidCountryCode(v: unknown) {
-  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
-}
-
 function isValidMobile(v: unknown) {
-  return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
+  return typeof v === 'string' && /^[0-9]{8,10}$/.test(v)
 }
 
 function isValidPAN(v: unknown) {
@@ -234,7 +231,7 @@ export async function POST(request: Request) {
   if (companyName.length < 2) errors.companyName = 'Company name must be at least 2 characters'
   if (!ObjectId.isValid(associateTypeIdRaw)) errors.associateTypeId = 'Associate type is required'
   if (!isValidCountryCode(countryCode)) errors.countryCode = 'Invalid country code'
-  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
+  if (!isValidMobile(mobile)) errors.mobile = 'Mobile must be 8 to 10 digits'
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
   if (!isValidPAN(pan)) errors.pan = 'Invalid PAN format'
   if (payout != null && !isValidPayout(payout)) errors.payout = 'Payout must be between 0 and 100'

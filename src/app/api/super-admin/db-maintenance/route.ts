@@ -33,7 +33,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid_collection' }, { status: 400 })
   }
 
-  const result = await clearDbMaintenanceCollection(collection)
+  try {
+    const result = await clearDbMaintenanceCollection(collection)
 
-  return NextResponse.json({ result })
+    return NextResponse.json({ result })
+  } catch (e: any) {
+    const status = typeof e?.status === 'number' ? e.status : 400
+
+    return NextResponse.json({ error: e?.message || 'failed' }, { status })
+  }
 }

@@ -19,6 +19,8 @@ declare module 'next-auth' {
     tenantIds?: string[]
     currentTenantId?: string
     isSuperAdmin?: boolean
+    isDemoMode?: boolean
+    demoMode?: boolean
     impersonation?: ImpersonationSession
     impersonationStartNonce?: string
     impersonationStop?: boolean
@@ -43,6 +45,7 @@ declare module 'next-auth/jwt' {
     tenantIds?: string[]
     currentTenantId?: string
     isSuperAdmin?: boolean
+    isDemoMode?: boolean
     impersonation?: JWTImpersonation
   }
 }

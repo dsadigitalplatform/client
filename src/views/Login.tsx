@@ -29,7 +29,15 @@ import themeConfig from '@configs/themeConfig'
 import { useImageVariant } from '@core/hooks/useImageVariant'
 import { useSettings } from '@core/hooks/useSettings'
 
-const LoginV2 = ({ mode, callbackUrl }: { mode: Mode; callbackUrl?: string }) => {
+const LoginV2 = ({
+  mode,
+  callbackUrl,
+  demoLoginEnabled = false
+}: {
+  mode: Mode
+  callbackUrl?: string
+  demoLoginEnabled?: boolean
+}) => {
   // Vars
   const darkImg = '/images/pages/auth-v2-mask-dark.png'
   const lightImg = '/images/pages/auth-v2-mask-light.png'
@@ -68,7 +76,21 @@ const LoginV2 = ({ mode, callbackUrl }: { mode: Mode; callbackUrl?: string }) =>
 
     await signIn('google', { callbackUrl: url })
   }
-  
+
+  const handleDemo = async () => {
+    let url = '/post-login?demo=1'
+
+    if (typeof window !== 'undefined') {
+      try {
+        url = new URL(url, window.location.origin).toString()
+      } catch {
+        url = '/post-login?demo=1'
+      }
+    }
+
+    await signIn('google', { callbackUrl: url })
+  }
+
   const handleFacebook = () => {
     router.push('/')
   }
@@ -127,6 +149,21 @@ const LoginV2 = ({ mode, callbackUrl }: { mode: Mode; callbackUrl?: string }) =>
             >
               Continue with Google
             </Button>
+            {demoLoginEnabled && (
+              <Button
+                fullWidth
+                variant='outlined'
+                onClick={handleDemo}
+                startIcon={<i className='ri-flask-line' />}
+                sx={{
+                  py: 2,
+                  borderColor: 'var(--mui-palette-primary-main)',
+                  color: 'var(--mui-palette-primary-main)'
+                }}
+              >
+                Try demo organisation
+              </Button>
+            )}
             <Button
               fullWidth
               variant='contained'

@@ -15,6 +15,9 @@ export type GetLoanCasesParams = {
   loanTypeId?: string
   bankName?: string
   showInactive?: boolean
+  stagedDateFrom?: string
+  stagedDateTo?: string
+  progressivePaymentFilter?: 'ready_to_track' | 'tracking_active'
 }
 
 export async function getLoanCases(params: GetLoanCasesParams = {}) {
@@ -26,6 +29,9 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.loanTypeId) url.searchParams.set('loanTypeId', params.loanTypeId)
   if (params.bankName) url.searchParams.set('bankName', params.bankName)
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
+  if (params.stagedDateFrom) url.searchParams.set('stagedDateFrom', params.stagedDateFrom)
+  if (params.stagedDateTo) url.searchParams.set('stagedDateTo', params.stagedDateTo)
+  if (params.progressivePaymentFilter) url.searchParams.set('progressivePaymentFilter', params.progressivePaymentFilter)
 
   const res = await fetch(url.toString(), { cache: 'no-store' })
 
@@ -108,11 +114,11 @@ export async function updateLoanCase(id: string, body: UpdateLoanCaseInput) {
   return data as { ok: true }
 }
 
-export async function updateCaseStage(caseId: string, newStageId: string) {
+export async function updateCaseStage(caseId: string, newStageId: string, stageSubmittedDate: string) {
   const res = await fetch(`/api/loan-cases/${caseId}/stage`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ newStageId })
+    body: JSON.stringify({ newStageId, stageSubmittedDate })
   })
 
   const data = await res.json().catch(() => ({}))

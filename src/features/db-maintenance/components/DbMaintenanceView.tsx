@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -26,13 +27,49 @@ import MenuItem from '@mui/material/MenuItem'
 import { useTheme } from '@mui/material/styles'
 
 import { dbMaintenanceService } from '../services/dbMaintenanceService'
-import type {
-  DbMaintenanceCollectionInfo,
-  DbMaintenanceCreatorOption,
-  DbMaintenanceDocumentPreview,
-  DbMaintenanceTenantInfo,
-  DbMaintenanceTenantPurgeResult
+import {
+  DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS,
+  DB_MAINTENANCE_UI_HIDDEN_GROUPS,
+  isDbMaintenanceCollectionDeletable,
+  type DbMaintenanceCollectionInfo,
+  type DbMaintenanceCreatorOption,
+  type DbMaintenanceDocumentPreview,
+  type DbMaintenanceTenantInfo,
+  type DbMaintenanceTenantPurgeResult
 } from '../db-maintenance.types'
+
+const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Other'] as const
+
+const hiddenUiGroups = new Set<string>(DB_MAINTENANCE_UI_HIDDEN_GROUPS)
+
+function supportsCreatorFilterCollection(name: string) {
+  return (DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS as readonly string[]).includes(name)
+}
+
+function RecordPreviewContent({ record }: { record: DbMaintenanceDocumentPreview }) {
+  const title = record.title || record.summary || 'Record'
+  const details = Array.isArray(record.details) ? record.details : []
+
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant='subtitle2' sx={{ fontWeight: 700, lineHeight: 1.35 }}>
+        {title}
+      </Typography>
+      {details.map(line => (
+        <Typography key={line} variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.4, mt: 0.25 }}>
+          {line}
+        </Typography>
+      ))}
+      <Typography
+        variant='caption'
+        color='text.disabled'
+        sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace', fontSize: '0.7rem', wordBreak: 'break-all' }}
+      >
+        {record.id}
+      </Typography>
+    </Box>
+  )
+}
 
 export const DbMaintenanceView = () => {
   const [collections, setCollections] = useState<DbMaintenanceCollectionInfo[]>([])
@@ -80,10 +117,38 @@ export const DbMaintenanceView = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const selectedInfo = useMemo(() => collections.find(c => c.name === selected) || null, [collections, selected])
+  const selectedCollectionDeletable = useMemo(
+    () => (selectedInfo ? selectedInfo.deletable : selected ? isDbMaintenanceCollectionDeletable(selected) : false),
+    [selectedInfo, selected]
+  )
   const selectedIds = useMemo(() => Object.keys(recordSelections).filter(k => recordSelections[k]), [recordSelections])
   const selectedTenant = useMemo(() => tenants.find(t => t.id === selectedTenantId) || null, [tenants, selectedTenantId])
-  const supportsCreatorFilter = selected === 'loanCases' || selected === 'appointments'
+  const supportsCreatorFilter = supportsCreatorFilterCollection(selected)
   const selectedCreator = useMemo(() => creators.find(c => c.id === selectedCreatedById) || null, [creators, selectedCreatedById])
+
+  const groupedCollections = useMemo(() => {
+    const byGroup = new Map<string, DbMaintenanceCollectionInfo[]>()
+
+    collections.forEach(c => {
+      const group = c.group || 'Other'
+
+      if (hiddenUiGroups.has(group)) return
+
+      const list = byGroup.get(group) || []
+
+      list.push(c)
+      byGroup.set(group, list)
+    })
+
+    const orderedGroups = [
+      ...COLLECTION_GROUP_ORDER.filter(g => byGroup.has(g)),
+      ...Array.from(byGroup.keys()).filter(g => !COLLECTION_GROUP_ORDER.includes(g as (typeof COLLECTION_GROUP_ORDER)[number]))
+    ]
+
+    return orderedGroups.map(group => ({ group, items: byGroup.get(group) || [] }))
+  }, [collections])
+
+  const selectedCollectionLabel = selectedInfo?.label || selected
 
   const load = async () => {
     setLoading(true)
@@ -112,6 +177,7 @@ export const DbMaintenanceView = () => {
 
       setTenants(list)
       if (selectedTenantId && !list.some(t => t.id === selectedTenantId)) setSelectedTenantId('')
+      if (!selectedTenantId && list.length > 0) setSelectedTenantId(list[0].id)
     } catch (e: any) {
       setTenantError(e?.message || 'Failed to load tenants')
     } finally {
@@ -203,8 +269,7 @@ export const DbMaintenanceView = () => {
     setRecordsError(null)
 
     try {
-      const creatorFilteringEnabled =
-        (collectionName === 'loanCases' || collectionName === 'appointments') && Boolean(selectedCreatedById)
+      const creatorFilteringEnabled = supportsCreatorFilterCollection(collectionName) && Boolean(selectedCreatedById)
 
       const cursor = reset ? null : recordsNextCursor
 
@@ -231,7 +296,7 @@ export const DbMaintenanceView = () => {
   }
 
   const loadCreators = async (collectionName: string) => {
-    if (!(collectionName === 'loanCases' || collectionName === 'appointments')) {
+    if (!supportsCreatorFilterCollection(collectionName)) {
       setCreators([])
       setSelectedCreatedById('')
       setCreatorsError(null)
@@ -375,11 +440,16 @@ export const DbMaintenanceView = () => {
 
   return (
     <Box className='flex flex-col gap-4'>
+      <Alert severity='info' sx={{ borderRadius: 2 }}>
+        Deletions are limited to the demo organisation configured in <code>DEMO_TENANT_ID</code>. Platform data is managed via tenant
+        purge only and is not shown here.
+      </Alert>
+
       <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 2 }}>
           <Typography variant='h6'>Tools</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Database maintenance tools for super admins.
+            Database maintenance tools for super admins. Only demo tenant data can be deleted.
           </Typography>
         </CardContent>
       </Card>
@@ -389,7 +459,8 @@ export const DbMaintenanceView = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant='h6'>Tenant Maintenance</Typography>
             <Typography variant='body2' color='text.secondary'>
-              Purge all records for a tenant. Users are removed only if they are not super admins and not part of other tenants.
+              Purge all operational data for the demo organisation only. The demo tenant record is kept. Users are removed only if they are
+              not super admins and not part of other tenants.
             </Typography>
           </Box>
 
@@ -463,7 +534,7 @@ export const DbMaintenanceView = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
               <Typography variant='h6'>Collections</Typography>
               <Typography variant='body2' color='text.secondary'>
-                Select a collection and clear all documents.
+                Select a collection and clear demo tenant documents only.
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
@@ -482,10 +553,10 @@ export const DbMaintenanceView = () => {
                 color='error'
                 variant='contained'
                 onClick={openConfirm}
-                disabled={!selected || loading || clearing}
+                disabled={!selected || !selectedCollectionDeletable || loading || clearing}
                 fullWidth={isMobile}
               >
-                Clear Selected
+                Clear Demo Data
               </Button>
             </Box>
           </Box>
@@ -497,110 +568,115 @@ export const DbMaintenanceView = () => {
             </Typography>
           )}
 
-          {isMobile ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              {loading ? (
-                <Typography variant='body2' color='text.secondary'>
-                  Loading...
-                </Typography>
-              ) : collections.length === 0 ? (
-                <Typography variant='body2' color='text.secondary'>
-                  No collections found.
-                </Typography>
-              ) : (
-                collections.map(c => (
-                  <Card
-                    key={c.name}
-                    sx={{
-                      borderRadius: 3,
-                      boxShadow: 'none',
-                      border: '1px solid',
-                      borderColor: selected === c.name ? 'primary.main' : 'divider'
-                    }}
-                  >
-                    <CardContent sx={{ p: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Button
-                            variant='text'
-                            onClick={() => openRecords(c.name)}
-                            sx={{ px: 0, minWidth: 0, justifyContent: 'flex-start', textAlign: 'left' }}
-                          >
-                            <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
-                              {c.name}
-                            </Typography>
-                          </Button>
-                          <Typography variant='body2' color='text.secondary'>
-                            {c.exists ? `Docs: ${c.documentCount}` : 'Not created yet'}
-                          </Typography>
-                        </Box>
-                        <Button
-                          size='small'
-                          variant={selected === c.name ? 'contained' : 'outlined'}
-                          onClick={() => setSelected(c.name)}
-                        >
-                          {selected === c.name ? 'Selected' : 'Select'}
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </Box>
+          {loading ? (
+            <Typography variant='body2' color='text.secondary'>
+              Loading...
+            </Typography>
+          ) : collections.length === 0 ? (
+            <Typography variant='body2' color='text.secondary'>
+              No collections found.
+            </Typography>
           ) : (
-            <Table size='small'>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Selected</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell align='right'>Docs</TableCell>
-                  <TableCell align='right'>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={4}>Loading...</TableCell>
-                  </TableRow>
-                ) : collections.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4}>No collections found.</TableCell>
-                  </TableRow>
-                ) : (
-                  collections.map(c => (
-                    <TableRow
-                      key={c.name}
-                      hover
-                      selected={selected === c.name}
-                      sx={{ cursor: 'default' }}
-                    >
-                      <TableCell>
-                        <Button
-                          size='small'
-                          variant={selected === c.name ? 'contained' : 'outlined'}
-                          onClick={() => setSelected(c.name)}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {groupedCollections.map(({ group, items }) => (
+                <Box key={group}>
+                  <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 1 }}>
+                    {group}
+                  </Typography>
+
+                  {isMobile ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                      {items.map(c => (
+                        <Card
+                          key={c.name}
+                          sx={{
+                            borderRadius: 2.5,
+                            boxShadow: 'none',
+                            border: '1px solid',
+                            borderColor: selected === c.name ? 'primary.main' : 'divider'
+                          }}
                         >
-                          {selected === c.name ? 'Selected' : 'Select'}
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant='text' onClick={() => openRecords(c.name)} sx={{ px: 0, minWidth: 0 }}>
-                          {c.name}
-                        </Button>
-                      </TableCell>
-                      <TableCell align='right'>{c.exists ? c.documentCount : '-'}</TableCell>
-                      <TableCell align='right'>{c.exists ? 'Ready' : 'Missing'}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Button
+                                  variant='text'
+                                  onClick={() => openRecords(c.name)}
+                                  sx={{ px: 0, minWidth: 0, justifyContent: 'flex-start', textAlign: 'left' }}
+                                >
+                                  <Typography variant='subtitle2' sx={{ fontWeight: 600 }}>
+                                    {c.label}
+                                  </Typography>
+                                </Button>
+                                <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
+                                  {c.name}
+                                </Typography>
+                                <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                                  {c.exists ? `${c.documentCount} documents` : 'Collection not created yet'}
+                                </Typography>
+                              </Box>
+                              <Button
+                                size='small'
+                                variant={selected === c.name ? 'contained' : 'outlined'}
+                                onClick={() => setSelected(c.name)}
+                              >
+                                {selected === c.name ? 'Selected' : 'Select'}
+                              </Button>
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Table size='small' sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell width={120}>Select</TableCell>
+                          <TableCell>Screen</TableCell>
+                          <TableCell>Collection</TableCell>
+                          <TableCell align='right'>Docs</TableCell>
+                          <TableCell align='right'>Status</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {items.map(c => (
+                          <TableRow key={c.name} hover selected={selected === c.name}>
+                            <TableCell>
+                              <Button
+                                size='small'
+                                variant={selected === c.name ? 'contained' : 'outlined'}
+                                onClick={() => setSelected(c.name)}
+                              >
+                                {selected === c.name ? 'Selected' : 'Select'}
+                              </Button>
+                            </TableCell>
+                            <TableCell>
+                              <Button variant='text' onClick={() => openRecords(c.name)} sx={{ px: 0, minWidth: 0, fontWeight: 600 }}>
+                                {c.label}
+                              </Button>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant='caption' color='text.secondary'>
+                                {c.name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align='right'>{c.exists ? c.documentCount : '—'}</TableCell>
+                            <TableCell align='right'>{c.exists ? 'Ready' : 'Missing'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Box>
+              ))}
+            </Box>
           )}
 
           {selectedInfo && (
             <Typography variant='body2' color='text.secondary'>
-              Selected: {selectedInfo.name}
-              {selectedInfo.exists ? ` (Docs: ${selectedInfo.documentCount})` : ' (Not created yet)'}
+              Selected: {selectedCollectionLabel} ({selectedInfo.name})
+              {selectedInfo.exists ? ` — ${selectedInfo.documentCount} demo documents` : ' — collection not created yet'}
+              {!selectedCollectionDeletable ? ' — clear/delete disabled (platform collection)' : ''}
             </Typography>
           )}
         </CardContent>
@@ -611,7 +687,7 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Clear Collection</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all documents in: <strong>{selected || '-'}</strong>
+            This will permanently delete all <strong>demo tenant</strong> documents in: <strong>{selected || '-'}</strong>
           </Typography>
           <Typography variant='body2' color='text.secondary'>
             Type the collection name to confirm.
@@ -664,8 +740,8 @@ export const DbMaintenanceView = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={recordsOpen} onClose={closeRecords} fullWidth maxWidth='md' fullScreen={isMobile}>
-        <DialogTitle>Records: {selected || '-'}</DialogTitle>
+      <Dialog open={recordsOpen} onClose={closeRecords} fullWidth maxWidth='lg' fullScreen={isMobile}>
+        <DialogTitle>Records: {selectedCollectionLabel}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           {recordsError && <Typography color='error'>{recordsError}</Typography>}
           {creatorsError && <Typography color='error'>{creatorsError}</Typography>}
@@ -710,7 +786,13 @@ export const DbMaintenanceView = () => {
                 color='error'
                 variant='contained'
                 onClick={openDeleteSelectedConfirm}
-                disabled={selectedIds.length === 0 || recordsLoading || deletingSelected || deletingByUser}
+                disabled={
+                  !selectedCollectionDeletable ||
+                  selectedIds.length === 0 ||
+                  recordsLoading ||
+                  deletingSelected ||
+                  deletingByUser
+                }
                 fullWidth={isMobile}
               >
                 Delete Selected
@@ -720,7 +802,13 @@ export const DbMaintenanceView = () => {
                   color='error'
                   variant='outlined'
                   onClick={openDeleteByUserConfirm}
-                  disabled={!selectedCreatedById || recordsLoading || deletingSelected || deletingByUser}
+                  disabled={
+                    !selectedCollectionDeletable ||
+                    !selectedCreatedById ||
+                    recordsLoading ||
+                    deletingSelected ||
+                    deletingByUser
+                  }
                   fullWidth={isMobile}
                 >
                   Delete By User
@@ -741,14 +829,7 @@ export const DbMaintenanceView = () => {
                   <CardContent sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
                       <Checkbox checked={Boolean(recordSelections[r.id])} onChange={() => toggleRecord(r.id)} />
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant='subtitle2' sx={{ wordBreak: 'break-word' }}>
-                          {r.id}
-                        </Typography>
-                        <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
-                          {r.summary || '-'}
-                        </Typography>
-                      </Box>
+                      <RecordPreviewContent record={r} />
                     </Box>
                   </CardContent>
                 </Card>
@@ -759,27 +840,27 @@ export const DbMaintenanceView = () => {
               <TableHead>
                 <TableRow>
                   <TableCell padding='checkbox' />
-                  <TableCell>ID</TableCell>
-                  <TableCell>Summary</TableCell>
+                  <TableCell>Record</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {recordsLoading && records.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3}>Loading...</TableCell>
+                    <TableCell colSpan={2}>Loading...</TableCell>
                   </TableRow>
                 ) : records.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3}>No records found.</TableCell>
+                    <TableCell colSpan={2}>No records found.</TableCell>
                   </TableRow>
                 ) : (
                   records.map(r => (
                     <TableRow key={r.id} hover onClick={() => toggleRecord(r.id)} sx={{ cursor: 'pointer' }}>
-                      <TableCell padding='checkbox'>
+                      <TableCell padding='checkbox' sx={{ verticalAlign: 'top' }}>
                         <Checkbox checked={Boolean(recordSelections[r.id])} />
                       </TableCell>
-                      <TableCell sx={{ maxWidth: 280, wordBreak: 'break-word' }}>{r.id}</TableCell>
-                      <TableCell sx={{ wordBreak: 'break-word' }}>{r.summary || '-'}</TableCell>
+                      <TableCell sx={{ verticalAlign: 'top' }}>
+                        <RecordPreviewContent record={r} />
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -812,7 +893,7 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Delete Selected Records</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete {selectedIds.length} selected record(s) from: <strong>{selected || '-'}</strong>
+            This will permanently delete {selectedIds.length} selected record(s) from: <strong>{selectedCollectionLabel}</strong>
           </Typography>
           <Typography variant='body2' color='text.secondary'>Type DELETE to confirm.</Typography>
           <TextField
@@ -836,7 +917,7 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Delete Records By User</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all records from <strong>{selected || '-'}</strong> created by:{' '}
+            This will permanently delete all records from <strong>{selectedCollectionLabel}</strong> created by:{' '}
             <strong>{selectedCreator ? `${selectedCreator.name}${selectedCreator.email ? ` (${selectedCreator.email})` : ''}` : '-'}</strong>
           </Typography>
           <Typography variant='body2' color='text.secondary'>Type DELETE to confirm.</Typography>

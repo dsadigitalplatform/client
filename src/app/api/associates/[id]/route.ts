@@ -6,18 +6,15 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
 
 function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
 }
 
-function isValidCountryCode(v: unknown) {
-  return typeof v === 'string' && /^\+[0-9]{1,4}$/.test(v)
-}
-
 function isValidMobile(v: unknown) {
-  return typeof v === 'string' && /^[0-9]{9,10}$/.test(v)
+  return typeof v === 'string' && /^[0-9]{8,10}$/.test(v)
 }
 
 function isValidPAN(v: unknown) {
@@ -205,7 +202,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (patch.associateTypeId != null && !ObjectId.isValid(patch.associateTypeId))
     errors.associateTypeId = 'Associate type is required'
   if (patch.countryCode != null && !isValidCountryCode(patch.countryCode)) errors.countryCode = 'Invalid country code'
-  if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 9 or 10 digits'
+  if (patch.mobile != null && !isValidMobile(patch.mobile)) errors.mobile = 'Mobile must be 8 to 10 digits'
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'
   if (patch.payout != null && !isValidPayout(patch.payout)) errors.payout = 'Payout must be between 0 and 100'

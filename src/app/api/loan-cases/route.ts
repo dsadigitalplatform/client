@@ -7,8 +7,22 @@ import { ObjectId } from 'mongodb'
 
 import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
 
+import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
+import {
+  buildDisbursementTrackerLookupStage,
+  buildProgressivePaymentReadyToTrackMatchStage,
+  buildProgressivePaymentTrackingActiveMatchStage,
+  isProgressivePaymentListFilterMode
+} from '@features/loan-cases/utils/progressivePaymentListFilter'
+import {
+  buildStagedDateAuditExistsMatchStage,
+  buildStagedDateAuditFlattenStage,
+  buildStagedDateAuditLookupStage
+} from '@features/loan-cases/utils/stageAuditDate'
+
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { findBankByName } from '@/app/api/banks/_helpers'
 
 const AUDIT_ACTIONS = {
   leadCreated: 'LEAD_CREATED'
@@ -71,7 +85,7 @@ function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 }
 
-const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE'] as const
+const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
 
 type LeadSource = (typeof LEAD_SOURCE_VALUES)[number]
 
@@ -191,24 +205,37 @@ export async function GET(request: Request) {
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
   const bankName = url.searchParams.get('bankName') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
+  const stagedDateFrom = url.searchParams.get('stagedDateFrom') || ''
+  const stagedDateTo = url.searchParams.get('stagedDateTo') || ''
+  const progressivePaymentFilter = url.searchParams.get('progressivePaymentFilter') || ''
   const bankNameOptions = url.searchParams.get('bankNameOptions') === 'true'
   const tenantIdHex = tenantIdObj.toHexString()
 
   if (bankNameOptions) {
     const rows = await db
-      .collection('loanCases')
-      .aggregate([
-        { $match: { tenantId: { $in: [tenantIdObj, tenantIdHex] }, bankName: { $type: 'string' } } },
-        { $project: { bankName: { $trim: { input: '$bankName' } } } },
-        { $match: { bankName: { $ne: '' } } },
-        { $group: { _id: { $toLower: '$bankName' }, value: { $first: '$bankName' } } },
-        { $sort: { value: 1 } },
-        { $project: { _id: 0, value: 1 } }
-      ])
+      .collection('banks')
+      .find({ tenantId: tenantIdObj }, { projection: { name: 1 } })
+      .sort({ name: 1 })
       .toArray()
 
-    return NextResponse.json({ bankNames: rows.map(r => String((r as any).value || '')) })
+    return NextResponse.json({
+      bankNames: rows.map(r => String((r as { name?: string }).name || '')).filter(Boolean)
+    })
   }
+
+  if (stagedDateFrom && !parseStageSubmittedDate(stagedDateFrom)) {
+    return NextResponse.json({ error: 'invalid_stagedDateFrom' }, { status: 400 })
+  }
+
+  if (stagedDateTo && !parseStageSubmittedDate(stagedDateTo)) {
+    return NextResponse.json({ error: 'invalid_stagedDateTo' }, { status: 400 })
+  }
+
+  if (stagedDateFrom && stagedDateTo && stagedDateFrom > stagedDateTo) {
+    return NextResponse.json({ error: 'invalid_staged_date_range' }, { status: 400 })
+  }
+
+  const hasStagedDateFilter = Boolean(stagedDateFrom || stagedDateTo)
 
   const baseFilter: any = { tenantId: { $in: [tenantIdObj, tenantIdHex] } }
   
@@ -217,7 +244,7 @@ export async function GET(request: Request) {
     baseFilter.isActive = { $ne: false }
   }
 
-  if (stageId) {
+  if (stageId && !hasStagedDateFilter) {
     if (!ObjectId.isValid(stageId)) return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
     const stageObjId = new ObjectId(stageId)
 
@@ -227,6 +254,10 @@ export async function GET(request: Request) {
         $or: [{ stageId: stageObjId }, { stageId }]
       }
     ]
+  }
+
+  if (stageId && hasStagedDateFilter && !ObjectId.isValid(stageId)) {
+    return NextResponse.json({ error: 'invalid_stageId' }, { status: 400 })
   }
 
   if (assignedAgentId) {
@@ -305,12 +336,42 @@ export async function GET(request: Request) {
     ]
   }
 
+  const listPipeline: Record<string, unknown>[] = [{ $match: baseFilter }]
+
+  if (hasStagedDateFilter) {
+    listPipeline.push(
+      buildStagedDateAuditLookupStage(
+        tenantIdObj,
+        tenantIdHex,
+        stagedDateFrom || undefined,
+        stagedDateTo || undefined,
+        stageId || undefined
+      ),
+      buildStagedDateAuditExistsMatchStage(),
+      buildStagedDateAuditFlattenStage()
+    )
+  }
+
+  if (progressivePaymentFilter) {
+    if (!isProgressivePaymentListFilterMode(progressivePaymentFilter)) {
+      return NextResponse.json({ error: 'invalid_progressivePaymentFilter' }, { status: 400 })
+    }
+
+    listPipeline.push(buildDisbursementTrackerLookupStage(tenantIdObj, tenantIdHex))
+
+    if (progressivePaymentFilter === 'ready_to_track') {
+      listPipeline.push(buildProgressivePaymentReadyToTrackMatchStage())
+    } else {
+      listPipeline.push(buildProgressivePaymentTrackingActiveMatchStage())
+    }
+  }
+
+  listPipeline.push({ $sort: { updatedAt: -1 } }, { $limit: 200 })
+
   const rows = await db
     .collection('loanCases')
     .aggregate([
-      { $match: baseFilter },
-      { $sort: { updatedAt: -1 } },
-      { $limit: 200 },
+      ...listPipeline,
       {
         $lookup: {
           from: 'customers',
@@ -447,6 +508,7 @@ export async function GET(request: Request) {
           createdBy: 1,
           isLocked: 1,
           isActive: 1,
+          enableProgressivePayment: 1,
           totalDocuments: 1,
           incompleteDocumentsCount: 1,
           pendingDocumentsCount: 1,
@@ -455,7 +517,19 @@ export async function GET(request: Request) {
           stageName: { $ifNull: ['$stage.name', '$stageName'] },
           assignedAgentName: { $ifNull: ['$assignedAgent.name', '$assignedAgentName'] },
           assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] },
-          remarks: { $ifNull: ['$remarks', []] }
+          remarks: { $ifNull: ['$remarks', []] },
+          auditMatchedStageName: hasStagedDateFilter
+            ? {
+                $trim: {
+                  input: {
+                    $toString: { $ifNull: ['$auditMatch.matchedStageName', ''] }
+                  }
+                }
+              }
+            : null,
+          auditMatchedStagedDate: hasStagedDateFilter
+            ? { $ifNull: ['$auditMatch.effectiveStagedDate', null] }
+            : null
         }
       }
     ])
@@ -471,12 +545,15 @@ export async function GET(request: Request) {
     requestedAmount: (r as any).requestedAmount ?? null,
     stageId: String((r as any).stageId || ''),
     stageName: String((r as any).stageName || ''),
+    auditMatchedStageName: hasStagedDateFilter ? String((r as any).auditMatchedStageName || '') || null : null,
+    auditMatchedStagedDate: hasStagedDateFilter ? String((r as any).auditMatchedStagedDate || '') || null : null,
     assignedAgentId: (r as any).assignedAgentId ? String((r as any).assignedAgentId) : null,
     assignedAgentName: (r as any).assignedAgentName ?? null,
     assignedAgentEmail: (r as any).assignedAgentEmail ?? null,
     updatedAt: (r as any).updatedAt ? new Date((r as any).updatedAt).toISOString() : null,
     isLocked: Boolean((r as any).isLocked),
     isActive: (r as any).isActive !== false,
+    enableProgressivePayment: Boolean((r as any).enableProgressivePayment),
     totalDocuments: Number((r as any).totalDocuments || 0),
     incompleteDocumentsCount: Number((r as any).incompleteDocumentsCount || 0),
     pendingDocumentsCount: Number((r as any).pendingDocumentsCount || 0),
@@ -510,6 +587,8 @@ export async function POST(request: Request) {
   const assignedAgentId = body?.assignedAgentId == null ? null : String(body.assignedAgentId)
   const leadSourceRaw = body?.leadSource
   const associateIdRaw = body?.associateId == null ? null : String(body.associateId)
+  const advocateIdRaw = body?.advocateId == null ? null : String(body.advocateId)
+  const corporateIdRaw = body?.corporateId == null ? null : String(body.corporateId)
 
   const nextFollowUpDateRaw = body?.nextFollowUpDate
   const expectedActionDateRaw = body?.expectedActionDate
@@ -519,6 +598,7 @@ export async function POST(request: Request) {
 
   const bankName = body?.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
   const requestedAmount = body?.requestedAmount == null ? null : Number(body.requestedAmount)
+  const approvedAmount = body?.approvedAmount == null ? null : Number(body.approvedAmount)
   const eligibleAmount = body?.eligibleAmount == null ? null : Number(body.eligibleAmount)
   const interestRate = body?.interestRate == null ? null : Number(body.interestRate)
   const tenureMonths = body?.tenureMonths == null ? null : Number(body.tenureMonths)
@@ -528,12 +608,21 @@ export async function POST(request: Request) {
   const errors: Record<string, string> = {}
   const leadSource = isLeadSource(leadSourceRaw) ? leadSourceRaw : leadSourceRaw == null ? 'DIRECT' : null
 
+  const stageSubmittedParsed = parseStageSubmittedDate(body?.stageSubmittedDate)
+
+  if (!stageSubmittedParsed) errors.stageSubmittedDate = 'Stage date is required'
+
   if (!ObjectId.isValid(customerId)) errors.customerId = 'Customer is required'
   if (!ObjectId.isValid(loanTypeId)) errors.loanTypeId = 'Loan type is required'
   if (!ObjectId.isValid(stageId)) errors.stageId = 'Stage is required'
 
   if (!(typeof requestedAmount === 'number' && Number.isFinite(requestedAmount) && requestedAmount > 0))
     errors.requestedAmount = 'Loan amount must be greater than 0'
+  if (
+    approvedAmount != null &&
+    !(typeof approvedAmount === 'number' && Number.isFinite(approvedAmount) && approvedAmount >= 0)
+  )
+    errors.approvedAmount = 'Approved amount must be numeric'
   if (emi != null && !(typeof emi === 'number' && Number.isFinite(emi))) errors.emi = 'EMI must be numeric'
   if (interestRate != null && !(typeof interestRate === 'number' && Number.isFinite(interestRate)))
     errors.interestRate = 'Interest rate must be numeric'
@@ -589,8 +678,10 @@ export async function POST(request: Request) {
   }
 
   let associateObjId: ObjectId | null = null
+  let advocateObjId: ObjectId | null = null
+  const resolvedLeadSource: LeadSource = leadSource === 'ASSOCIATE' ? 'ASSOCIATE' : 'DIRECT'
 
-  if (leadSource === 'ASSOCIATE') {
+  if (resolvedLeadSource === 'ASSOCIATE') {
     if (!associateIdRaw) return NextResponse.json({ error: 'validation_error', details: { associateId: 'Associate is required' } }, { status: 400 })
     if (!ObjectId.isValid(associateIdRaw))
       return NextResponse.json({ error: 'validation_error', details: { associateId: 'Invalid associate' } }, { status: 400 })
@@ -603,6 +694,36 @@ export async function POST(request: Request) {
 
     if (!associate)
       return NextResponse.json({ error: 'validation_error', details: { associateId: 'Associate must be active' } }, { status: 400 })
+  }
+
+  if (advocateIdRaw && advocateIdRaw.trim().length > 0) {
+    if (!ObjectId.isValid(advocateIdRaw))
+      return NextResponse.json({ error: 'validation_error', details: { advocateId: 'Invalid advocate' } }, { status: 400 })
+
+    advocateObjId = new ObjectId(advocateIdRaw)
+
+    const advocate = await db
+      .collection('advocates')
+      .findOne({ _id: advocateObjId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+
+    if (!advocate)
+      return NextResponse.json({ error: 'validation_error', details: { advocateId: 'Advocate not found' } }, { status: 400 })
+  }
+
+  let corporateObjId: ObjectId | null = null
+
+  if (corporateIdRaw && corporateIdRaw.trim().length > 0) {
+    if (!ObjectId.isValid(corporateIdRaw))
+      return NextResponse.json({ error: 'validation_error', details: { corporateId: 'Invalid corporate' } }, { status: 400 })
+
+    corporateObjId = new ObjectId(corporateIdRaw)
+
+    const corporate = await db
+      .collection('corporates')
+      .findOne({ _id: corporateObjId, tenantId: tenantIdObj }, { projection: { _id: 1 } })
+
+    if (!corporate)
+      return NextResponse.json({ error: 'validation_error', details: { corporateId: 'Corporate not found' } }, { status: 400 })
   }
 
   const duplicate = await db.collection('loanCases').findOne(
@@ -624,27 +745,46 @@ export async function POST(request: Request) {
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))
   const now = new Date()
 
+  let resolvedBankName: string | null = null
+
+  if (bankName) {
+    const bank = await findBankByName(db, tenantIdObj, bankName)
+
+    if (!bank) {
+      return NextResponse.json(
+        { error: 'validation_error', details: { bankName: 'Select a bank from bank master' } },
+        { status: 400 }
+      )
+    }
+
+    resolvedBankName = String((bank as { name?: string }).name || bankName)
+  }
+
   const doc: any = {
     tenantId: tenantIdObj,
     customerId: new ObjectId(customerId),
     loanTypeId: new ObjectId(loanTypeId),
     stageId: new ObjectId(stageId),
-    bankName,
+    bankName: resolvedBankName,
     requestedAmount,
+    approvedAmount,
     eligibleAmount,
     interestRate,
     tenureMonths,
     emi,
     assignedAgentId: assignedAgentObjId,
-    leadSource,
+    leadSource: resolvedLeadSource,
     associateId: associateObjId,
+    advocateId: advocateObjId,
+    corporateId: corporateObjId,
     documents,
     remarks: [],
     createdBy: userId,
     createdAt: now,
     updatedAt: now,
     isLocked: true,
-    isActive: true
+    isActive: true,
+    enableProgressivePayment: body?.enableProgressivePayment === true
   }
 
   if (nextFollowUpDate) doc.nextFollowUpDate = nextFollowUpDate
@@ -692,6 +832,7 @@ export async function POST(request: Request) {
       loanTypeName: String((tenantLoanType as any).name || ''),
       stageId,
       stageName: String((tenantStage as any).name || ''),
+      stageSubmittedDate: stageSubmittedParsed?.isoDate ?? null,
       assignedAgentId: assignedAgentObjId ? assignedAgentObjId.toHexString() : null,
       assignedAgentName: assignedAgentUser ? String((assignedAgentUser as any).name || '') : null,
       assignedAgentEmail: assignedAgentUser ? String((assignedAgentUser as any).email || '') : null

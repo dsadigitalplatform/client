@@ -10,6 +10,9 @@ export type LoanCasesFilters = {
   assignedAgentId?: string
   bankName?: string
   showInactive?: boolean
+  stagedDateFrom?: string
+  stagedDateTo?: string
+  progressivePaymentFilter?: 'ready_to_track' | 'tracking_active'
 }
 
 export const useLoanCases = (filters: LoanCasesFilters) => {

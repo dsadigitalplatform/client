@@ -15,7 +15,8 @@
     "clean": "rm -rf .next",
     "clear": "rm -rf node_modules .next",
     "clear:db": "node database/mongo/clear-db.js",
-    "clear:db:yes": "node database/mongo/clear-db.js --yes"
+    "clear:db:yes": "node database/mongo/clear-db.js --yes",
+    "migrate:banks-from-leads": "node database/mongo/migrate-banks-from-leads.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

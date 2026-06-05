@@ -28,15 +28,13 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { createAssociate } from '@features/associates/services/associatesService'
 import { getAssociateTypes } from '@features/associate-types/services/associateTypesService'
-
-const COUNTRY_CODE_OPTIONS = [
-  { code: '+91', iso: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: '+1', iso: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: '+44', iso: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+971', iso: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-  { code: '+65', iso: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: '+61', iso: 'AU', name: 'Australia', flag: '🇦🇺' }
-] as const
+import CountryCodeField from '@/components/CountryCodeField'
+import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
+import {
+  isValidMobileDigits,
+  MOBILE_VALIDATION_MESSAGE,
+  normalizeMobileDigits
+} from '@/lib/mobile'
 
 const buildBaseCode = (associateName: string, companyName: string, mobile: string) => {
   const nameWords = associateName.trim().split(/\s+/).filter(Boolean)
@@ -104,22 +102,27 @@ const AssociatesCreateForm = ({
   const [associateTypes, setAssociateTypes] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
   const [associateTypesLoading, setAssociateTypesLoading] = useState(false)
   const associateTypeIdRef = useRef('')
+  const didHydrateFromInitialValues = useRef(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
-  const selectedCountry = useMemo(
-    () => COUNTRY_CODE_OPTIONS.find(o => o.code === countryCode) || COUNTRY_CODE_OPTIONS[0],
-    [countryCode]
-  )
-
   useEffect(() => {
-    if (!initialValues) return
+    if (!initialValues) {
+      didHydrateFromInitialValues.current = false
+
+      return
+    }
+
+    if (didHydrateFromInitialValues.current) return
+
+    didHydrateFromInitialValues.current = true
+
     if (initialValues.associateName != null) setAssociateName(initialValues.associateName)
     if (initialValues.companyName != null) setCompanyName(initialValues.companyName)
     if (initialValues.associateTypeId != null) setAssociateTypeId(initialValues.associateTypeId)
-    if (initialValues.mobile != null) setMobile(initialValues.mobile)
+    if (initialValues.mobile != null) setMobile(normalizeMobileDigits(String(initialValues.mobile)))
     if (initialValues.countryCode != null) setCountryCode(initialValues.countryCode)
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.payout !== undefined && initialValues.payout !== null) setPayout(String(initialValues.payout))
@@ -166,8 +169,7 @@ const AssociatesCreateForm = ({
     }
   }, [initialValues?.associateTypeId])
 
-  const isValidMobile = (v: string) => /^[0-9]{9,10}$/.test(v)
-  const isValidCountryCode = (v: string) => /^\+[0-9]{1,4}$/.test(v)
+  const isValidMobile = isValidMobileDigits
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
   const isValidPayout = (v: string) => !v || (/^\d+(\.\d+)?$/.test(v) && Number(v) >= 0 && Number(v) <= 100)
@@ -188,7 +190,7 @@ const AssociatesCreateForm = ({
   )
 
   const handleMobile = (v: string) => {
-    setMobile(v.replace(/\D/g, '').slice(0, 10))
+    setMobile(normalizeMobileDigits(v))
   }
 
   const handlePAN = (v: string) => {
@@ -205,6 +207,19 @@ const AssociatesCreateForm = ({
 
   const handleSubmit = async () => {
     setError(null)
+
+    const validationErrors: Record<string, string> = {}
+
+    if (!isValidCountryCode(countryCode)) validationErrors.countryCode = COUNTRY_CODE_VALIDATION_MESSAGE
+
+    if (!isValidMobile(mobile)) validationErrors.mobile = MOBILE_VALIDATION_MESSAGE
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors)
+
+      return
+    }
+
     setFieldErrors({})
     setSubmitting(true)
 
@@ -231,7 +246,7 @@ const AssociatesCreateForm = ({
 
       if (redirectOnSuccess) {
         if (!initialValues) {
-          router.push(redirectPath)
+          router.push(`${redirectPath}?created=1`)
         }
 
         return
@@ -357,36 +372,25 @@ const AssociatesCreateForm = ({
           </FormControl>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-          <FormControl fullWidth sx={{ width: { xs: '100%', sm: 180 } }}>
-            <InputLabel id='associate-country-code-label'>Country Code</InputLabel>
-            <Select
-              labelId='associate-country-code-label'
-              label='Country Code'
-              value={countryCode}
-              onChange={e => setCountryCode(String(e.target.value))}
-              renderValue={() => `${selectedCountry.flag} ${selectedCountry.code}`}
-            >
-              {COUNTRY_CODE_OPTIONS.map(o => (
-                <MenuItem key={`${o.iso}-${o.code}`} value={o.code}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <span>{o.flag}</span>
-                      <Typography variant='body2'>{o.name}</Typography>
-                    </Box>
-                    <Typography variant='body2' color='text.secondary'>
-                      {o.code}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <CountryCodeField
+            labelId='associate-country-code-label'
+            value={countryCode}
+            onChange={setCountryCode}
+            error={Boolean(fieldErrors.countryCode) || (countryCode.length > 0 && !isValidCountryCode(countryCode))}
+            helperText={
+              fieldErrors.countryCode ||
+              (countryCode.length > 0 && !isValidCountryCode(countryCode) ? COUNTRY_CODE_VALIDATION_MESSAGE : ' ')
+            }
+            sx={{ width: { xs: '100%', sm: 220 } }}
+          />
           <TextField
             label='Mobile Number'
             value={mobile}
             onChange={e => handleMobile(e.target.value)}
-            error={Boolean(fieldErrors.mobile)}
-            helperText={fieldErrors.mobile}
+            error={Boolean(fieldErrors.mobile) || (mobile.length > 0 && !isValidMobile(mobile))}
+            helperText={
+              fieldErrors.mobile || (mobile.length > 0 && !isValidMobile(mobile) ? MOBILE_VALIDATION_MESSAGE : ' ')
+            }
             fullWidth
             inputProps={{ inputMode: 'numeric', maxLength: 10 }}
             InputProps={{

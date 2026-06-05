@@ -84,8 +84,8 @@ const usersValidator = {
       name: { bsonType: 'string' },
       avatarUrl: { bsonType: 'string' },
       image: { bsonType: ['string', 'null'] },
-      countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,4}$' },
-      mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{9,10}$' },
+      countryCode: { bsonType: ['string', 'null'], pattern: '^\\+[0-9]{1,3}$' },
+      mobile: { bsonType: ['string', 'null'], pattern: '^[0-9]{8,10}$' },
       notifyMe: { bsonType: 'bool' },
       isSuperAdmin: { bsonType: 'bool' },
       status: { enum: ['active', 'suspended'] },
@@ -226,7 +226,9 @@ const auditLogsValidator = {
           'LEAD_ASSIGNED_AGENT_CHANGED',
           'LEAD_STATUS_CHANGED',
           'LEAD_REQUESTED_AMOUNT_CHANGED',
-          'LEAD_DELETED'
+          'LEAD_DELETED',
+          'DISBURSEMENT_TRACKER_CREATED',
+          'DISBURSEMENT_RECORDED'
         ]
       },
       targetTenantId: { bsonType: 'objectId' },
@@ -278,7 +280,7 @@ const customersValidator = {
       tenantId: { bsonType: 'objectId' },
       fullName: { bsonType: 'string', minLength: 2 },
       countryCode: { bsonType: 'string' },
-      mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       isNRI: { bsonType: 'bool' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       dob: { bsonType: ['date', 'null'] },
@@ -293,8 +295,8 @@ const customersValidator = {
           bsonType: 'object',
           required: ['countryCode', 'mobile', 'type'],
           properties: {
-            countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,4}$' },
-            mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+            countryCode: { bsonType: 'string', pattern: '^\\+[0-9]{1,3}$' },
+            mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
             type: { enum: ['ALTERNATE', 'SPOUSE', 'FRIEND', 'RELATIVE', 'OTHER'] }
           },
           additionalProperties: true
@@ -327,7 +329,7 @@ const associatesValidator = {
       companyName: { bsonType: 'string', minLength: 2 },
       associateTypeId: { bsonType: 'objectId' },
       countryCode: { bsonType: 'string' },
-      mobile: { bsonType: 'string', pattern: '^[0-9]{9,10}$' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       payout: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
       code: { bsonType: 'string', minLength: 3 },
@@ -346,6 +348,51 @@ ensureIndex('associates', { tenantId: 1 }, { name: 'idx_associates_tenantId' })
 ensureIndex('associates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_associate_mobile' })
 ensureIndex('associates', { tenantId: 1, code: 1 }, { unique: true, name: 'uniq_tenant_associate_code' })
 ensureIndex('associates', { tenantId: 1, associateTypeId: 1 }, { name: 'idx_associates_tenant_associateTypeId' })
+
+const advocatesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'name', 'mobile', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      name: { bsonType: 'string', minLength: 2 },
+      countryCode: { bsonType: 'string' },
+      mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
+      email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
+      address: { bsonType: ['string', 'null'] },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('advocates', advocatesValidator)
+ensureIndex('advocates', { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
+ensureIndex('advocates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_advocate_mobile' })
+
+const banksValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'code', 'name', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      code: { bsonType: 'string', minLength: 1 },
+      codeNormalized: { bsonType: 'string' },
+      name: { bsonType: 'string', minLength: 2 },
+      description: { bsonType: ['string', 'null'] },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('banks', banksValidator)
+ensureIndex('banks', { tenantId: 1 }, { name: 'idx_banks_tenantId' })
+ensureIndex('banks', { tenantId: 1, codeNormalized: 1 }, { unique: true, name: 'uniq_tenant_bank_code' })
 
 const loanTypesValidator = {
   $jsonSchema: {
@@ -411,6 +458,28 @@ ensureCollection('associateTypes', associateTypesValidator)
 ensureIndex('associateTypes', { tenantId: 1 }, { name: 'idx_associateTypes_tenantId' })
 ensureIndex('associateTypes', { tenantId: 1, name: 1 }, { unique: true, name: 'uniq_tenant_associateType_name' })
 
+const corporatesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'code', 'codeNormalized', 'name', 'isActive', 'createdAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      code: { bsonType: 'string', minLength: 1 },
+      codeNormalized: { bsonType: 'string', minLength: 1 },
+      name: { bsonType: 'string', minLength: 2 },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: ['date', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('corporates', corporatesValidator)
+ensureIndex('corporates', { tenantId: 1 }, { name: 'idx_corporates_tenantId' })
+ensureIndex('corporates', { tenantId: 1, codeNormalized: 1 }, { unique: true, name: 'uniq_tenant_corporate_code' })
+
 const loanStatusPipelineStagesValidator = {
   $jsonSchema: {
     bsonType: 'object',
@@ -472,13 +541,16 @@ const loanCasesValidator = {
       stageId: { bsonType: 'objectId' },
       bankName: { bsonType: ['string', 'null'] },
       requestedAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      approvedAmount: { bsonType: ['number', 'null'], minimum: 0 },
       eligibleAmount: { bsonType: ['number', 'null'], minimum: 0 },
       interestRate: { bsonType: ['number', 'null'], minimum: 0 },
       tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
       emi: { bsonType: ['number', 'null'], minimum: 0 },
       assignedAgentId: { bsonType: ['objectId', 'null'] },
-      leadSource: { enum: ['DIRECT', 'ASSOCIATE'] },
+      leadSource: { enum: ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] },
       associateId: { bsonType: ['objectId', 'null'] },
+      advocateId: { bsonType: ['objectId', 'null'] },
+      corporateId: { bsonType: ['objectId', 'null'] },
       documents: {
         bsonType: 'array',
         items: {
@@ -511,7 +583,8 @@ const loanCasesValidator = {
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
       isLocked: { bsonType: 'bool' },
-      isActive: { bsonType: 'bool' }
+      isActive: { bsonType: 'bool' },
+      enableProgressivePayment: { bsonType: 'bool' }
     },
     additionalProperties: true
   }
@@ -564,6 +637,89 @@ ensureIndex('appointments', { customerId: 1 }, { name: 'idx_appointments_custome
 ensureIndex('appointments', { scheduledAt: 1 }, { name: 'idx_appointments_scheduledAt' })
 ensureIndex('appointments', { assignedTo: 1 }, { name: 'idx_appointments_assignedTo' })
 ensureIndex('appointments', { parentAppointmentId: 1 }, { name: 'idx_appointments_parentAppointmentId' })
+
+/* =========================
+   progressive loan disbursements
+   One tracker per lead; line items in loanDisbursements.
+   ========================= */
+const loanDisbursementTrackersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'leadId',
+      'approvedAmount',
+      'totalDisbursedAmount',
+      'remainingAmount',
+      'disbursementStatus',
+      'createdByUserId',
+      'createdByName',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      leadId: { bsonType: 'objectId' },
+      approvedAmount: { bsonType: 'number', minimum: 0 },
+      totalDisbursedAmount: { bsonType: 'number', minimum: 0 },
+      remainingAmount: { bsonType: 'number', minimum: 0 },
+      disbursementStatus: { enum: ['PENDING', 'PARTIAL', 'COMPLETED'] },
+      createdByUserId: { bsonType: 'objectId' },
+      createdByName: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanDisbursementTrackers', loanDisbursementTrackersValidator)
+ensureIndex('loanDisbursementTrackers', { tenantId: 1 }, { name: 'idx_loanDisbursementTrackers_tenantId' })
+ensureIndex(
+  'loanDisbursementTrackers',
+  { tenantId: 1, leadId: 1 },
+  { unique: true, name: 'uniq_tenant_lead_disbursement_tracker' }
+)
+ensureIndex(
+  'loanDisbursementTrackers',
+  { tenantId: 1, disbursementStatus: 1, updatedAt: -1 },
+  { name: 'idx_loanDisbursementTrackers_tenant_status_updated' }
+)
+
+const loanDisbursementsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'trackerId',
+      'leadId',
+      'amount',
+      'disbursedDate',
+      'reason',
+      'createdByUserId',
+      'createdByName',
+      'createdAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      trackerId: { bsonType: 'objectId' },
+      leadId: { bsonType: 'objectId' },
+      amount: { bsonType: 'number', exclusiveMinimum: 0 },
+      disbursedDate: { bsonType: 'date' },
+      reason: { bsonType: 'string', minLength: 1 },
+      bankReference: { bsonType: ['string', 'null'] },
+      createdByUserId: { bsonType: 'objectId' },
+      createdByName: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('loanDisbursements', loanDisbursementsValidator)
+ensureIndex('loanDisbursements', { tenantId: 1 }, { name: 'idx_loanDisbursements_tenantId' })
+ensureIndex('loanDisbursements', { trackerId: 1, disbursedDate: -1 }, { name: 'idx_loanDisbursements_tracker_date' })
+ensureIndex('loanDisbursements', { leadId: 1 }, { name: 'idx_loanDisbursements_leadId' })
 
 print('Database initialization complete.')
 

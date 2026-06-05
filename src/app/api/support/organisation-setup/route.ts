@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { getSupportRecipientEmails } from '@/lib/env'
 import { sendMail } from '@/lib/mailer'
 
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   const errors: Record<string, string> = {}
 
   if (fullName.length < 2) errors.fullName = 'invalid_full_name'
-  if (!/^\+[0-9]{1,4}$/.test(countryCode)) errors.countryCode = 'invalid_country_code'
+  if (!isValidCountryCode(countryCode)) errors.countryCode = 'invalid_country_code'
   if (!/^[0-9]{9,10}$/.test(mobile)) errors.mobile = 'invalid_mobile'
   if (!isValidEmail(email)) errors.email = 'invalid_email'
   if (description.length < 10 || description.length > 2000) errors.description = 'invalid_description'
