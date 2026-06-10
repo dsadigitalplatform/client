@@ -109,6 +109,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
               Disbursements
             </MenuItem>
           )}
+          {hasTenant && (
+            <MenuItem href='/reports' icon={<i className='ri-bar-chart-box-line' />}>
+              Reports
+            </MenuItem>
+          )}
         </SubMenu>
 
         {hasTenant && (
