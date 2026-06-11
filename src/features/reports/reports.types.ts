@@ -15,9 +15,13 @@ export type ReportPresetId =
   | 'loan-type-breakdown'
   | 'stage-movement-history'
 
+export type ReportDetailGroupDimension = Exclude<ReportGroupBy, 'time'>
+
 export type ReportFilters = {
   dataMode: ReportDataMode
   groupBy: ReportGroupBy
+  /** Second nesting level for the detailed table (e.g. agent → stage). */
+  groupBySecondary: ReportDetailGroupDimension | null
   view: ReportViewType
   metric: ReportMetric
   trendGranularity: ReportTrendGranularity
@@ -89,6 +93,8 @@ export type ReportFilterOptions = {
   banks: Array<{ name: string }>
 }
 
+export type ReportDetailExportFormat = 'grouped' | 'flat'
+
 export type ReportExportMeta = {
   organisationName: string
   preparedBy: string
@@ -96,6 +102,8 @@ export type ReportExportMeta = {
   reportTitle: string
   dataMode: ReportDataMode
   disclaimer: string | null
+  groupBySecondary?: ReportDetailGroupDimension | null
+  detailFormat?: ReportDetailExportFormat
 }
 
 export type ReportPreset = {
@@ -109,6 +117,7 @@ export type ReportPreset = {
 export const DEFAULT_REPORT_FILTERS: ReportFilters = {
   dataMode: 'snapshot',
   groupBy: 'stage',
+  groupBySecondary: 'agent',
   view: 'full',
   metric: 'count',
   trendGranularity: 'week',
@@ -148,6 +157,7 @@ export const REPORT_PRESETS: ReportPreset[] = [
     filters: {
       dataMode: 'snapshot',
       groupBy: 'stage',
+      groupBySecondary: 'agent',
       view: 'full',
       metric: 'count'
     }
@@ -160,6 +170,7 @@ export const REPORT_PRESETS: ReportPreset[] = [
     filters: {
       dataMode: 'snapshot',
       groupBy: 'agent',
+      groupBySecondary: 'stage',
       view: 'full',
       metric: 'amount'
     }

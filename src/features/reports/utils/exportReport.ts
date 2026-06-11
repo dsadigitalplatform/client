@@ -1,5 +1,11 @@
 import type { ReportExportMeta, ReportQueryResponse } from '../reports.types'
 import type { ReportChartImages } from './captureReportCharts'
+import {
+  buildFlatDetailCsvRows,
+  buildFlatDetailHtml,
+  buildGroupedDetailCsvRows,
+  buildGroupedDetailHtml
+} from './groupedDetailExport'
 import { chartImagesToHtml } from './reportChartSvg'
 
 const formatINR = (amount: number | null | undefined) => {
@@ -69,47 +75,41 @@ export function exportReportExcel(data: ReportQueryResponse, meta: ReportExportM
   }
 
   if (data.details.length > 0) {
-    const isHistorical = data.dataMode === 'historical'
+    const detailRows =
+      meta.detailFormat === 'flat'
+        ? buildFlatDetailCsvRows(data)
+        : buildGroupedDetailCsvRows(data, meta.groupBySecondary ?? null)
 
-    rows.push(
-      isHistorical
-        ? ['Customer', 'Loan type', 'Bank', 'Stage (audit)', 'Staged date', 'Agent', 'Amount', 'Lead created']
-        : ['Customer', 'Loan type', 'Bank', 'Stage', 'Agent', 'Amount', 'Created']
-    )
-
-    data.details.forEach(row => {
-      rows.push(
-        isHistorical
-          ? [
-              row.customerName ?? '',
-              row.loanTypeName ?? '',
-              row.bankName ?? '',
-              row.auditStageName ?? row.stageName ?? '',
-              row.auditStagedDate ?? '',
-              row.agentName ?? '',
-              formatINR(row.requestedAmount),
-              formatDate(row.createdAt)
-            ]
-          : [
-              row.customerName ?? '',
-              row.loanTypeName ?? '',
-              row.bankName ?? '',
-              row.stageName ?? '',
-              row.agentName ?? '',
-              formatINR(row.requestedAmount),
-              formatDate(row.createdAt)
-            ]
-      )
-    })
+    rows.push(...detailRows)
   }
 
   const csv = `\uFEFF${rows.map(r => r.map(escapeCsvCell).join(',')).join('\n')}`
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
+  const suffix = meta.detailFormat === 'flat' ? '-flat' : ''
 
   a.href = url
-  a.download = `report-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `report${suffix}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportReportExcelFlat(data: ReportQueryResponse, meta: ReportExportMeta) {
+  exportReportExcel(data, { ...meta, detailFormat: 'flat' })
+}
+
+export function exportReportExcelFlatOnly(data: ReportQueryResponse) {
+  if (data.details.length === 0) return
+
+  const rows = buildFlatDetailCsvRows(data)
+  const csv = `\uFEFF${rows.map(r => r.map(escapeCsvCell).join(',')).join('\n')}`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+
+  a.href = url
+  a.download = `report-details-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -141,17 +141,9 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
 
   const detailsHtml =
     data.details.length > 0
-      ? `<h2>Detailed rows (${data.details.length}${data.details.length >= 500 ? ', max 500 shown' : ''})</h2><table><thead><tr>${
-          isHistorical
-            ? '<th>Customer</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>'
-            : '<th>Customer</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th><th>Created</th>'
-        }</tr></thead><tbody>${data.details
-          .map(row =>
-            isHistorical
-              ? `<tr><td>${escapeHtml(row.customerName)}</td><td>${escapeHtml(row.loanTypeName)}</td><td>${escapeHtml(row.bankName)}</td><td>${escapeHtml(row.auditStageName ?? row.stageName)}</td><td>${escapeHtml(row.auditStagedDate)}</td><td>${escapeHtml(row.agentName)}</td><td>${escapeHtml(formatINR(row.requestedAmount))}</td></tr>`
-              : `<tr><td>${escapeHtml(row.customerName)}</td><td>${escapeHtml(row.loanTypeName)}</td><td>${escapeHtml(row.bankName)}</td><td>${escapeHtml(row.stageName)}</td><td>${escapeHtml(row.agentName)}</td><td>${escapeHtml(formatINR(row.requestedAmount))}</td><td>${escapeHtml(formatDate(row.createdAt))}</td></tr>`
-          )
-          .join('')}</tbody></table>`
+      ? meta.detailFormat === 'flat'
+        ? buildFlatDetailHtml(data)
+        : buildGroupedDetailHtml(data, meta.groupBySecondary ?? null)
       : ''
 
   const disclaimer = meta.disclaimer ?? (isHistorical ? 'Historical audit-based report.' : 'Current snapshot report.')
@@ -190,6 +182,17 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
       box-sizing: border-box;
     }
     .print-hint { margin-top: 24px; padding: 10px 12px; background: #f5f5f5; border-radius: 6px; font-size: 11px; color: #555; }
+    .grouped-detail-table .group-row-primary td { background: #e3f2fd; border-top: 2px solid #1976d2; }
+    .grouped-detail-table .group-row-secondary td { background: #f3e5f5; border-top: 1px solid #9c27b0; }
+    .grouped-detail-table .detail-row td { background: #fff; }
+    .grouped-detail-table .level-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px; }
+    .grouped-detail-table .level-group { background: #1976d2; color: #fff; }
+    .grouped-detail-table .level-subgroup { background: #9c27b0; color: #fff; }
+    .grouped-detail-table .indent-sub { padding-left: 22px !important; }
+    .grouped-detail-table .indent-detail { padding-left: 36px !important; color: #333; }
+    .grouped-detail-table .num { text-align: right; white-space: nowrap; }
+    .grouped-detail-table .amount-total strong { font-size: 13px; }
+    .grouped-detail-table .sum-label { font-size: 10px; color: #666; margin-top: 2px; }
     @media print {
       body { margin: 12mm; }
       .print-hint { display: none; }

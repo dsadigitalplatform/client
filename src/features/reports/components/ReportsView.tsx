@@ -51,7 +51,7 @@ export default function ReportsView() {
             snapshot and audit-based stage history with clear labelling.
           </Typography>
         </Box>
-        {data ? <ReportsExportActions data={data} /> : null}
+        {data ? <ReportsExportActions data={data} groupBySecondary={filters.groupBySecondary} /> : null}
       </Box>
 
       <ReportsPresetCards onSelect={handlePreset} activePresetId={activePresetId} />
@@ -84,7 +84,7 @@ export default function ReportsView() {
           <ReportsDataModeBanner dataMode={data.dataMode} disclaimer={data.disclaimer} />
           <ReportsSummarySection summary={data.summary} />
           <ReportsChartSection data={data} />
-          <ReportsTableSection data={data} />
+          <ReportsTableSection data={data} groupBySecondary={filters.groupBySecondary} />
           <Typography variant='caption' color='text.secondary'>
             Generated at {new Date(data.generatedAt).toLocaleString()}
           </Typography>

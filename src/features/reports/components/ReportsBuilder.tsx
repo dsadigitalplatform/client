@@ -21,8 +21,9 @@ import Grid from '@mui/material/Grid'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import type { ReportFilterOptions, ReportFilters } from '../reports.types'
+import type { ReportDetailGroupDimension, ReportFilterOptions, ReportFilters } from '../reports.types'
 import { DEFAULT_REPORT_FILTERS, filtersEqual, hasActiveDimensionFilters } from '../reports.types'
+import { groupByLabel } from '../utils/exportReport'
 
 type Props = {
   filters: ReportFilters
@@ -41,6 +42,12 @@ const GROUP_BY_OPTIONS = [
   { value: 'loanType', label: 'Loan type' },
   { value: 'time', label: 'Time' }
 ] as const
+
+const TABLE_GROUP_OPTIONS = GROUP_BY_OPTIONS.filter(option => option.value !== 'time')
+
+function secondaryGroupOptions(primary: ReportFilters['groupBy']) {
+  return TABLE_GROUP_OPTIONS.filter(option => option.value !== primary)
+}
 
 const VIEW_OPTIONS = [
   { value: 'full', label: 'Full report' },
@@ -94,21 +101,83 @@ export default function ReportsBuilder({ filters, filterOptions, loading, onChan
               </ToggleButtonGroup>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <FormControl fullWidth size='small'>
-                <InputLabel>Group by</InputLabel>
-                <Select
-                  label='Group by'
-                  value={filters.groupBy}
-                  onChange={e => onChange('groupBy', e.target.value as ReportFilters['groupBy'])}
-                >
-                  {GROUP_BY_OPTIONS.map(o => (
-                    <MenuItem key={o.value} value={o.value}>
-                      {o.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            <Grid size={{ xs: 12 }}>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  p: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1.5,
+                  bgcolor: 'action.hover'
+                }}
+              >
+                <Box>
+                  <Typography variant='subtitle2'>Grouping</Typography>
+                  <Typography variant='caption' color='text.secondary'>
+                    Charts use the primary group. The detailed table can nest a second level with subtotals.
+                  </Typography>
+                </Box>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <FormControl fullWidth size='small'>
+                      <InputLabel>Primary group</InputLabel>
+                      <Select
+                        label='Primary group'
+                        value={filters.groupBy}
+                        onChange={e => {
+                          const next = e.target.value as ReportFilters['groupBy']
+
+                          onChange('groupBy', next)
+
+                          if (filters.groupBySecondary === next) {
+                            onChange('groupBySecondary', null)
+                          }
+                        }}
+                      >
+                        {GROUP_BY_OPTIONS.map(o => (
+                          <MenuItem key={o.value} value={o.value}>
+                            {o.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <FormControl fullWidth size='small'>
+                      <InputLabel>Secondary group (table)</InputLabel>
+                      <Select
+                        label='Secondary group (table)'
+                        value={filters.groupBySecondary ?? ''}
+                        onChange={e =>
+                          onChange(
+                            'groupBySecondary',
+                            (e.target.value || null) as ReportDetailGroupDimension | null
+                          )
+                        }
+                      >
+                        <MenuItem value=''>None — single level only</MenuItem>
+                        {secondaryGroupOptions(filters.groupBy).map(o => (
+                          <MenuItem key={o.value} value={o.value}>
+                            {o.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', minHeight: 40 }}>
+                      <Typography variant='body2' color='text.secondary'>
+                        {filters.groupBySecondary
+                          ? `Table: ${groupByLabel(filters.groupBy)} → ${groupByLabel(filters.groupBySecondary)}`
+                          : `Table: ${groupByLabel(filters.groupBy)} only`}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Box>
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>

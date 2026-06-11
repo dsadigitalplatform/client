@@ -8,16 +8,24 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 
-import type { ReportExportMeta, ReportQueryResponse } from '../reports.types'
-import { exportReportExcel, exportReportHtml, groupByLabel, printReportPdf } from '../utils/exportReport'
+import type { ReportDetailGroupDimension, ReportExportMeta, ReportQueryResponse } from '../reports.types'
+import {
+  exportReportExcel,
+  exportReportExcelFlat,
+  exportReportExcelFlatOnly,
+  exportReportHtml,
+  groupByLabel,
+  printReportPdf
+} from '../utils/exportReport'
 import { resolveReportCharts } from '../utils/resolveReportCharts'
 import { fetchProfileName, fetchSessionTenant } from '../services/reportsService'
 
 type Props = {
   data: ReportQueryResponse | null
+  groupBySecondary: ReportDetailGroupDimension | null
 }
 
-export default function ReportsExportActions({ data }: Props) {
+export default function ReportsExportActions({ data, groupBySecondary }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [meta, setMeta] = useState<Omit<ReportExportMeta, 'reportTitle'> | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -48,25 +56,34 @@ export default function ReportsExportActions({ data }: Props) {
     organisationName: meta?.organisationName ?? 'Organisation',
     preparedBy: meta?.preparedBy ?? 'User',
     preparedAt: meta?.preparedAt ?? new Date().toLocaleString(),
-    reportTitle: `${groupByLabel(data.groupBy)} report (${data.dataMode === 'historical' ? 'audit history' : 'snapshot'})`,
+    reportTitle: `${groupByLabel(data.groupBy)}${groupBySecondary ? ` → ${groupByLabel(groupBySecondary)}` : ''} report (${data.dataMode === 'historical' ? 'audit history' : 'snapshot'})`,
     dataMode: data.dataMode,
-    disclaimer: data.disclaimer
+    disclaimer: data.disclaimer,
+    groupBySecondary
   })
 
-  const runExport = async (action: 'excel' | 'pdf' | 'html') => {
+  const runExport = async (action: 'excel-grouped' | 'excel-flat' | 'excel-flat-only' | 'pdf' | 'html') => {
     setExporting(true)
     setAnchorEl(null)
 
     try {
-      const charts = await resolveReportCharts(data)
       const exportMeta = buildMeta()
 
-      if (action === 'excel') {
-        exportReportExcel(data, exportMeta)
+      if (action === 'excel-flat-only') {
+        exportReportExcelFlatOnly(data)
+        return
+      }
+
+      const charts = await resolveReportCharts(data)
+
+      if (action === 'excel-grouped') {
+        exportReportExcel(data, { ...exportMeta, detailFormat: 'grouped' })
+      } else if (action === 'excel-flat') {
+        exportReportExcelFlat(data, exportMeta)
       } else if (action === 'pdf') {
-        printReportPdf(data, exportMeta, charts)
+        printReportPdf(data, { ...exportMeta, detailFormat: 'grouped' }, charts)
       } else {
-        exportReportHtml(data, exportMeta, charts)
+        exportReportHtml(data, { ...exportMeta, detailFormat: 'grouped' }, charts)
       }
     } finally {
       setExporting(false)
@@ -85,9 +102,17 @@ export default function ReportsExportActions({ data }: Props) {
         </Button>
       </ButtonGroup>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => void runExport('excel')} disabled={exporting}>
+        <MenuItem onClick={() => void runExport('excel-grouped')} disabled={exporting}>
           <i className='ri-file-excel-2-line' style={{ marginRight: 8 }} />
-          Excel (CSV data)
+          Excel — grouped (with subtotals)
+        </MenuItem>
+        <MenuItem onClick={() => void runExport('excel-flat')} disabled={exporting}>
+          <i className='ri-file-list-2-line' style={{ marginRight: 8 }} />
+          Excel — flat list (full report)
+        </MenuItem>
+        <MenuItem onClick={() => void runExport('excel-flat-only')} disabled={exporting}>
+          <i className='ri-table-line' style={{ marginRight: 8 }} />
+          CSV — simple list (rows only)
         </MenuItem>
         <MenuItem onClick={() => void runExport('pdf')} disabled={exporting}>
           <i className='ri-file-pdf-2-line' style={{ marginRight: 8 }} />
