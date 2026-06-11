@@ -236,6 +236,25 @@ const NavbarContent = ({
               <i className='ri-lightbulb-flash-line' />
             </IconButton>
           </Tooltip>
+          {tenantName ? (
+            <Tooltip title='Reports' arrow>
+              <IconButton
+                component={Link}
+                href='/reports'
+                color='primary'
+                size='small'
+                aria-label='Reports'
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  boxShadow: 'var(--mui-customShadows-sm, 0px 4px 14px rgba(0,0,0,0.10))'
+                }}
+              >
+                <i className='ri-bar-chart-box-line' />
+              </IconButton>
+            </Tooltip>
+          ) : null}
           <div className='hidden sm:flex'>
             {tenantName ? (
               <Chip

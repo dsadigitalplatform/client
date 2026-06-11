@@ -8,9 +8,9 @@ export type ReportChartImages = {
   trend?: ReportChartImage
 }
 
-function svgElementToDataUrl(svg: SVGElement, width: number, height: number): string | null {
+function svgElementToDataUrl(svg: SVGSVGElement, width: number, height: number): string | null {
   try {
-    const clone = svg.cloneNode(true) as SVGElement
+    const clone = svg.cloneNode(true) as SVGSVGElement
     const w = Math.max(1, Math.round(width))
     const h = Math.max(1, Math.round(height))
 
@@ -46,7 +46,7 @@ function svgElementToDataUrl(svg: SVGElement, width: number, height: number): st
 function captureChartFromContainer(container: HTMLElement | null): string | null {
   if (!container) return null
 
-  const svg = container.querySelector('svg.apexcharts-svg') as SVGElement | null
+  const svg = container.querySelector('svg.apexcharts-svg') as SVGSVGElement | null
 
   if (!svg) return null
 
