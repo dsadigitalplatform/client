@@ -12,6 +12,10 @@ import {
   parseIsoDateParam,
   startOfDayIso
 } from '@features/reports/server/reportContext.server'
+import {
+  buildProgressivePaymentFilterStages,
+  isProgressivePaymentListFilterMode
+} from '@features/loan-cases/utils/progressivePaymentListFilter'
 import type {
   ReportBreakdownRow,
   ReportDataMode,
@@ -83,7 +87,12 @@ function parseQueryParams(searchParams: URLSearchParams) {
     customerId: searchParams.get('customerId') || null,
     loanTypeId: searchParams.get('loanTypeId') || null,
     bankName: searchParams.get('bankName') || null,
-    showInactive: searchParams.get('showInactive') === 'true'
+    showInactive: searchParams.get('showInactive') === 'true',
+    progressivePaymentFilter: (() => {
+      const value = searchParams.get('progressivePaymentFilter') || ''
+
+      return isProgressivePaymentListFilterMode(value) ? value : null
+    })()
   }
 }
 
@@ -114,6 +123,13 @@ function buildSnapshotMatch(
   return match
 }
 
+function buildSnapshotPipelinePrefix(
+  match: Record<string, unknown>,
+  progressiveStages: Record<string, unknown>[] = []
+) {
+  return [{ $match: match }, ...progressiveStages]
+}
+
 function snapshotGroupId(groupBy: ReportGroupBy) {
   switch (groupBy) {
     case 'agent':
@@ -137,8 +153,10 @@ async function runSnapshotReport(
   match: Record<string, unknown>,
   groupBy: ReportGroupBy,
   view: ReportViewType,
-  trendGranularity: ReportTrendGranularity
+  trendGranularity: ReportTrendGranularity,
+  progressiveStages: Record<string, unknown>[] = []
 ) {
+  const pipelinePrefix = buildSnapshotPipelinePrefix(match, progressiveStages)
   const includeBreakdown = view === 'summary' || view === 'full'
   const includeTrend = view === 'trend' || view === 'full'
   const includeDetails = view === 'detailed' || view === 'full'
@@ -146,7 +164,7 @@ async function runSnapshotReport(
   const summaryAgg = await db
     .collection('loanCases')
     .aggregate([
-      { $match: match },
+      ...pipelinePrefix,
       {
         $group: {
           _id: null,
@@ -176,7 +194,7 @@ async function runSnapshotReport(
     const breakdownRows = await db
       .collection('loanCases')
       .aggregate([
-        { $match: match },
+        ...pipelinePrefix,
         {
           $group: {
             _id: groupId,
@@ -279,7 +297,7 @@ async function runSnapshotReport(
     const trendRows = await db
       .collection('loanCases')
       .aggregate([
-        { $match: match },
+        ...pipelinePrefix,
         {
           $group: {
             _id: { $dateTrunc: { date: '$createdAt', unit } },
@@ -307,7 +325,7 @@ async function runSnapshotReport(
     const detailRows = await db
       .collection('loanCases')
       .aggregate([
-        { $match: match },
+        ...pipelinePrefix,
         { $sort: { createdAt: -1 } },
         { $limit: 500 },
         {
@@ -389,7 +407,8 @@ async function runHistoricalReport(
   filters: ReturnType<typeof parseQueryParams>,
   groupBy: ReportGroupBy,
   view: ReportViewType,
-  trendGranularity: ReportTrendGranularity
+  trendGranularity: ReportTrendGranularity,
+  progressiveStages: Record<string, unknown>[] = []
 ) {
   const auditMatchConditions: Record<string, unknown>[] = [
     {
@@ -529,7 +548,8 @@ async function runHistoricalReport(
         }
       }
     },
-    { $match: leadDimensionFilter }
+    { $match: leadDimensionFilter },
+    ...progressiveStages
   ]
 
   const includeBreakdown = view === 'summary' || view === 'full'
@@ -784,6 +804,10 @@ export async function GET(request: Request) {
 
   let result: { summary: ReportSummary; breakdown: ReportBreakdownRow[]; trend: ReportTrendRow[]; details: ReportDetailRow[] }
 
+  const progressiveStages = filters.progressivePaymentFilter
+    ? buildProgressivePaymentFilterStages(tenantIdObj, tenantIdHex, filters.progressivePaymentFilter)
+    : []
+
   if (filters.dataMode === 'historical') {
     result = await runHistoricalReport(
       db,
@@ -794,12 +818,20 @@ export async function GET(request: Request) {
       filters,
       filters.groupBy,
       filters.view,
-      filters.trendGranularity
+      filters.trendGranularity,
+      progressiveStages
     )
   } else {
     const match = buildSnapshotMatch(tenantIdObj, userId, role, filters)
 
-    result = await runSnapshotReport(db, match, filters.groupBy, filters.view, filters.trendGranularity)
+    result = await runSnapshotReport(
+      db,
+      match,
+      filters.groupBy,
+      filters.view,
+      filters.trendGranularity,
+      progressiveStages
+    )
   }
 
   return NextResponse.json({

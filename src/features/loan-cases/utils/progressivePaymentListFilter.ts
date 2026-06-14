@@ -68,3 +68,16 @@ export function buildProgressivePaymentTrackingActiveMatchStage() {
 export function isProgressivePaymentListFilterMode(value: string): value is ProgressivePaymentListFilterMode {
   return value === 'ready_to_track' || value === 'tracking_active'
 }
+
+export function buildProgressivePaymentFilterStages(
+  tenantIdObj: ObjectId,
+  tenantIdHex: string,
+  mode: ProgressivePaymentListFilterMode
+) {
+  return [
+    buildDisbursementTrackerLookupStage(tenantIdObj, tenantIdHex),
+    mode === 'ready_to_track'
+      ? buildProgressivePaymentReadyToTrackMatchStage()
+      : buildProgressivePaymentTrackingActiveMatchStage()
+  ]
+}

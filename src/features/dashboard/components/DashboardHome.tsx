@@ -45,6 +45,8 @@ import {
     type TopLimit
 } from '@features/dashboard/components/DashboardChartToolbar'
 import DashboardAnalyticsSection from '@features/dashboard/components/DashboardAnalyticsSection'
+import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
+import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
 
 const DONUT_SIZE = 64
 
@@ -181,7 +183,7 @@ const DashboardHome = () => {
     const [remindersLoading, setRemindersLoading] = useState(false)
     const [remindersError, setRemindersError] = useState<string | null>(null)
     const [reminderTypeCounts, setReminderTypeCounts] = useState<Record<string, number>>({})
-    const [stages, setStages] = useState<Array<{ id: string; name: string; order: number }>>([])
+    const [stages, setStages] = useState<Array<{ id: string; name: string; order: number; isLoggedIn: boolean; isDisbursed: boolean }>>([])
     const [stagesLoading, setStagesLoading] = useState(false)
     const [stagesError, setStagesError] = useState<string | null>(null)
     const [meetings, setMeetings] = useState<AppointmentListItem[]>([])
@@ -511,7 +513,9 @@ const DashboardHome = () => {
                     .map((s: any) => ({
                         id: String(s?.id || ''),
                         name: String(s?.name || ''),
-                        order: Number(s?.order || 0)
+                        order: Number(s?.order || 0),
+                        isLoggedIn: Boolean(s?.isLoggedIn),
+                        isDisbursed: Boolean(s?.isDisbursed)
                     }))
                     .filter(s => s.id.length > 0 && s.name.length > 0)
 
@@ -532,6 +536,12 @@ const DashboardHome = () => {
 
     const showWelcomeCta = isSuperAdmin && !hasMembership && !checking
     const hasTenant = Boolean(currentTenantId)
+    const {
+        data: monthlyPerformance,
+        loading: monthlyPerformanceLoading,
+        error: monthlyPerformanceError,
+        refresh: refreshMonthlyPerformance
+    } = useMonthlyPerformance(hasTenant, effectiveAssignedAgentId)
 
     useEffect(() => {
         if (checking || isSuperAdmin || hasMembership || supportAutoShown) return
@@ -542,6 +552,13 @@ const DashboardHome = () => {
 
     const disbursementStageIds = useMemo(() => {
         const ids = new Set<string>()
+        const flagged = stages.filter(s => s.isDisbursed)
+
+        if (flagged.length > 0) {
+            flagged.forEach(s => ids.add(s.id))
+
+            return ids
+        }
 
         stages.forEach(s => {
             if (/disburs/i.test(s.name)) ids.add(s.id)
@@ -550,7 +567,11 @@ const DashboardHome = () => {
         return ids
     }, [stages])
 
-    const finalStageId = useMemo(() => {
+    const closedStageIds = useMemo(() => {
+        const flagged = stages.filter(s => s.isDisbursed).map(s => s.id)
+
+        if (flagged.length > 0) return new Set(flagged)
+
         const finalStage = stages.reduce<{ id: string; name: string; order: number } | null>((max, s) => {
             if (!max) return s
             if ((s.order || 0) > (max.order || 0)) return s
@@ -558,7 +579,7 @@ const DashboardHome = () => {
             return max
         }, null)
 
-        return finalStage?.id || null
+        return finalStage ? new Set([finalStage.id]) : new Set<string>()
     }, [stages])
 
     const periodFilteredLeads = useMemo(
@@ -572,26 +593,28 @@ const DashboardHome = () => {
     const widgetMetrics = useMemo(() => {
         const totalLeads = periodFilteredLeads.length
         const disbursements = Array.from(periodFilteredLeads).filter(c => disbursementStageIds.has(c.stageId)).length
-        const activeCases = finalStageId ? periodFilteredLeads.filter(c => c.stageId !== finalStageId).length : totalLeads
+        const activeCases = closedStageIds.size
+            ? periodFilteredLeads.filter(c => !closedStageIds.has(c.stageId)).length
+            : totalLeads
 
         return { totalLeads, activeCases, disbursements }
-    }, [periodFilteredLeads, disbursementStageIds, finalStageId])
+    }, [periodFilteredLeads, disbursementStageIds, closedStageIds])
 
     const activeCases = useMemo(() => {
-        if (!finalStageId) return periodFilteredLeads
+        if (closedStageIds.size === 0) return periodFilteredLeads
 
-        return periodFilteredLeads.filter(c => c.stageId !== finalStageId)
-    }, [periodFilteredLeads, finalStageId])
+        return periodFilteredLeads.filter(c => !closedStageIds.has(c.stageId))
+    }, [periodFilteredLeads, closedStageIds])
 
     const activeCasesValue = useMemo(() => {
         return activeCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
     }, [activeCases])
 
     const closedCases = useMemo(() => {
-        if (!finalStageId) return []
+        if (closedStageIds.size === 0) return []
 
-        return periodFilteredLeads.filter(c => c.stageId === finalStageId)
-    }, [periodFilteredLeads, finalStageId])
+        return periodFilteredLeads.filter(c => closedStageIds.has(c.stageId))
+    }, [periodFilteredLeads, closedStageIds])
 
     const closedCasesValue = useMemo(() => {
         return closedCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
@@ -1077,6 +1100,13 @@ const DashboardHome = () => {
                     </CardContent>
                 </Card>
             </Box>
+            <MonthlyPerformanceSection
+                enabled={hasTenant}
+                loading={monthlyPerformanceLoading}
+                error={monthlyPerformanceError}
+                data={monthlyPerformance}
+                onRefresh={() => void refreshMonthlyPerformance()}
+            />
             <DashboardAnalyticsSection
                 leads={periodFilteredLeads}
                 loading={myLeadsLoading}

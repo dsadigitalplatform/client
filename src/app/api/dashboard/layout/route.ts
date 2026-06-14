@@ -57,6 +57,7 @@ const WIDGET_IDS = [
   'trend-loan-volume',
   'agents',
   'appointments',
+  'monthly-performance',
   'reminders'
 ] as const
 
@@ -183,6 +184,10 @@ function defaultGridItem(id: (typeof WIDGET_IDS)[number], bp: Breakpoint): GridI
     return { i: id, x: 0, y: 0, w: bp === 'md' ? 6 : 4, h: 5, minW: bp === 'md' ? 6 : 3, minH: 4 }
   }
 
+  if (id === 'monthly-performance') {
+    return { i: id, x: 0, y: 0, w: bp === 'md' ? 12 : 8, h: 4, minW: bp === 'md' ? 6 : 4, minH: 4 }
+  }
+
   return { i: id, x: 0, y: 0, w: bp === 'md' ? 6 : 4, h: 5, minW: 2, minH: 4 }
 }
 
@@ -249,7 +254,8 @@ export async function GET() {
           'trend-loan-volume',
           'stage-breakdown',
           'agents',
-          'appointments'
+          'appointments',
+          'monthly-performance'
         ] as Array<(typeof WIDGET_IDS)[number]>)
       : ([
           'kpi-customers',
@@ -259,7 +265,8 @@ export async function GET() {
           'trend-cases',
           'trend-loan-volume',
           'stage-breakdown',
-          'appointments'
+          'appointments',
+          'monthly-performance'
         ] as Array<(typeof WIDGET_IDS)[number]>)
   )
 

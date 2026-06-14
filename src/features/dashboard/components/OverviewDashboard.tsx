@@ -30,6 +30,8 @@ import type { Layout, LayoutItem, ResponsiveLayouts } from 'react-grid-layout'
 
 import { useDashboardOverview } from '@features/dashboard/hooks/useDashboardOverview'
 import { useDashboardLayout } from '@features/dashboard/hooks/useDashboardLayout'
+import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
+import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
 import type { DashboardWidgetId, TrendPoint } from '@features/dashboard/dashboard.types'
 import { getReminders, updateReminderStatus } from '@features/reminders/services/remindersService'
 import type { ReminderListItem, ReminderStatus } from '@features/reminders/reminders.types'
@@ -80,6 +82,7 @@ const widgetLoadingLabel = (id: DashboardWidgetId) => {
   if (id === 'stage-breakdown') return 'Loading case stages'
   if (id === 'agents') return 'Loading agents'
   if (id === 'appointments') return 'Loading appointments'
+  if (id === 'monthly-performance') return 'Loading monthly performance'
   if (id === 'reminders') return 'Loading reminders'
 
   return 'Loading data'
@@ -100,6 +103,7 @@ const ALL_WIDGET_IDS: DashboardWidgetId[] = [
   'stage-breakdown',
   'agents',
   'appointments',
+  'monthly-performance',
   'reminders'
 ]
 
@@ -143,8 +147,13 @@ function defaultGridItem(id: DashboardWidgetId, bp: Breakpoint): LayoutItem {
     id === 'stage-breakdown' ||
     id === 'agents' ||
     id === 'appointments' ||
+    id === 'monthly-performance' ||
     id === 'reminders'
   ) {
+    if (id === 'monthly-performance') {
+      return { i: id, x: 0, y: 0, w: bp === 'md' ? 12 : 8, h: 4, minW: bp === 'md' ? 6 : 4, minH: 4 }
+    }
+
     return { i: id, x: 0, y: 0, w: bp === 'md' ? 6 : 4, h: 5, minW: bp === 'md' ? 6 : 3, minH: 4 }
   }
 
@@ -476,6 +485,7 @@ const ALL_WIDGETS: WidgetMeta[] = [
   { id: 'stage-breakdown', title: 'Case Stages', icon: 'ri-git-merge-line' },
   { id: 'agents', title: 'Sales Agents', icon: 'ri-team-line' },
   { id: 'appointments', title: 'Appointments', icon: 'ri-calendar-event-line' },
+  { id: 'monthly-performance', title: 'Monthly Performance', icon: 'ri-bar-chart-grouped-line' },
   { id: 'reminders', title: 'Reminders', icon: 'ri-notification-3-line' }
 ]
 
@@ -485,6 +495,12 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
   const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true })
 
   const { data, loading, error, refresh } = useDashboardOverview(hasTenantSelected)
+  const {
+    data: monthlyPerformance,
+    loading: monthlyPerformanceLoading,
+    error: monthlyPerformanceError,
+    refresh: refreshMonthlyPerformance
+  } = useMonthlyPerformance(hasTenantSelected)
 
   const {
     layout: savedLayout,
@@ -1104,6 +1120,19 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
         )
       }
 
+      if (id === 'monthly-performance') {
+        return (
+          <MonthlyPerformanceSection
+            enabled={hasTenantSelected}
+            loading={monthlyPerformanceLoading}
+            error={monthlyPerformanceError}
+            data={monthlyPerformance}
+            onRefresh={() => void refreshMonthlyPerformance()}
+            compact
+          />
+        )
+      }
+
       return (
         <Typography variant='body2' color='text.secondary'>
           Unknown widget
@@ -1119,6 +1148,11 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
       reminders,
       remindersError,
       remindersLoading,
+      monthlyPerformance,
+      monthlyPerformanceLoading,
+      monthlyPerformanceError,
+      refreshMonthlyPerformance,
+      hasTenantSelected,
       setReminderStatus,
       theme.palette.primary.main,
       theme.palette.info.main,
@@ -1293,7 +1327,13 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                   >
                     <ListItemText
                       primary={meta.title}
-                      secondary={id === 'appointments' ? 'Upcoming, completed, and pending outcomes' : undefined}
+                      secondary={
+                        id === 'appointments'
+                          ? 'Upcoming, completed, and pending outcomes'
+                          : id === 'monthly-performance'
+                            ? 'Logged-in and disbursed cases this month'
+                            : undefined
+                      }
                     />
                     <i className='ri-add-line' />
                   </ListItemButton>

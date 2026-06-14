@@ -15,6 +15,7 @@ const WIDGET_IDS: DashboardWidgetId[] = [
   'trend-loan-volume',
   'agents',
   'appointments',
+  'monthly-performance',
   'reminders'
 ]
 

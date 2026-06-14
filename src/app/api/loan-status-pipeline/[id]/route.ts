@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { enforceUniqueStageFlags, validateStageFlags } from '@features/loan-status-pipeline/server/stageFlags.server'
 
 function isNonEmptyString(v: unknown, min = 2) {
   return typeof v === 'string' && v.trim().length >= min
@@ -14,6 +15,10 @@ function isNonEmptyString(v: unknown, min = 2) {
 
 function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1
+}
+
+function parseStageFlag(v: unknown): boolean {
+  return v === true
 }
 
 async function getRequestContext(session: any) {
@@ -85,6 +90,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     name: String((row as any).name || ''),
     description: (row as any).description ?? null,
     order: Number((row as any).order || 0),
+    isLoggedIn: Boolean((row as any).isLoggedIn),
+    isDisbursed: Boolean((row as any).isDisbursed),
     createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
     canManage
   }
@@ -113,12 +120,27 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.description !== undefined)
     patch.description = body.description == null || String(body.description).trim().length === 0 ? null : String(body.description).trim()
   if (body.order !== undefined) patch.order = typeof body.order === 'number' ? body.order : Number(body.order)
+  if (body.isLoggedIn !== undefined) patch.isLoggedIn = parseStageFlag(body.isLoggedIn)
+  if (body.isDisbursed !== undefined) patch.isDisbursed = parseStageFlag(body.isDisbursed)
   patch.updatedAt = new Date()
 
   const errors: Record<string, string> = {}
 
   if (patch.name != null && !isNonEmptyString(patch.name)) errors.name = 'Stage name is required'
   if (patch.order !== undefined && !isPositiveInt(patch.order)) errors.order = 'Stage must be a whole number ≥ 1'
+
+  const stageIdObj = new ObjectId(id)
+  const current = await db.collection('loanStatusPipelineStages').findOne(
+    { _id: stageIdObj, tenantId: tenantIdObj },
+    { projection: { isLoggedIn: 1, isDisbursed: 1 } }
+  )
+
+  if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  const nextIsLoggedIn = patch.isLoggedIn !== undefined ? patch.isLoggedIn : Boolean((current as any).isLoggedIn)
+  const nextIsDisbursed = patch.isDisbursed !== undefined ? patch.isDisbursed : Boolean((current as any).isDisbursed)
+
+  Object.assign(errors, validateStageFlags(nextIsLoggedIn, nextIsDisbursed))
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
   try {
@@ -152,9 +174,14 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
     const res = await db
       .collection('loanStatusPipelineStages')
-      .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { $set: patch })
+      .updateOne({ _id: stageIdObj, tenantId: tenantIdObj, ...userScopedFilter }, { $set: patch })
 
     if (res.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+    await enforceUniqueStageFlags(db, tenantIdObj, stageIdObj, {
+      isLoggedIn: nextIsLoggedIn,
+      isDisbursed: nextIsDisbursed
+    })
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

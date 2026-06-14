@@ -33,6 +33,22 @@ import { useTheme } from '@mui/material/styles'
 import { useLoanStatusPipeline } from '@features/loan-status-pipeline/hooks/useLoanStatusPipeline'
 import LoanStatusPipelineCreateForm from '@features/loan-status-pipeline/components/LoanStatusPipelineCreateForm'
 import { deleteLoanStatusPipelineStage } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
+import type { LoanStatusStage } from '@features/loan-status-pipeline/loan-status-pipeline.types'
+
+function StageFlagChips({ stage }: { stage: LoanStatusStage }) {
+  if (!stage.isLoggedIn && !stage.isDisbursed) return null
+
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
+      {stage.isLoggedIn ? (
+        <Chip label='Logged In' size='small' color='info' variant='outlined' sx={{ boxShadow: 'none' }} />
+      ) : null}
+      {stage.isDisbursed ? (
+        <Chip label='Disbursed' size='small' color='success' variant='outlined' sx={{ boxShadow: 'none' }} />
+      ) : null}
+    </Box>
+  )
+}
 
 const LoanStatusPipelineList = () => {
   const { stages, loading, search, setSearch, refresh } = useLoanStatusPipeline()
@@ -191,6 +207,7 @@ const LoanStatusPipelineList = () => {
                       <Typography variant='body2' color='text.secondary' sx={{ wordBreak: 'break-word' }}>
                         {s.description || '-'}
                       </Typography>
+                      <StageFlagChips stage={s} />
                     </Box>
                     <Chip
                       label={`Stage ${s.order}`}
@@ -223,17 +240,18 @@ const LoanStatusPipelineList = () => {
               <TableCell>Stage</TableCell>
               <TableCell>Stage Name</TableCell>
               <TableCell>Description</TableCell>
+              <TableCell>Flags</TableCell>
               <TableCell align='right'>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4}>Loading...</TableCell>
+                <TableCell colSpan={5}>Loading...</TableCell>
               </TableRow>
             ) : stages.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4}>No stages found</TableCell>
+                <TableCell colSpan={5}>No stages found</TableCell>
               </TableRow>
             ) : (
               stages.map(s => (
@@ -263,6 +281,9 @@ const LoanStatusPipelineList = () => {
                     </MuiLink>
                   </TableCell>
                   <TableCell>{s.description || '-'}</TableCell>
+                  <TableCell>
+                    <StageFlagChips stage={s} />
+                  </TableCell>
                   <TableCell align='right'>
                     {s.canManage ? (
                       <Button size='small' color='error' variant='outlined' onClick={() => setDeleteTarget({ id: s.id, name: s.name })}>

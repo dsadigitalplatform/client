@@ -40,6 +40,8 @@ function actionLabel(action: string) {
       return 'Tracker created'
     case 'DISBURSEMENT_RECORDED':
       return 'Disbursement recorded'
+    case 'DISBURSEMENT_TRACKER_DELETED':
+      return 'Tracker deleted'
     default:
       return action.replaceAll('_', ' ').toLowerCase()
   }
@@ -71,6 +73,41 @@ function buildChanges(action: string, metadata: Record<string, unknown>) {
         from: null,
         to: null,
         value: toNullableText(metadata?.stageName)
+      }
+    ].filter(c => c.value || c.from || c.to)
+  }
+
+  if (action === 'DISBURSEMENT_TRACKER_DELETED') {
+    return [
+      {
+        label: 'Customer',
+        from: null,
+        to: null,
+        value: toNullableText(metadata?.customerName)
+      },
+      {
+        label: 'Approved amount',
+        from: null,
+        to: null,
+        value: metadata?.approvedAmount == null ? null : formatINR(Number(metadata.approvedAmount))
+      },
+      {
+        label: 'Total disbursed',
+        from: null,
+        to: null,
+        value: metadata?.totalDisbursedAmount == null ? null : formatINR(Number(metadata.totalDisbursedAmount))
+      },
+      {
+        label: 'Disbursements removed',
+        from: null,
+        to: null,
+        value: metadata?.disbursementCount == null ? null : String(metadata.disbursementCount)
+      },
+      {
+        label: 'Status at deletion',
+        from: null,
+        to: null,
+        value: toNullableText(metadata?.disbursementStatus)
       }
     ].filter(c => c.value || c.from || c.to)
   }
@@ -197,7 +234,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         { 'metadata.leadId': leadId },
         { 'metadata.leadId': trackerLeadId }
       ],
-      action: { $in: ['DISBURSEMENT_TRACKER_CREATED', 'DISBURSEMENT_RECORDED', 'ADMIN_VIEW'] }
+      action: { $in: ['DISBURSEMENT_TRACKER_CREATED', 'DISBURSEMENT_RECORDED', 'DISBURSEMENT_TRACKER_DELETED', 'ADMIN_VIEW'] }
     })
     .sort({ createdAt: -1 })
     .limit(200)
@@ -207,7 +244,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     const action = resolveAction(r as { action?: string; metadata?: { requestedAction?: string } })
     const meta = (r as { metadata?: Record<string, unknown> }).metadata || {}
 
-    if (action === 'DISBURSEMENT_TRACKER_CREATED' || action === 'DISBURSEMENT_RECORDED') {
+    if (
+      action === 'DISBURSEMENT_TRACKER_CREATED' ||
+      action === 'DISBURSEMENT_RECORDED' ||
+      action === 'DISBURSEMENT_TRACKER_DELETED'
+    ) {
       return String(meta.trackerId || '') === id || String(meta.leadId || '') === leadId
     }
 

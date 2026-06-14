@@ -17,6 +17,7 @@ function buildQueryString(filters: ReportFilters) {
   if (filters.customerId) params.set('customerId', filters.customerId)
   if (filters.loanTypeId) params.set('loanTypeId', filters.loanTypeId)
   if (filters.bankName) params.set('bankName', filters.bankName)
+  if (filters.progressivePaymentFilter) params.set('progressivePaymentFilter', filters.progressivePaymentFilter)
 
   return params.toString()
 }

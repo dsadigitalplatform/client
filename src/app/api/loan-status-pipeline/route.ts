@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { enforceUniqueStageFlags, validateStageFlags } from '@features/loan-status-pipeline/server/stageFlags.server'
 
 function isNonEmptyString(v: unknown, min = 2) {
   return typeof v === 'string' && v.trim().length >= min
@@ -14,6 +15,10 @@ function isNonEmptyString(v: unknown, min = 2) {
 
 function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1
+}
+
+function parseStageFlag(v: unknown): boolean {
+  return v === true
 }
 
 export async function GET(request: Request) {
@@ -73,6 +78,8 @@ export async function GET(request: Request) {
         name: 1,
         description: 1,
         order: 1,
+        isLoggedIn: 1,
+        isDisbursed: 1,
         createdBy: 1,
         createdAt: 1
       }
@@ -86,6 +93,8 @@ export async function GET(request: Request) {
     name: String((r as any).name || ''),
     description: (r as any).description ?? null,
     order: Number((r as any).order || 0),
+    isLoggedIn: Boolean((r as any).isLoggedIn),
+    isDisbursed: Boolean((r as any).isDisbursed),
     createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
     canManage:
       isSuperAdmin ||
@@ -142,11 +151,14 @@ export async function POST(request: Request) {
     body?.description == null || String(body.description).trim().length === 0 ? null : String(body.description).trim()
 
   const order = typeof body?.order === 'number' ? body.order : Number(body?.order)
+  const isLoggedIn = parseStageFlag(body?.isLoggedIn)
+  const isDisbursed = parseStageFlag(body?.isDisbursed)
 
   const errors: Record<string, string> = {}
 
   if (!isNonEmptyString(name)) errors.name = 'Stage name is required'
   if (!isPositiveInt(order)) errors.order = 'Stage must be a whole number ≥ 1'
+  Object.assign(errors, validateStageFlags(isLoggedIn, isDisbursed))
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
   const safeName = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
@@ -167,6 +179,8 @@ export async function POST(request: Request) {
     name,
     description,
     order,
+    isLoggedIn,
+    isDisbursed,
     createdBy: userId,
     createdAt: now,
     updatedAt: now
@@ -174,6 +188,8 @@ export async function POST(request: Request) {
 
   try {
     const res = await db.collection('loanStatusPipelineStages').insertOne(doc)
+
+    await enforceUniqueStageFlags(db, tenantIdObj, res.insertedId, { isLoggedIn, isDisbursed })
 
     return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
   } catch (err: any) {

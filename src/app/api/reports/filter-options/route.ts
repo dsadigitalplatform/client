@@ -20,7 +20,7 @@ export async function GET() {
   const [stages, loanTypes, banks, agents, customers] = await Promise.all([
     db
       .collection('loanStatusPipelineStages')
-      .find({ tenantId: tenantIdObj }, { projection: { name: 1, order: 1 } })
+      .find({ tenantId: tenantIdObj }, { projection: { name: 1, order: 1, isLoggedIn: 1, isDisbursed: 1 } })
       .sort({ order: 1, name: 1 })
       .toArray(),
     db
@@ -102,7 +102,9 @@ export async function GET() {
     stages: stages.map(s => ({
       id: String(s._id),
       name: String(s.name || ''),
-      order: Number(s.order ?? 0)
+      order: Number(s.order ?? 0),
+      isLoggedIn: Boolean((s as { isLoggedIn?: boolean }).isLoggedIn),
+      isDisbursed: Boolean((s as { isDisbursed?: boolean }).isDisbursed)
     })),
     agents: agents.map(a => ({
       id: String(a.userId),

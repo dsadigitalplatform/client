@@ -641,19 +641,21 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     }
   }
 
-  const progressivePaymentEnabled =
-    patch.enableProgressivePayment !== undefined
-      ? patch.enableProgressivePayment
-      : Boolean((existing as any).enableProgressivePayment)
+  if (patch.approvedAmount !== undefined) {
+    const activeTracker = await db.collection('loanDisbursementTrackers').findOne(
+      { tenantId: tenantIdObj, leadId: new ObjectId(id) },
+      { projection: { _id: 1 } }
+    )
 
-  if (progressivePaymentEnabled && patch.approvedAmount !== undefined) {
-    const existingApproved = (existing as any).approvedAmount ?? null
-    const nextApproved = patch.approvedAmount
+    if (activeTracker) {
+      const existingApproved = (existing as any).approvedAmount ?? null
+      const nextApproved = patch.approvedAmount
 
-    if (nextApproved !== existingApproved) {
-      errors.approvedAmount = 'Approved amount cannot be changed when progressive payment is enabled'
-    } else {
-      delete patch.approvedAmount
+      if (nextApproved !== existingApproved) {
+        errors.approvedAmount = 'Approved amount cannot be changed while disbursement tracking is active'
+      } else {
+        delete patch.approvedAmount
+      }
     }
   }
 

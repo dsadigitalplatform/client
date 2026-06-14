@@ -4,6 +4,8 @@ export type CreateLoanStatusPipelineStageInput = {
   name: string
   description?: string | null
   order: number
+  isLoggedIn?: boolean
+  isDisbursed?: boolean
 }
 
 export async function getLoanStatusPipelineStages(params: GetLoanStatusPipelineStagesParams = {}) {

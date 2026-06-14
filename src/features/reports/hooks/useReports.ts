@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReportFilterOptions, ReportFilters, ReportPreset, ReportQueryResponse } from '../reports.types'
 import { DEFAULT_REPORT_FILTERS } from '../reports.types'
 import { fetchReportFilterOptions, fetchReportQuery } from '../services/reportsService'
+import { buildDefaultMonthlyLoggedInFilters } from '../utils/monthlyReportHelpers'
 
 export function useReports(initialFilters: Partial<ReportFilters> = {}) {
   const [filters, setFilters] = useState<ReportFilters>({ ...DEFAULT_REPORT_FILTERS, ...initialFilters })
@@ -13,6 +14,7 @@ export function useReports(initialFilters: Partial<ReportFilters> = {}) {
   const [loading, setLoading] = useState(false)
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasInitialRun, setHasInitialRun] = useState(false)
 
   const loadOptions = useCallback(async () => {
     setOptionsLoading(true)
@@ -46,6 +48,14 @@ export function useReports(initialFilters: Partial<ReportFilters> = {}) {
     }
   }, [filters])
 
+  const applyFilters = useCallback(
+    (nextFilters: ReportFilters) => {
+      setFilters(nextFilters)
+      void runReport(nextFilters)
+    },
+    [runReport]
+  )
+
   const applyPreset = useCallback(
     (preset: ReportPreset) => {
       const next = { ...DEFAULT_REPORT_FILTERS, ...preset.filters }
@@ -72,8 +82,18 @@ export function useReports(initialFilters: Partial<ReportFilters> = {}) {
   }, [loadOptions])
 
   useEffect(() => {
-    void runReport()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- initial load only
+    if (hasInitialRun || optionsLoading || !filterOptions) return
+
+    const monthlyLoggedIn = buildDefaultMonthlyLoggedInFilters(filterOptions.stages)
+
+    if (monthlyLoggedIn) {
+      applyFilters(monthlyLoggedIn)
+    } else {
+      void runReport()
+    }
+
+    setHasInitialRun(true)
+  }, [applyFilters, filterOptions, hasInitialRun, optionsLoading, runReport])
 
   return {
     filters,
@@ -86,6 +106,7 @@ export function useReports(initialFilters: Partial<ReportFilters> = {}) {
     error,
     runReport,
     applyPreset,
+    applyFilters,
     clearFilters,
     refresh: () => runReport()
   }
