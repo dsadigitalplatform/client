@@ -13,15 +13,16 @@ import ReportsBuilder from './ReportsBuilder'
 import ReportsChartSection from './ReportsChartSection'
 import ReportsDataModeBanner from './ReportsDataModeBanner'
 import ReportsExportActions from './ReportsExportActions'
+import ReportsMonthlyQuickActions from './ReportsMonthlyQuickActions'
 import ReportsPresetCards from './ReportsPresetCards'
 import ReportsSummarySection from './ReportsSummarySection'
 import ReportsTableSection from './ReportsTableSection'
 
 export default function ReportsView() {
-  const { filters, updateFilter, data, filterOptions, loading, optionsLoading, error, runReport, applyPreset, clearFilters } =
+  const { filters, updateFilter, data, filterOptions, loading, optionsLoading, error, runReport, applyPreset, applyFilters, clearFilters } =
     useReports()
 
-  const [activePresetId, setActivePresetId] = useState<string | null>('stage-wise-loans')
+  const [activePresetId, setActivePresetId] = useState<string | null>(null)
 
   const handlePreset = (preset: ReportPreset) => {
     setActivePresetId(preset.id)
@@ -53,6 +54,16 @@ export default function ReportsView() {
         </Box>
         {data ? <ReportsExportActions data={data} groupBySecondary={filters.groupBySecondary} /> : null}
       </Box>
+
+      <ReportsMonthlyQuickActions
+        filters={filters}
+        filterOptions={filterOptions}
+        loading={loading || optionsLoading}
+        onApply={next => {
+          setActivePresetId(null)
+          applyFilters(next)
+        }}
+      />
 
       <ReportsPresetCards onSelect={handlePreset} activePresetId={activePresetId} />
 

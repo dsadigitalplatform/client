@@ -56,6 +56,12 @@ const VIEW_OPTIONS = [
   { value: 'trend', label: 'Trend only' }
 ] as const
 
+const PROGRESSIVE_PAYMENT_FILTER_OPTIONS = [
+  { value: '', label: 'All leads', hint: 'No progressive disbursement filter' },
+  { value: 'ready_to_track', label: 'Ready to start', hint: 'Enabled on lead · tracker not created yet' },
+  { value: 'tracking_active', label: 'Tracking active', hint: 'Enabled on lead · disbursement tracker exists' }
+] as const
+
 export default function ReportsBuilder({ filters, filterOptions, loading, onChange, onRun, onClear }: Props) {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
@@ -309,6 +315,28 @@ export default function ReportsBuilder({ filters, filterOptions, loading, onChan
                   {filterOptions?.banks.map(b => (
                     <MenuItem key={b.name} value={b.name}>
                       {b.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <FormControl fullWidth size='small'>
+                <InputLabel>Progressive payment</InputLabel>
+                <Select
+                  label='Progressive payment'
+                  value={filters.progressivePaymentFilter ?? ''}
+                  onChange={e =>
+                    onChange(
+                      'progressivePaymentFilter',
+                      (e.target.value || null) as ReportFilters['progressivePaymentFilter']
+                    )
+                  }
+                >
+                  {PROGRESSIVE_PAYMENT_FILTER_OPTIONS.map(option => (
+                    <MenuItem key={option.value || 'all'} value={option.value}>
+                      {option.label}
                     </MenuItem>
                   ))}
                 </Select>

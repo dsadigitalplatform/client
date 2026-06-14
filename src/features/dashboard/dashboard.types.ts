@@ -9,6 +9,21 @@ export type LoanCasesTrendPoint = {
   requestedLoanVolume: number
 }
 
+export type MonthlyStageMetric = {
+  stageId: string | null
+  stageName: string | null
+  configured: boolean
+  totalCases: number
+  totalAmount: number
+}
+
+export type MonthlyPerformanceData = {
+  dateFrom: string
+  dateTo: string
+  loggedIn: MonthlyStageMetric
+  disbursed: MonthlyStageMetric
+}
+
 export type DashboardOverview = {
   customers: {
     total: number
@@ -57,6 +72,7 @@ export type DashboardWidgetId =
   | 'trend-loan-volume'
   | 'agents'
   | 'appointments'
+  | 'monthly-performance'
   | 'reminders'
 
 export type DashboardGridItem = {

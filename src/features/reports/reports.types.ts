@@ -8,14 +8,11 @@ export type ReportViewType = 'summary' | 'detailed' | 'trend' | 'full'
 
 export type ReportTrendGranularity = 'week' | 'month'
 
-export type ReportPresetId =
-  | 'stage-wise-loans'
-  | 'agent-wise-loans'
-  | 'bank-wise-loans'
-  | 'loan-type-breakdown'
-  | 'stage-movement-history'
+export type ReportPresetId = 'stage-wise-loans' | 'agent-wise-loans' | 'bank-wise-loans'
 
 export type ReportDetailGroupDimension = Exclude<ReportGroupBy, 'time'>
+
+export type ReportProgressivePaymentFilter = 'ready_to_track' | 'tracking_active'
 
 export type ReportFilters = {
   dataMode: ReportDataMode
@@ -33,6 +30,7 @@ export type ReportFilters = {
   loanTypeId: string | null
   bankName: string | null
   showInactive: boolean
+  progressivePaymentFilter: ReportProgressivePaymentFilter | null
 }
 
 export type ReportBreakdownRow = {
@@ -86,7 +84,7 @@ export type ReportQueryResponse = {
 }
 
 export type ReportFilterOptions = {
-  stages: Array<{ id: string; name: string; order: number }>
+  stages: Array<{ id: string; name: string; order: number; isLoggedIn?: boolean; isDisbursed?: boolean }>
   agents: Array<{ id: string; name: string | null; email: string | null }>
   customers: Array<{ id: string; name: string }>
   loanTypes: Array<{ id: string; name: string }>
@@ -128,7 +126,8 @@ export const DEFAULT_REPORT_FILTERS: ReportFilters = {
   customerId: null,
   loanTypeId: null,
   bankName: null,
-  showInactive: false
+  showInactive: false,
+  progressivePaymentFilter: null
 }
 
 export function filtersEqual(a: ReportFilters, b: ReportFilters) {
@@ -144,7 +143,8 @@ export function hasActiveDimensionFilters(filters: ReportFilters) {
       filters.customerId ||
       filters.loanTypeId ||
       filters.bankName ||
-      filters.showInactive
+      filters.showInactive ||
+      filters.progressivePaymentFilter
   )
 }
 
@@ -183,30 +183,6 @@ export const REPORT_PRESETS: ReportPreset[] = [
     filters: {
       dataMode: 'snapshot',
       groupBy: 'bank',
-      view: 'full',
-      metric: 'count'
-    }
-  },
-  {
-    id: 'loan-type-breakdown',
-    title: 'Loan Type Breakdown',
-    description: 'Compare product mix by loan type.',
-    icon: 'ri-pie-chart-2-line',
-    filters: {
-      dataMode: 'snapshot',
-      groupBy: 'loanType',
-      view: 'full',
-      metric: 'count'
-    }
-  },
-  {
-    id: 'stage-movement-history',
-    title: 'Stage Movement History',
-    description: 'Audit-based report: leads that reached stages in the selected period.',
-    icon: 'ri-history-line',
-    filters: {
-      dataMode: 'historical',
-      groupBy: 'stage',
       view: 'full',
       metric: 'count'
     }

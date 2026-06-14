@@ -489,6 +489,8 @@ const loanStatusPipelineStagesValidator = {
       name: { bsonType: 'string', minLength: 2 },
       description: { bsonType: ['string', 'null'] },
       order: { bsonType: 'number', minimum: 1, multipleOf: 1 },
+      isLoggedIn: { bsonType: 'bool' },
+      isDisbursed: { bsonType: 'bool' },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: ['date', 'null'] }

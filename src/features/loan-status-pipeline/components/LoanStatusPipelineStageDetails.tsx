@@ -155,7 +155,9 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
               initialValues={{
                 name: data.name,
                 description: data.description,
-                order: data.order
+                order: data.order,
+                isLoggedIn: Boolean(data.isLoggedIn),
+                isDisbursed: Boolean(data.isDisbursed)
               }}
               submitLabel='Update Stage'
               onSubmitOverride={async payload => {
@@ -183,6 +185,17 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                   {data.description || '-'}
                 </Typography>
               </Box>
+              {(data.isLoggedIn || data.isDisbursed) && (
+                <Box>
+                  <Typography variant='subtitle2' color='text.secondary'>
+                    Stage Flags
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.75 }}>
+                    {data.isLoggedIn ? <Chip label='Logged In' size='small' color='info' variant='outlined' /> : null}
+                    {data.isDisbursed ? <Chip label='Disbursed' size='small' color='success' variant='outlined' /> : null}
+                  </Box>
+                </Box>
+              )}
             </Box>
           )}
         </CardContent>

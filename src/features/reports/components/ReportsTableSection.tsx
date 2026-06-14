@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Fragment, useMemo, useState, type KeyboardEvent } from 'react'
+import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -150,58 +150,120 @@ function GroupAmountCell({ amount, label }: { amount: number; label: string }) {
   )
 }
 
-function MobileGroupTotals({ count, amount, label, tone }: { count: number; amount: number; label: string; tone: 'primary' | 'secondary' }) {
+function MobileGroupHeader({
+  dimensionLabel,
+  groupLabel,
+  count,
+  amount,
+  collapsed,
+  onToggle,
+  tone
+}: {
+  dimensionLabel: string
+  groupLabel: string
+  count: number
+  amount: number
+  collapsed: boolean
+  onToggle: () => void
+  tone: 'primary' | 'secondary'
+}) {
   const theme = useTheme()
   const accent = tone === 'primary' ? theme.palette.primary : theme.palette.secondary
+  const caseLabel = count === 1 ? 'case' : 'cases'
 
   return (
     <Box
+      role='button'
+      tabIndex={0}
+      aria-expanded={!collapsed}
+      onClick={onToggle}
+      onKeyDown={event => toggleGroupOnKeyDown(event, onToggle)}
       sx={{
-        display: 'flex',
-        gap: 1,
-        flexShrink: 0,
-        alignItems: 'stretch'
+        px: 2,
+        py: 1.5,
+        cursor: 'pointer',
+        bgcolor: alpha(accent.main, tone === 'primary' ? 0.1 : 0.06),
+        borderLeft: `4px solid ${accent.main}`,
+        transition: 'background-color 0.15s ease',
+        '&:hover': { bgcolor: alpha(accent.main, tone === 'primary' ? 0.16 : 0.1) }
       }}
     >
-      <Box
-        sx={{
-          px: 1.25,
-          py: 0.75,
-          borderRadius: 1.5,
-          bgcolor: alpha(accent.main, 0.12),
-          border: 1,
-          borderColor: alpha(accent.main, 0.35),
-          textAlign: 'center',
-          minWidth: 72
-        }}
-      >
-        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.2 }}>
-          Cases
-        </Typography>
-        <Typography variant='subtitle2' fontWeight={800}>
-          {count}
-        </Typography>
-      </Box>
-      <Box
-        sx={{
-          px: 1.25,
-          py: 0.75,
-          borderRadius: 1.5,
-          bgcolor: alpha(accent.main, 0.12),
-          border: 1,
-          borderColor: alpha(accent.main, 0.35),
-          textAlign: 'right',
-          minWidth: 108
-        }}
-      >
-        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.2 }}>
-          {label}
-        </Typography>
-        <Typography variant='subtitle2' fontWeight={800}>
-          {formatINR(amount)}
-        </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+        <ExpandChevron collapsed={collapsed} />
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.3 }}>
+            {dimensionLabel}
+          </Typography>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
+            {groupLabel}
+          </Typography>
+          <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+            {count} {caseLabel} · {formatINR(amount)}
+          </Typography>
+        </Box>
       </Box>
     </Box>
+  )
+}
+
+function MobileDetailField({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <>
+      <Typography variant='caption' color='text.secondary' sx={{ pt: 0.25 }}>
+        {label}
+      </Typography>
+      <Typography variant='body2' sx={{ wordBreak: 'break-word' }}>
+        {value}
+      </Typography>
+    </>
+  )
+}
+
+function MobileDetailCard({ row, isHistorical }: { row: ReportDetailRow; isHistorical: boolean }) {
+  const stageValue = isHistorical ? (
+    <Chip size='small' color='warning' variant='outlined' label={row.auditStageName ?? row.stageName ?? '—'} sx={{ height: 22 }} />
+  ) : (
+    (row.stageName ?? '—')
+  )
+
+  return (
+    <Card variant='outlined' sx={{ borderColor: 'divider' }}>
+      <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1.25 }}>
+          <Typography variant='subtitle2' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
+            {row.customerName ?? 'Unknown customer'}
+          </Typography>
+          <MuiLink
+            component={Link}
+            href={`/loan-cases/${row.leadId}`}
+            underline='hover'
+            variant='body2'
+            sx={{ flexShrink: 0, fontWeight: 600 }}
+          >
+            View
+          </MuiLink>
+        </Box>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(72px, auto) 1fr',
+            columnGap: 1.5,
+            rowGap: 0.75,
+            alignItems: 'center'
+          }}
+        >
+          <MobileDetailField label='Loan type' value={row.loanTypeName ?? '—'} />
+          <MobileDetailField label='Bank' value={row.bankName ?? '—'} />
+          <MobileDetailField label={isHistorical ? 'Stage (audit)' : 'Stage'} value={stageValue} />
+          <MobileDetailField label='Agent' value={row.agentName ?? '—'} />
+          <MobileDetailField label='Amount' value={<Typography component='span' fontWeight={700}>{formatINR(row.requestedAmount)}</Typography>} />
+          <MobileDetailField
+            label={isHistorical ? 'Staged' : 'Created'}
+            value={isHistorical ? (row.auditStagedDate ?? '—') : formatDate(row.createdAt)}
+          />
+        </Box>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -284,14 +346,14 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
 
   if (isMobile) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           <Typography variant='h6'>Grouped detail</Typography>
           <Typography variant='body2' color='text.secondary'>
             Nested by {groupingLabel}
             {data.details.length >= 500 ? ' (showing first 500 rows)' : ''}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
             <Button size='small' variant='outlined' onClick={expandAll}>
               Expand all
             </Button>
@@ -306,43 +368,19 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
           const primaryCollapsed = isCollapsed(primaryId)
 
           return (
-            <Card
-              key={group.key}
-              variant='outlined'
-              sx={{ overflow: 'hidden', borderColor: alpha(theme.palette.primary.main, 0.35), borderWidth: 2 }}
-            >
-              <Box
-                role='button'
-                tabIndex={0}
-                aria-expanded={!primaryCollapsed}
-                onClick={() => toggleGroup(primaryId)}
-                onKeyDown={event => toggleGroupOnKeyDown(event, () => toggleGroup(primaryId))}
-                sx={{
-                  px: 2,
-                  py: 1.5,
-                  ...primaryStyles,
-                  borderLeft: `5px solid ${theme.palette.primary.main}`
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
-                    <GroupLevelMarker level='primary' />
-                    <ExpandChevron collapsed={primaryCollapsed} />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-                        {groupByLabel(data.groupBy)}
-                      </Typography>
-                      <Typography variant='subtitle1' fontWeight={800} noWrap>
-                        {group.label}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <MobileGroupTotals count={group.count} amount={group.amount} label='Group total' tone='primary' />
-                </Box>
-              </Box>
+            <Card key={group.key} variant='outlined' sx={{ overflow: 'hidden' }}>
+              <MobileGroupHeader
+                dimensionLabel={groupByLabel(data.groupBy)}
+                groupLabel={group.label}
+                count={group.count}
+                amount={group.amount}
+                collapsed={primaryCollapsed}
+                onToggle={() => toggleGroup(primaryId)}
+                tone='primary'
+              />
 
               <Collapse in={!primaryCollapsed}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, pt: 1 }}>
                   {hasSecondary
                     ? group.subgroups.map(subgroup => {
                         const secondaryId = groupRowId('secondary', group.key, subgroup.key)
@@ -353,58 +391,28 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                             key={subgroup.key}
                             sx={{
                               border: 1,
-                              borderColor: alpha(theme.palette.secondary.main, 0.35),
-                              borderRadius: 2,
-                              overflow: 'hidden',
-                              ml: 1
+                              borderColor: 'divider',
+                              borderRadius: 1.5,
+                              overflow: 'hidden'
                             }}
                           >
-                            <Box
-                              role='button'
-                              tabIndex={0}
-                              aria-expanded={!secondaryCollapsed}
-                              onClick={() => toggleGroup(secondaryId)}
-                              onKeyDown={event => toggleGroupOnKeyDown(event, () => toggleGroup(secondaryId))}
-                              sx={{ px: 1.5, py: 1.25, ...secondaryStyles }}
-                            >
-                              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
-                                  <GroupLevelMarker level='secondary' />
-                                  <ExpandChevron collapsed={secondaryCollapsed} />
-                                  <Box sx={{ minWidth: 0 }}>
-                                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-                                      {groupByLabel(groupBySecondary!)}
-                                    </Typography>
-                                    <Typography variant='body1' fontWeight={700} noWrap>
-                                      {subgroup.label}
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                                <MobileGroupTotals count={subgroup.count} amount={subgroup.amount} label='Subtotal' tone='secondary' />
-                              </Box>
-                            </Box>
+                            <MobileGroupHeader
+                              dimensionLabel={groupByLabel(groupBySecondary!)}
+                              groupLabel={subgroup.label}
+                              count={subgroup.count}
+                              amount={subgroup.amount}
+                              collapsed={secondaryCollapsed}
+                              onToggle={() => toggleGroup(secondaryId)}
+                              tone='secondary'
+                            />
                             <Collapse in={!secondaryCollapsed}>
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1, bgcolor: 'background.default' }}>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, pt: 1, bgcolor: 'action.hover' }}>
                                 {subgroup.rows.map(row => (
-                                  <Card key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`} variant='outlined'>
-                                    <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '12px !important' }}>
-                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                                        <Typography fontWeight={600}>{row.customerName ?? 'Unknown customer'}</Typography>
-                                        <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} underline='hover' variant='body2'>
-                                          View
-                                        </MuiLink>
-                                      </Box>
-                                      <Typography variant='body2' color='text.secondary'>
-                                        {row.loanTypeName ?? '—'} {row.bankName ? `• ${row.bankName}` : ''}
-                                      </Typography>
-                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Typography fontWeight={600}>{formatINR(row.requestedAmount)}</Typography>
-                                        <Typography variant='caption' color='text.secondary'>
-                                          {isHistorical ? `Staged ${row.auditStagedDate ?? '—'}` : formatDate(row.createdAt)}
-                                        </Typography>
-                                      </Box>
-                                    </CardContent>
-                                  </Card>
+                                  <MobileDetailCard
+                                    key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
+                                    row={row}
+                                    isHistorical={isHistorical}
+                                  />
                                 ))}
                               </Box>
                             </Collapse>
@@ -412,25 +420,11 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                         )
                       })
                     : group.rows.map(row => (
-                        <Card key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`} variant='outlined'>
-                          <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, py: '12px !important' }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                              <Typography fontWeight={600}>{row.customerName ?? 'Unknown customer'}</Typography>
-                              <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} underline='hover' variant='body2'>
-                                View
-                              </MuiLink>
-                            </Box>
-                            <Typography variant='body2' color='text.secondary'>
-                              {row.loanTypeName ?? '—'} {row.bankName ? `• ${row.bankName}` : ''}
-                            </Typography>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Typography fontWeight={600}>{formatINR(row.requestedAmount)}</Typography>
-                              <Typography variant='caption' color='text.secondary'>
-                                {isHistorical ? `Staged ${row.auditStagedDate ?? '—'}` : formatDate(row.createdAt)}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
+                        <MobileDetailCard
+                          key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
+                          row={row}
+                          isHistorical={isHistorical}
+                        />
                       ))}
                 </Box>
               </Collapse>

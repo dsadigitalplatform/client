@@ -114,3 +114,18 @@ export async function getDisbursementAuditHistory(trackerId: string) {
 
   return (data?.items ?? []) as DisbursementAuditHistoryItem[]
 }
+
+export async function deleteDisbursementTracker(trackerId: string) {
+  const res = await fetch(`/api/loan-disbursements/${trackerId}`, { method: 'DELETE' })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message =
+      (data as { message?: string }).message || (data as { error?: string }).error || 'Failed to delete tracker'
+
+    throw new Error(message)
+  }
+
+  return data as { ok: boolean; leadId: string; message: string }
+}

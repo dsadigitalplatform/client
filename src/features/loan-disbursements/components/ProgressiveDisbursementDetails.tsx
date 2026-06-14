@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -31,6 +32,7 @@ import type {
 } from '@features/loan-disbursements/loan-disbursements.types'
 import {
   addLoanDisbursement,
+  deleteDisbursementTracker,
   getDisbursementAuditHistory,
   getDisbursementTrackerById
 } from '@features/loan-disbursements/services/loanDisbursementsService'
@@ -70,6 +72,7 @@ function formatDisplayDate(iso: string | null) {
 }
 
 export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
+  const router = useRouter()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [tracker, setTracker] = useState<DisbursementTrackerDetails | null>(null)
@@ -77,7 +80,10 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
@@ -155,6 +161,24 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
     }
   }
 
+  const handleDeleteTracker = async () => {
+    if (!tracker) return
+
+    setDeleting(true)
+    setDeleteError(null)
+
+    try {
+      const result = await deleteDisbursementTracker(trackerId)
+
+      setDeleteOpen(false)
+      router.push(`/loan-cases/${result.leadId}`)
+    } catch (e: unknown) {
+      setDeleteError((e as Error)?.message || 'Failed to delete tracker')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
@@ -198,13 +222,27 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
             </MuiLink>
           </Box>
         </Box>
-        {canAdd ? (
-          <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setAddOpen(true)} fullWidth={isMobile}>
-            Record disbursement
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'center' } }}>
+          {canAdd ? (
+            <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setAddOpen(true)} fullWidth={isMobile}>
+              Record disbursement
+            </Button>
+          ) : (
+            <Chip icon={<i className='ri-checkbox-circle-line' />} label='Disbursement complete' color='success' />
+          )}
+          <Button
+            variant='outlined'
+            color='error'
+            startIcon={<i className='ri-delete-bin-line' />}
+            onClick={() => {
+              setDeleteError(null)
+              setDeleteOpen(true)
+            }}
+            fullWidth={isMobile}
+          >
+            Delete tracker
           </Button>
-        ) : (
-          <Chip icon={<i className='ri-checkbox-circle-line' />} label='Disbursement complete' color='success' />
-        )}
+        </Box>
       </Box>
 
       <Card
@@ -410,6 +448,37 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
           </Button>
           <Button variant='contained' onClick={() => void handleAddDisbursement()} disabled={submitting}>
             {submitting ? 'Saving…' : 'Save disbursement'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onClose={() => !deleting && setDeleteOpen(false)} fullWidth maxWidth='sm'>
+        <DialogTitle>Delete disbursement tracker?</DialogTitle>
+        <DialogContent dividers>
+          {deleteError ? (
+            <Alert severity='error' sx={{ mb: 2 }}>
+              {deleteError}
+            </Alert>
+          ) : null}
+          <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+            This removes the active tracker for <strong>{tracker.customerName}</strong> so you can edit the approved amount
+            on the lead again. All tracker and disbursement history is preserved in the audit trail.
+          </Typography>
+          {tracker.disbursements.length > 0 ? (
+            <Alert severity='warning'>
+              {tracker.disbursements.length} recorded disbursement{tracker.disbursements.length === 1 ? '' : 's'} (
+              {formatINR(tracker.totalDisbursedAmount)}) will be removed from the tracker but kept in audit.
+            </Alert>
+          ) : (
+            <Alert severity='info'>No disbursements have been recorded yet.</Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button color='error' variant='contained' onClick={() => void handleDeleteTracker()} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete tracker'}
           </Button>
         </DialogActions>
       </Dialog>

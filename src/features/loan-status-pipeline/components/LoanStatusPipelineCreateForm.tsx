@@ -23,6 +23,8 @@ import Avatar from '@mui/material/Avatar'
 import LinearProgress from '@mui/material/LinearProgress'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Checkbox from '@mui/material/Checkbox'
 
 import { createLoanStatusPipelineStage } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 
@@ -36,6 +38,8 @@ type Props = {
         name: string
         description: string | null
         order: number
+        isLoggedIn: boolean
+        isDisbursed: boolean
     }>
     onSubmitOverride?: (payload: any) => Promise<void>
     submitLabel?: string
@@ -63,6 +67,8 @@ const LoanStatusPipelineCreateForm = ({
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
     const [order, setOrder] = useState('1')
+    const [isLoggedIn, setIsLoggedIn] = useState(false)
+    const [isDisbursed, setIsDisbursed] = useState(false)
 
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -77,6 +83,8 @@ const LoanStatusPipelineCreateForm = ({
         if (initialValues.name != null) setName(initialValues.name)
         if (initialValues.description !== undefined) setDescription(initialValues.description || '')
         if (initialValues.order != null) setOrder(String(initialValues.order))
+        if (initialValues.isLoggedIn != null) setIsLoggedIn(Boolean(initialValues.isLoggedIn))
+        if (initialValues.isDisbursed != null) setIsDisbursed(Boolean(initialValues.isDisbursed))
     }, [initialValues])
 
     useEffect(() => {
@@ -114,9 +122,22 @@ const LoanStatusPipelineCreateForm = ({
 
         if (name.trim().length < 2) next.name = 'Stage name is required'
         if (parsedOrder == null || parsedOrder < 1) next.order = 'Order must be a whole number ≥ 1'
+        if (isLoggedIn && isDisbursed) next.stageFlags = 'Select either Logged In or Disbursed, not both'
         setFieldErrors(next)
 
         return Object.keys(next).length === 0
+    }
+
+    const handleLoggedInChange = (checked: boolean) => {
+        setIsLoggedIn(checked)
+        if (checked) setIsDisbursed(false)
+        if (fieldErrors.stageFlags) setFieldErrors(prev => ({ ...prev, stageFlags: '' }))
+    }
+
+    const handleDisbursedChange = (checked: boolean) => {
+        setIsDisbursed(checked)
+        if (checked) setIsLoggedIn(false)
+        if (fieldErrors.stageFlags) setFieldErrors(prev => ({ ...prev, stageFlags: '' }))
     }
 
     const handleSubmit = async () => {
@@ -130,7 +151,9 @@ const LoanStatusPipelineCreateForm = ({
             const payload = {
                 name: name.trim(),
                 description: description.trim().length === 0 ? null : description.trim(),
-                order: parsedOrder as number
+                order: parsedOrder as number,
+                isLoggedIn,
+                isDisbursed
             }
 
             if (onSubmitOverride) {
@@ -257,6 +280,32 @@ const LoanStatusPipelineCreateForm = ({
                         )
                     }}
                 />
+                <Divider />
+                <Typography variant='subtitle2' color='text.secondary'>
+                    Stage Flags
+                </Typography>
+                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: -1 }}>
+                    Only one stage in the pipeline can be Logged In, and only one can be Disbursed. Select either one, not both.
+                </Typography>
+                {fieldErrors.stageFlags ? (
+                    <Typography variant='caption' color='error.main'>
+                        {fieldErrors.stageFlags}
+                    </Typography>
+                ) : null}
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0, sm: 3 } }}>
+                    <FormControlLabel
+                        control={
+                            <Checkbox checked={isLoggedIn} onChange={e => handleLoggedInChange(e.target.checked)} />
+                        }
+                        label='Logged In'
+                    />
+                    <FormControlLabel
+                        control={
+                            <Checkbox checked={isDisbursed} onChange={e => handleDisbursedChange(e.target.checked)} />
+                        }
+                        label='Disbursed'
+                    />
+                </Box>
             </Stack>
         </Box>
     )

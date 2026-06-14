@@ -1222,7 +1222,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           documents: documents.map(d => ({ documentId: d.documentId, status: d.status }))
         }
 
-        if (updatePayload.enableProgressivePayment) {
+        if (disbursementTracker) {
           delete updatePayload.approvedAmount
         }
 
@@ -1801,11 +1801,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     onChange={e => setApprovedAmount(e.target.value.replace(/[^\d.]/g, ''))}
                     fullWidth
                     size='small'
-                    disabled={enableProgressivePayment}
+                    disabled={Boolean(disbursementTracker)}
                     error={!!fieldErrors.approvedAmount}
                     helperText={
                       fieldErrors.approvedAmount ||
-                      (enableProgressivePayment ? 'Locked while progressive payment is enabled' : undefined)
+                      (disbursementTracker ? 'Locked while disbursement tracking is active' : undefined)
                     }
                     InputProps={{
                       startAdornment: <InputAdornment position='start'>₹</InputAdornment>
