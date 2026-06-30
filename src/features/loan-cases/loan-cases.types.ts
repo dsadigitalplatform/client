@@ -84,6 +84,8 @@ export type LoanCaseDetails = {
   advocateMobile: string | null
   stageId: string
   stageName: string
+  /** Current stage submission date (YYYY-MM-DD) from audit history. */
+  stageSubmittedDate?: string | null
   documents: LoanCaseDocument[]
   isLocked: boolean
   isActive: boolean

@@ -761,6 +761,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         setCustomerInputValue(data.customerName || '')
         setLoanTypeId(data.loanTypeId)
         setStageId(data.stageId)
+        setStageSubmittedDate(data.stageSubmittedDate || dayjs().format('YYYY-MM-DD'))
         setAssignedAgentId(data.assignedAgentId || '')
         setLeadSource(data.leadSource === 'ASSOCIATE' ? 'ASSOCIATE' : 'DIRECT')
         setAssociateId(data.associateId || '')
@@ -1111,8 +1112,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
       if (!associateId) next.associateId = 'Associate is required'
       else if (!associateOptions.some(a => a.id === associateId)) next.associateId = 'Associate must be active'
     }
-
-    if (!id && draftAppointments.length === 0) next.appointments = 'At least one appointment is required'
 
     setFieldErrors(next)
 
@@ -2113,7 +2112,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 icon='ri-calendar-event-line'
                 title='Appointments'
                 subtitle={
-                  id ? 'Follow-ups and scheduled touchpoints' : 'At least one appointment required before save'
+                  id ? 'Follow-ups and scheduled touchpoints' : 'Optional: add follow-ups and scheduled touchpoints'
                 }
                 accent='secondary'
                 action={

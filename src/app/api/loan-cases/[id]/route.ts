@@ -10,6 +10,7 @@ import { upsertCaseFollowUpReminder } from '@features/reminders/services/reminde
 import { computeProgressPercent } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
+import { fetchLeadCurrentStageSubmittedDate } from '@features/loan-cases/utils/stageAuditDate'
 
 import { authOptions } from '@/lib/auth'
 import { sendMail } from '@/lib/mailer'
@@ -318,6 +319,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     }
   }
 
+  const stageIdHex = String((row as any).stageId)
+  const stageSubmittedDate = await fetchLeadCurrentStageSubmittedDate(db, tenantIdObj, id, stageIdHex)
+
   const data = {
     id: String((row as any)._id),
     customerId: String((row as any).customerId),
@@ -346,8 +350,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     advocateMobile: advocate
       ? [[(advocate as any).countryCode, (advocate as any).mobile].filter(Boolean).join(' ')].filter(Boolean).join('')
       : null,
-    stageId: String((row as any).stageId),
+    stageId: stageIdHex,
     stageName: stage ? String((stage as any).name || '') : '',
+    stageSubmittedDate,
     documents: Array.isArray((row as any).documents)
       ? (row as any).documents.map((d: any) => ({
           documentId: String(d?.documentId || ''),
@@ -852,6 +857,37 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
         ...(stageSubmittedDateIso ? { stageSubmittedDate: stageSubmittedDateIso } : {})
       }
     })
+  } else if (stageSubmittedDateIso && nextStageId) {
+    const previousStageSubmittedDate = await fetchLeadCurrentStageSubmittedDate(
+      db,
+      tenantIdObj,
+      id,
+      nextStageId.toHexString()
+    )
+
+    if (stageSubmittedDateIso !== previousStageSubmittedDate) {
+      const currentStage = await db
+        .collection('loanStatusPipelineStages')
+        .findOne({ _id: nextStageId, tenantId: tenantIdObj }, { projection: { name: 1 } })
+
+      const stageName = currentStage ? String((currentStage as any).name || '') : ''
+      const stageIdHex = nextStageId.toHexString()
+
+      await writeAuditLog({
+        db,
+        actorUserId: userId,
+        targetTenantId: tenantIdObj,
+        action: AUDIT_ACTIONS.leadStatusChanged,
+        metadata: {
+          leadId: id,
+          fromStageId: stageIdHex,
+          fromStageName: stageName,
+          toStageId: stageIdHex,
+          toStageName: stageName,
+          stageSubmittedDate: stageSubmittedDateIso
+        }
+      })
+    }
   }
 
   if (requestedAmountChanged) {

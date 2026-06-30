@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth'
 import { ObjectId } from 'mongodb'
 
 import { parseStageSubmittedDate, todayStageSubmittedDateIso } from '@features/loan-cases/utils/stageSubmittedDate'
+import { fetchLeadCurrentStageSubmittedDate } from '@features/loan-cases/utils/stageAuditDate'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
@@ -158,12 +159,48 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const nextStageObjId = new ObjectId(stageId)
   const currentStageId = (existing as any).stageId as ObjectId | undefined
-
-  if (currentStageId && currentStageId.equals(nextStageObjId)) {
-    return NextResponse.json({ ok: true })
-  }
-
   const now = new Date()
+  const sameStage = Boolean(currentStageId && currentStageId.equals(nextStageObjId))
+
+  if (sameStage) {
+    const previousStageSubmittedDate = await fetchLeadCurrentStageSubmittedDate(
+      db,
+      tenantIdObj,
+      id,
+      nextStageObjId.toHexString()
+    )
+
+    if (previousStageSubmittedDate === stageSubmittedParsed.isoDate) {
+      return NextResponse.json({ ok: true })
+    }
+
+    const currentStage = await db
+      .collection('loanStatusPipelineStages')
+      .findOne({ _id: nextStageObjId, tenantId: tenantIdObj }, { projection: { name: 1 } })
+
+    const stageName = currentStage ? String((currentStage as any).name || '') : ''
+
+    await writeAuditLog({
+      db,
+      actorUserId: userId,
+      targetTenantId: tenantIdObj,
+      action: AUDIT_ACTIONS.leadStatusChanged,
+      metadata: {
+        leadId: id,
+        fromStageId: nextStageObjId.toHexString(),
+        fromStageName: stageName,
+        toStageId: nextStageObjId.toHexString(),
+        toStageName: stageName,
+        stageSubmittedDate: stageSubmittedParsed.isoDate
+      }
+    })
+
+    await db
+      .collection('loanCases')
+      .updateOne({ _id: new ObjectId(id), tenantId: tenantIdObj }, { $set: { updatedAt: now } })
+
+    return NextResponse.json({ ok: true, updatedAt: now.toISOString() })
+  }
 
   await db
     .collection('loanCases')

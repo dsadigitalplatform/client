@@ -238,3 +238,61 @@ export function buildStagedDateAuditFlattenStage() {
     }
   }
 }
+
+/** Latest submitted date for a lead's current pipeline stage (from audit history). */
+export async function fetchLeadCurrentStageSubmittedDate(
+  db: any,
+  tenantIdObj: ObjectId,
+  leadId: string,
+  stageId: string
+): Promise<string | null> {
+  if (!stageId) return null
+
+  const tenantIdHex = tenantIdObj.toHexString()
+
+  const rows = await db
+    .collection('auditLogs')
+    .aggregate([
+      {
+        $match: {
+          $expr: {
+            $and: [
+              {
+                $or: [
+                  { $eq: ['$targetTenantId', tenantIdObj] },
+                  { $eq: [{ $toString: '$targetTenantId' }, tenantIdHex] }
+                ]
+              },
+              {
+                $or: [
+                  { $eq: [{ $toString: '$metadata.leadId' }, leadId] },
+                  { $eq: ['$metadata.leadId', leadId] },
+                  {
+                    $eq: [
+                      { $convert: { input: '$metadata.leadId', to: 'objectId', onError: null, onNull: null } },
+                      { $convert: { input: leadId, to: 'objectId', onError: null, onNull: null } }
+                    ]
+                  }
+                ]
+              },
+              buildStageActionMatchExpr(),
+              buildTargetStageMatchExpr(stageId)
+            ]
+          }
+        }
+      },
+      {
+        $addFields: {
+          effectiveStagedDate: effectiveStagedDateExpression()
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 1 },
+      { $project: { effectiveStagedDate: 1 } }
+    ])
+    .toArray()
+
+  const date = rows[0]?.effectiveStagedDate
+
+  return typeof date === 'string' && date ? date : null
+}
