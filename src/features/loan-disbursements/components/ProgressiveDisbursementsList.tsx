@@ -33,6 +33,7 @@ import type {
   DisbursementStatus,
   DisbursementTrackerListItem
 } from '@features/loan-disbursements/loan-disbursements.types'
+import { LeadCodeChip, LeadIdentity, leadMatchesQuery } from '@features/loan-cases/components/LeadCodeDisplay'
 import { useLoanDisbursements } from '@features/loan-disbursements/hooks/useLoanDisbursements'
 import StartDisbursementDialog from '@features/loan-disbursements/components/StartDisbursementDialog'
 import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
@@ -96,20 +97,11 @@ function DisbursementTrackerMobileCard({ row }: { row: DisbursementTrackerListIt
             {customerInitials(row.customerName)}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant='subtitle1'
-              fontWeight={600}
-              sx={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
-            >
-              {row.customerName}
-            </Typography>
-            <Typography variant='body2' color='text.secondary' sx={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              {row.loanTypeName}
-            </Typography>
-            <Typography variant='caption' color='text.secondary'>
-              {row.stageName}
-              {row.bankName ? ` · ${row.bankName}` : ''}
-            </Typography>
+            <LeadIdentity
+              customerName={row.customerName}
+              code={row.leadCode}
+              subtitle={`${row.loanTypeName}${row.bankName ? ` · ${row.bankName}` : ''} · ${row.stageName}`}
+            />
           </Box>
           <Chip size='small' label={chip.label} color={chip.color} variant='outlined' sx={{ flexShrink: 0 }} />
         </Box>
@@ -247,11 +239,14 @@ export default function ProgressiveDisbursementsList() {
 
     if (!q) return trackers
 
-    return trackers.filter(
-      t =>
-        t.customerName.toLowerCase().includes(q) ||
-        t.loanTypeName.toLowerCase().includes(q) ||
-        (t.bankName || '').toLowerCase().includes(q)
+    return trackers.filter(t =>
+      leadMatchesQuery(q, {
+        code: t.leadCode,
+        customerName: t.customerName,
+        loanTypeName: t.loanTypeName,
+        bankName: t.bankName,
+        stageName: t.stageName
+      })
     )
   }, [trackers, search])
 
@@ -418,6 +413,7 @@ export default function ProgressiveDisbursementsList() {
               <TableHead>
                 <TableRow>
                   <TableCell>Customer</TableCell>
+                  <TableCell>Lead code</TableCell>
                   <TableCell>Loan</TableCell>
                   <TableCell>Progress</TableCell>
                   <TableCell align='right'>Disbursed</TableCell>
@@ -429,7 +425,7 @@ export default function ProgressiveDisbursementsList() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 3, textAlign: 'center' }}>
                         Loading…
                       </Typography>
@@ -437,7 +433,7 @@ export default function ProgressiveDisbursementsList() {
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Box sx={{ py: 5, textAlign: 'center' }}>
                         <Typography variant='body1' gutterBottom>
                           No disbursement trackers yet
@@ -464,6 +460,9 @@ export default function ProgressiveDisbursementsList() {
                           <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} variant='caption'>
                             View lead
                           </MuiLink>
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', fontWeight: 700 }}>
+                          {row.leadCode?.trim() || '—'}
                         </TableCell>
                         <TableCell>
                           <Typography variant='body2'>{row.loanTypeName}</Typography>

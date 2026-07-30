@@ -306,6 +306,7 @@ const customersValidator = {
       monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
       cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },
       source: { enum: ['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'] },
+      code: { bsonType: 'string', minLength: 3 },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: ['date', 'null'] }
@@ -318,6 +319,11 @@ ensureCollection('customers', customersValidator)
 dropUniqueIndexesOnFields('customers', ['fullName'])
 ensureIndex('customers', { tenantId: 1 }, { name: 'idx_tenantId' })
 ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_mobile' })
+ensureIndex(
+  'customers',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_tenant_customer_code' }
+)
 
 const associatesValidator = {
   $jsonSchema: {
@@ -360,6 +366,7 @@ const advocatesValidator = {
       mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       address: { bsonType: ['string', 'null'] },
+      code: { bsonType: 'string', minLength: 3 },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: ['date', 'null'] }
@@ -371,6 +378,11 @@ const advocatesValidator = {
 ensureCollection('advocates', advocatesValidator)
 ensureIndex('advocates', { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
 ensureIndex('advocates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_advocate_mobile' })
+ensureIndex(
+  'advocates',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_tenant_advocate_code' }
+)
 
 const banksValidator = {
   $jsonSchema: {
@@ -542,9 +554,14 @@ const loanCasesValidator = {
       loanTypeId: { bsonType: 'objectId' },
       stageId: { bsonType: 'objectId' },
       bankName: { bsonType: ['string', 'null'] },
+      bankId: { bsonType: ['objectId', 'null'] },
+      bankCode: { bsonType: ['string', 'null'], maxLength: 32 },
+      code: { bsonType: ['string', 'null'], maxLength: 64 },
+      codePrevious: { bsonType: ['string', 'null'], maxLength: 64 },
+      codeUpdatedAt: { bsonType: ['date', 'null'] },
       requestedAmount: { bsonType: ['number', 'null'], minimum: 0 },
       approvedAmount: { bsonType: ['number', 'null'], minimum: 0 },
-      eligibleAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      loanAccount: { bsonType: ['string', 'null'], maxLength: 20 },
       interestRate: { bsonType: ['number', 'null'], minimum: 0 },
       tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
       emi: { bsonType: ['number', 'null'], minimum: 0 },
@@ -601,6 +618,71 @@ ensureIndex('loanCases', { tenantId: 1, loanTypeId: 1 }, { name: 'idx_loanCases_
 ensureIndex('loanCases', { tenantId: 1, stageId: 1 }, { name: 'idx_loanCases_tenantId_stageId' })
 ensureIndex('loanCases', { tenantId: 1, createdBy: 1 }, { name: 'idx_loanCases_tenantId_createdBy' })
 ensureIndex('loanCases', { tenantId: 1, assignedAgentId: 1 }, { name: 'idx_loanCases_tenantId_assignedAgentId' })
+ensureIndex(
+  'loanCases',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_loanCases_tenantId_code' }
+)
+
+/* =========================
+   codeGenerationConfigs
+   Tenant-scoped business code templates per entity type.
+   ========================= */
+const codeGenerationConfigsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'entityType', 'isEnabled', 'template', 'prefix', 'sequencePadLength', 'updatedAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      entityType: {
+        enum: ['LEAD', 'CUSTOMER', 'BANK', 'ASSOCIATE', 'CORPORATE', 'LOAN_TYPE', 'ADVOCATE']
+      },
+      isEnabled: { bsonType: 'bool' },
+      template: { bsonType: 'string', maxLength: 80 },
+      prefix: { bsonType: 'string', minLength: 1, maxLength: 8 },
+      sequencePadLength: { bsonType: 'number', minimum: 1, maximum: 8 },
+      updatedBy: { bsonType: ['objectId', 'null'] },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('codeGenerationConfigs', codeGenerationConfigsValidator)
+ensureIndex(
+  'codeGenerationConfigs',
+  { tenantId: 1, entityType: 1 },
+  { unique: true, name: 'uniq_codeGenerationConfigs_tenant_entity' }
+)
+
+/* =========================
+   codeSequences
+   Atomic counters for business code SEQ tokens.
+   ========================= */
+const codeSequencesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'entityType', 'scopeKey', 'nextValue'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      entityType: {
+        enum: ['LEAD', 'CUSTOMER', 'BANK', 'ASSOCIATE', 'CORPORATE', 'LOAN_TYPE', 'ADVOCATE']
+      },
+      scopeKey: { bsonType: 'string' },
+      nextValue: { bsonType: 'number', minimum: 0 },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('codeSequences', codeSequencesValidator)
+ensureIndex(
+  'codeSequences',
+  { tenantId: 1, entityType: 1, scopeKey: 1 },
+  { unique: true, name: 'uniq_codeSequences_tenant_entity_scope' }
+)
 
 /* =========================
    appointments

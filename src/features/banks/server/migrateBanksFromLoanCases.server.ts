@@ -1,13 +1,10 @@
-import 'server-only'
-
 import type { Db, ObjectId } from 'mongodb'
 
 import {
-  ensureUniqueBankCode,
   escapeRegex,
-  generateBankCodeFromName,
   normalizeBankCode
 } from '@/app/api/banks/_helpers'
+import { generateBankBusinessCode } from '@features/banks/server/bankCode.server'
 
 export type MigrateBanksFromLoanCasesResult = {
   scanned: number
@@ -55,8 +52,11 @@ export async function migrateBanksFromLoanCases(
       continue
     }
 
-    const baseCode = generateBankCodeFromName(name)
-    const code = await ensureUniqueBankCode(db, tenantIdObj, baseCode)
+    const code = await generateBankBusinessCode({
+      db,
+      tenantId: tenantIdObj,
+      name
+    })
     const now = new Date()
 
     await db.collection('banks').insertOne({

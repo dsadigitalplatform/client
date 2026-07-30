@@ -38,7 +38,7 @@ import TableContainer from '@mui/material/TableContainer'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createCustomer, getCustomerByMobile, updateCustomer } from '@features/customers/services/customersService'
+import { createCustomer, getCustomerByMobile, previewCustomerCode, updateCustomer } from '@features/customers/services/customersService'
 import CountryCodeField from '@/components/CountryCodeField'
 import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
 import {
@@ -71,6 +71,7 @@ type Props = {
   showTitle?: boolean
   variant?: 'card' | 'plain'
   initialValues?: Partial<{
+    code: string | null
     fullName: string
     mobile: string
     countryCode: string
@@ -134,6 +135,9 @@ const CustomersCreateForm = ({
   const [redirectProgress, setRedirectProgress] = useState(0)
   const [successMsg, setSuccessMsg] = useState('')
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null)
   const lastLookupMobileRef = useRef('')
@@ -176,6 +180,44 @@ const CustomersCreateForm = ({
     if (initialValues.cibilScore !== undefined && initialValues.cibilScore !== null)
       setCibilScore(String(initialValues.cibilScore))
   }, [initialValues])
+
+  const isEditMode = Boolean(initialValues)
+
+  useEffect(() => {
+    if (isEditMode || matchedCustomerId) {
+      setCodePreview(null)
+
+      return
+    }
+
+    const trimmedName = fullName.trim()
+
+    if (trimmedName.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewCustomerCode({ fullName: trimmedName })
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [fullName, isEditMode, matchedCustomerId])
 
   useEffect(() => {
     if (initialValues) return
@@ -404,6 +446,7 @@ const CustomersCreateForm = ({
         const res = await createCustomer(payload)
 
         setCreatedCustomerId(res?.id ? String(res.id) : null)
+        setCreatedCode(res?.code ? String(res.code) : null)
       }
 
       setSuccessMsg(isEditing ? 'Customer updated successfully' : 'Customer created successfully')
@@ -548,6 +591,20 @@ const CustomersCreateForm = ({
 
   const isEditing = Boolean(initialValues || matchedCustomerId)
   const mobileTitle = submitLabel || (isEditing ? 'Update Customer' : 'Add Customer')
+  const displayedCode = isEditMode ? initialValues?.code || '' : createdCode || codePreview || ''
+
+  const codePreviewBlock =
+    isEditMode ? (
+      <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+    ) : matchedCustomerId ? null : (
+      <Alert severity='info' icon={false} sx={{ py: 1 }}>
+        {previewLoading
+          ? 'Generating code preview...'
+          : displayedCode
+            ? `Next code preview: ${displayedCode}`
+            : 'A unique customer code will be generated from your code generation template.'}
+      </Alert>
+    )
 
   const canAddSecondaryContact = secondaryContacts.length < SECONDARY_CONTACT_LIMIT
 
@@ -624,6 +681,8 @@ const CustomersCreateForm = ({
               )
             }}
           />
+
+          {codePreviewBlock}
 
           <Box
             sx={{
@@ -1119,6 +1178,8 @@ const CustomersCreateForm = ({
               )
             }}
           />
+
+          {codePreviewBlock}
 
           <Box
             sx={{

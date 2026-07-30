@@ -142,7 +142,47 @@ export async function GET(request: Request) {
           as: 'customer'
         }
       },
-      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } }
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'appointments',
+          let: { appointmentId: '$appointmentId', tenantId: '$tenantId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$_id', '$$appointmentId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
+            { $project: { leadId: 1 } }
+          ],
+          as: 'appointmentLead'
+        }
+      },
+      { $unwind: { path: '$appointmentLead', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'loanCases',
+          let: { caseId: '$caseId', appointmentLeadId: '$appointmentLead.leadId', tenantId: '$tenantId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$tenantId', '$$tenantId'] },
+                    {
+                      $or: [
+                        { $and: [{ $ne: ['$$caseId', null] }, { $eq: ['$_id', '$$caseId'] }] },
+                        {
+                          $and: [{ $ne: ['$$appointmentLeadId', null] }, { $eq: ['$_id', '$$appointmentLeadId'] }]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            { $project: { code: 1 } }
+          ],
+          as: 'lead'
+        }
+      },
+      { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } }
     ])
     .toArray()
 
@@ -159,6 +199,7 @@ export async function GET(request: Request) {
     caseRef: (r as any).caseRef == null ? null : String((r as any).caseRef),
     customerId: (r as any).customerId ? String((r as any).customerId) : null,
     customerName: (r as any).customer?.fullName ? String((r as any).customer.fullName) : null,
+    leadCode: (r as any).lead?.code ? String((r as any).lead.code) : null,
     appointmentId: (r as any).appointmentId ? String((r as any).appointmentId) : null
   }))
 

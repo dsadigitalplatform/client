@@ -19,13 +19,6 @@ export async function enforceUniqueStageFlags(
 ) {
   const now = new Date()
 
-  if (flags.isLoggedIn) {
-    await db.collection('loanStatusPipelineStages').updateMany(
-      { tenantId: tenantIdObj, _id: { $ne: stageId }, isLoggedIn: true },
-      { $set: { isLoggedIn: false, updatedAt: now } }
-    )
-  }
-
   if (flags.isDisbursed) {
     await db.collection('loanStatusPipelineStages').updateMany(
       { tenantId: tenantIdObj, _id: { $ne: stageId }, isDisbursed: true },

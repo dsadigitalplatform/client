@@ -17,6 +17,8 @@ import MuiLink from '@mui/material/Link'
 import { useDraggable } from '@dnd-kit/core'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 type Props = {
   loanCase: LoanCaseListItem
@@ -49,6 +51,7 @@ const PipelineCaseCardView = ({
   const moveOptions = useMemo(() => stages.filter(stage => stage.id !== loanCase.stageId), [loanCase.stageId, stages])
   const canMove = Boolean(loanCase.canMoveStage ?? true)
   const showMoveMenu = !forOverlay && canMove && moveOptions.length > 0 && Boolean(onMoveCaseStage)
+  const approvedAmount = resolveApprovedAmount(loanCase)
 
   return (
     <Box
@@ -93,6 +96,9 @@ const PipelineCaseCardView = ({
               >
                 {loanCase.customerName || 'Customer'}
               </MuiLink>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mt: 0.35 }}>
+                <LeadCodeChip code={loanCase.code} />
+              </Box>
               <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
                 {loanCase.loanTypeName || 'Loan Type'} {loanCase.bankName ? `• ${loanCase.bankName}` : ''}
               </Typography>
@@ -147,8 +153,8 @@ const PipelineCaseCardView = ({
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0.5, mt: 1.25 }}>
             <Typography variant='body2' sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-              <span>Requested</span>
-              <span>{typeof loanCase.requestedAmount === 'number' ? '₹' + loanCase.requestedAmount.toLocaleString('en-IN') : '—'}</span>
+              <span>Approved</span>
+              <span>{typeof approvedAmount === 'number' ? '₹' + approvedAmount.toLocaleString('en-IN') : '—'}</span>
             </Typography>
             <Typography variant='body2' color='text.secondary' sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
               <span>Agent</span>

@@ -42,6 +42,7 @@ import { getBanks } from '@features/banks/services/banksService'
 import type { Bank } from '@features/banks/banks.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type StageOption = { id: string; name: string; order: number }
 
@@ -83,6 +84,97 @@ const formatStagedDateLabel = (isoDate: string | null | undefined) => {
 }
 
 const STAGE_AUDIT_SECTION_WIDTH = 236
+
+const formatLeadAmount = (value: number | null | undefined, formatINR: (v: number) => string) =>
+  typeof value === 'number' ? formatINR(value) : '—'
+
+function LeadAmountsMobile({
+  requestedAmount,
+  approvedAmount,
+  loanAccount,
+  formatINR
+}: {
+  requestedAmount: number | null | undefined
+  approvedAmount: number | null | undefined
+  loanAccount: string | null | undefined
+  formatINR: (v: number) => string
+}) {
+  return (
+    <Box
+      sx={{
+        mt: 1.5,
+        borderRadius: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        overflow: 'hidden'
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Requested
+        </Typography>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatLeadAmount(requestedAmount, formatINR)}
+        </Typography>
+      </Box>
+      <Divider />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Approved
+        </Typography>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatLeadAmount(approvedAmount, formatINR)}
+        </Typography>
+      </Box>
+      <Divider />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Loan account
+        </Typography>
+        <Typography
+          variant='body2'
+          sx={{
+            fontWeight: 600,
+            maxWidth: '60%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            textAlign: 'right'
+          }}
+        >
+          {loanAccount?.trim() || '—'}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
 
 type StageMiniRow = { id: string; label: string; primary: string; secondary?: string | null }
 
@@ -211,7 +303,7 @@ const LoanCasesList = () => {
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
-  const [bankName, setBankName] = useState<string>('')
+  const [bankCode, setBankCode] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('updatedAt_desc')
   const [showInactive, setShowInactive] = useState<boolean>(false)
   const [stagedDateFrom, setStagedDateFrom] = useState<string>('')
@@ -220,7 +312,7 @@ const LoanCasesList = () => {
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
-  const [bankNames, setBankNames] = useState<string[]>([])
+  const [banks, setBanks] = useState<Bank[]>([])
   const effectiveAssignedAgentId = isUserRole ? '' : assignedAgentId
   const defaultAssignedAgentId = sessionUserId || ''
 
@@ -228,13 +320,13 @@ const LoanCasesList = () => {
     () => ({
       stageId: stageId || undefined,
       assignedAgentId: effectiveAssignedAgentId || undefined,
-      bankName: bankName || undefined,
+      bankCode: bankCode || undefined,
       showInactive: showInactive || undefined,
       stagedDateFrom: stagedDateFrom || undefined,
       stagedDateTo: stagedDateTo || undefined,
       progressivePaymentFilter: progressivePaymentFilter || undefined
     }),
-    [bankName, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo, progressivePaymentFilter]
+    [bankCode, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo, progressivePaymentFilter]
   )
 
   const isAuditSearchActive = Boolean(stagedDateFrom || stagedDateTo)
@@ -272,7 +364,7 @@ const LoanCasesList = () => {
 
   const hasActiveFilters =
     Boolean(stageId) ||
-    Boolean(bankName) ||
+    Boolean(bankCode) ||
     Boolean(stagedDateFrom) ||
     Boolean(stagedDateTo) ||
     showInactive ||
@@ -298,12 +390,7 @@ const LoanCasesList = () => {
 
         setStages(stagesData as any)
         setUsers(usersData as any)
-        setBankNames(
-          (Array.isArray(banksData) ? banksData : [])
-            .map((b: Bank) => b.name)
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b))
-        )
+        setBanks((Array.isArray(banksData) ? banksData : []) as Bank[])
       } catch {
       }
     })()
@@ -427,15 +514,17 @@ const LoanCasesList = () => {
           <Select
             labelId='loan-cases-bank-filter'
             label='Bank'
-            value={bankName}
+            value={bankCode}
             onChange={e => {
-              setBankName(String(e.target.value))
+              setBankCode(String(e.target.value))
             }}
           >
             <MenuItem value=''>All Banks</MenuItem>
-            {bankNames.map(name => (
-              <MenuItem key={name} value={name}>
-                {name}
+            {[...banks]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(bank => (
+              <MenuItem key={bank.id} value={bank.code}>
+                {bank.name} ({bank.code})
               </MenuItem>
             ))}
           </Select>
@@ -596,7 +685,7 @@ const LoanCasesList = () => {
           sx={{ alignSelf: { sm: 'center' }, minWidth: { sm: 120 } }}
           onClick={() => {
             setStageId('')
-            setBankName('')
+            setBankCode('')
             setStagedDateFrom('')
             setStagedDateTo('')
             setShowInactive(false)
@@ -778,7 +867,7 @@ const LoanCasesList = () => {
                 }}
               >
                 <CardContent sx={{ p: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1, gap: 1, flexWrap: 'wrap' }}>
                     <Chip
                       size='small'
                       label={`#${formatListNumber(index)}`}
@@ -791,6 +880,7 @@ const LoanCasesList = () => {
                         backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)'
                       }}
                     />
+                    {c.code?.trim() ? <LeadCodeChip code={c.code} /> : null}
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ minWidth: 0 }}>
@@ -835,14 +925,12 @@ const LoanCasesList = () => {
                     )}
                   </Box>
 
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, gap: 1.5 }}>
-                    <Typography variant='body2' color='text.secondary'>
-                      Requested
-                    </Typography>
-                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                      {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
-                    </Typography>
-                  </Box>
+                  <LeadAmountsMobile
+                    requestedAmount={c.requestedAmount}
+                    approvedAmount={c.approvedAmount}
+                    loanAccount={c.loanAccount}
+                    formatINR={formatINR}
+                  />
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.75, gap: 1.5 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Assigned
@@ -872,16 +960,19 @@ const LoanCasesList = () => {
               size='small'
               sx={{
                 tableLayout: isAuditSearchActive ? 'fixed' : 'auto',
-                minWidth: isAuditSearchActive ? 1080 : undefined
+                minWidth: isAuditSearchActive ? 1360 : undefined
               }}
             >
               {isAuditSearchActive ? (
                 <colgroup>
                   <col style={{ width: 52 }} />
+                  <col style={{ width: 130 }} />
                   <col style={{ width: '14%' }} />
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: 96 }} />
+                  <col style={{ width: 96 }} />
+                  <col style={{ width: 120 }} />
                   <col style={{ width: STAGE_AUDIT_SECTION_WIDTH + 16 }} />
                   <col style={{ width: 128 }} />
                   <col />
@@ -891,10 +982,13 @@ const LoanCasesList = () => {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 60 }}>#</TableCell>
+                  <TableCell>Code</TableCell>
                   <TableCell>Customer</TableCell>
                   <TableCell>Loan Type</TableCell>
                   <TableCell>Bank</TableCell>
                   <TableCell align='right'>Requested</TableCell>
+                  <TableCell align='right'>Approved</TableCell>
+                  <TableCell>Loan account</TableCell>
                   <TableCell sx={{ width: isAuditSearchActive ? STAGE_AUDIT_SECTION_WIDTH + 16 : undefined }}>
                     {isAuditSearchActive ? 'Stage history' : 'Stage'}
                   </TableCell>
@@ -906,7 +1000,7 @@ const LoanCasesList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={12}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         Loading...
                       </Typography>
@@ -914,7 +1008,7 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : sortedCases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={12}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         No cases found
                       </Typography>
@@ -944,6 +1038,9 @@ const LoanCasesList = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
+                        <LeadCodeText code={c.code} />
+                      </TableCell>
+                      <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <MuiLink
                             component={Link}
@@ -962,8 +1059,23 @@ const LoanCasesList = () => {
                       </TableCell>
                       <TableCell>{c.loanTypeName || '—'}</TableCell>
                       <TableCell>{c.bankName || '—'}</TableCell>
-                      <TableCell align='right'>
-                        {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
+                      <TableCell align='right' sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatLeadAmount(c.requestedAmount, formatINR)}
+                      </TableCell>
+                      <TableCell align='right' sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatLeadAmount(c.approvedAmount, formatINR)}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          maxWidth: 120,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.8125rem'
+                        }}
+                      >
+                        {c.loanAccount?.trim() || '—'}
                       </TableCell>
                       <TableCell
                         sx={{

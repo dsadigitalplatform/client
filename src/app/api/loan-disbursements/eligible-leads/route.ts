@@ -81,7 +81,8 @@ export async function GET() {
             customerName: { $ifNull: ['$customer.fullName', ''] },
             loanTypeName: { $ifNull: ['$loanType.name', ''] },
             stageName: { $ifNull: ['$stage.name', ''] },
-            assignedAgentName: { $ifNull: ['$assignedAgent.name', null] }
+            assignedAgentName: { $ifNull: ['$assignedAgent.name', null] },
+            code: 1
           }
         }
       ])
@@ -109,6 +110,7 @@ export async function GET() {
 
       return {
         id: String((row as { _id: ObjectId })._id),
+        leadCode: (row as { code?: string | null }).code ?? null,
         customerId: String((row as { customerId: ObjectId }).customerId || ''),
         customerName: String((row as { customerName?: string }).customerName || ''),
         loanTypeName: String((row as { loanTypeName?: string }).loanTypeName || ''),

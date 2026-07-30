@@ -13,6 +13,7 @@ import {
   startOfDayIso
 } from '@features/reports/server/reportContext.server'
 import {
+  buildDisbursementTrackerDetailsLookupStages,
   buildProgressivePaymentFilterStages,
   isProgressivePaymentListFilterMode
 } from '@features/loan-cases/utils/progressivePaymentListFilter'
@@ -27,6 +28,17 @@ import type {
   ReportTrendRow,
   ReportViewType
 } from '@features/reports/reports.types'
+import {
+  reportLeadAmountMongoExpression,
+  resolveReportLeadAmount
+} from '@features/reports/utils/reportLeadAmount'
+import {
+  enrichSummaryWithDisbursement,
+  mapReportDisbursementFields
+} from '@features/reports/utils/reportDisbursement'
+import { buildStageAuditMatchCondition } from '@features/reports/server/stageAuditMatch.server'
+import { getDisbursementActivityLeadsInRange } from '@features/reports/server/disbursementActivityReport.server'
+import { mergeHistoricalWithDisbursementActivity } from '@features/reports/server/mergeHistoricalDisbursementReport.server'
 
 type ReportDb = Db
 
@@ -83,6 +95,18 @@ function parseQueryParams(searchParams: URLSearchParams) {
     dateFrom: parseIsoDateParam(searchParams.get('dateFrom')),
     dateTo: parseIsoDateParam(searchParams.get('dateTo')),
     stageId: searchParams.get('stageId') || null,
+    stageIds: (() => {
+      const raw = searchParams.get('stageIds')
+
+      if (!raw) return null
+
+      const ids = raw
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean)
+
+      return ids.length > 0 ? ids : null
+    })(),
     assignedAgentId: searchParams.get('assignedAgentId') || null,
     customerId: searchParams.get('customerId') || null,
     loanTypeId: searchParams.get('loanTypeId') || null,
@@ -92,7 +116,8 @@ function parseQueryParams(searchParams: URLSearchParams) {
       const value = searchParams.get('progressivePaymentFilter') || ''
 
       return isProgressivePaymentListFilterMode(value) ? value : null
-    })()
+    })(),
+    includeDisbursementActivityInRange: searchParams.get('includeDisbursementActivityInRange') === 'true'
   }
 }
 
@@ -154,7 +179,9 @@ async function runSnapshotReport(
   groupBy: ReportGroupBy,
   view: ReportViewType,
   trendGranularity: ReportTrendGranularity,
-  progressiveStages: Record<string, unknown>[] = []
+  progressiveStages: Record<string, unknown>[] = [],
+  tenantIdObj?: ObjectId,
+  tenantIdHex?: string
 ) {
   const pipelinePrefix = buildSnapshotPipelinePrefix(match, progressiveStages)
   const includeBreakdown = view === 'summary' || view === 'full'
@@ -169,7 +196,7 @@ async function runSnapshotReport(
         $group: {
           _id: null,
           totalCases: { $sum: 1 },
-          totalAmount: { $sum: { $ifNull: ['$requestedAmount', 0] } },
+          totalAmount: { $sum: reportLeadAmountMongoExpression() },
           customers: { $addToSet: '$customerId' }
         }
       }
@@ -199,7 +226,7 @@ async function runSnapshotReport(
           $group: {
             _id: groupId,
             count: { $sum: 1 },
-            amount: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            amount: { $sum: reportLeadAmountMongoExpression() }
           }
         },
         ...(groupBy === 'stage'
@@ -302,7 +329,7 @@ async function runSnapshotReport(
           $group: {
             _id: { $dateTrunc: { date: '$createdAt', unit } },
             count: { $sum: 1 },
-            amount: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            amount: { $sum: reportLeadAmountMongoExpression() }
           }
         },
         { $sort: { _id: 1 } }
@@ -322,6 +349,9 @@ async function runSnapshotReport(
   }
 
   if (includeDetails) {
+    const disbursementLookup =
+      tenantIdObj && tenantIdHex ? buildDisbursementTrackerDetailsLookupStages(tenantIdObj, tenantIdHex) : []
+
     const detailRows = await db
       .collection('loanCases')
       .aggregate([
@@ -368,16 +398,20 @@ async function runSnapshotReport(
           }
         },
         { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+        ...disbursementLookup,
         {
           $project: {
             leadId: { $toString: '$_id' },
+            leadCode: '$code',
             customerName: '$customer.fullName',
             loanTypeName: '$loanType.name',
             bankName: 1,
             stageName: '$stage.name',
             agentName: '$agent.name',
+            approvedAmount: 1,
             requestedAmount: 1,
-            createdAt: 1
+            createdAt: 1,
+            disbursementTracker: 1
           }
         }
       ])
@@ -385,17 +419,22 @@ async function runSnapshotReport(
 
     details = detailRows.map(r => ({
       leadId: String(r.leadId),
+      leadCode: r.leadCode ? String(r.leadCode) : null,
       customerName: r.customerName ? String(r.customerName) : null,
       loanTypeName: r.loanTypeName ? String(r.loanTypeName) : null,
       bankName: r.bankName != null ? String(r.bankName) : null,
       stageName: r.stageName ? String(r.stageName) : null,
       agentName: r.agentName ? String(r.agentName) : null,
-      requestedAmount: r.requestedAmount != null ? Number(r.requestedAmount) : null,
-      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null
+      requestedAmount: resolveReportLeadAmount({
+        approvedAmount: r.approvedAmount != null ? Number(r.approvedAmount) : null,
+        requestedAmount: r.requestedAmount != null ? Number(r.requestedAmount) : null
+      }),
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      ...mapReportDisbursementFields(r.disbursementTracker)
     }))
   }
 
-  return { summary, breakdown, trend, details }
+  return { summary: enrichSummaryWithDisbursement(summary, details), breakdown, trend, details }
 }
 
 async function runHistoricalReport(
@@ -410,6 +449,42 @@ async function runHistoricalReport(
   trendGranularity: ReportTrendGranularity,
   progressiveStages: Record<string, unknown>[] = []
 ) {
+  const hasStageFilter = Boolean(filters.stageId || (filters.stageIds && filters.stageIds.length > 0))
+
+  if (filters.includeDisbursementActivityInRange && !hasStageFilter) {
+    const disbursementLeads = await getDisbursementActivityLeadsInRange(
+      db,
+      tenantIdObj,
+      tenantIdHex,
+      userId,
+      role,
+      filters.dateFrom,
+      filters.dateTo,
+      {
+        showInactive: filters.showInactive,
+        assignedAgentId: filters.assignedAgentId,
+        customerId: filters.customerId,
+        loanTypeId: filters.loanTypeId,
+        bankName: filters.bankName
+      }
+    )
+
+    const emptyHistorical = {
+      summary: { totalCases: 0, totalAmount: 0, uniqueCustomers: 0 },
+      breakdown: [] as ReportBreakdownRow[],
+      trend: [] as ReportTrendRow[],
+      details: [] as ReportDetailRow[]
+    }
+    const merged = mergeHistoricalWithDisbursementActivity(emptyHistorical, disbursementLeads, groupBy)
+
+    return {
+      summary: enrichSummaryWithDisbursement(merged.summary, merged.details),
+      breakdown: merged.breakdown,
+      trend: merged.trend,
+      details: merged.details
+    }
+  }
+
   const auditMatchConditions: Record<string, unknown>[] = [
     {
       $or: [
@@ -427,43 +502,14 @@ async function runHistoricalReport(
     }
   ]
 
-  if (filters.stageId) {
-    auditMatchConditions.push({
-      $or: [
-        {
-          $and: [
-            {
-              $or: [
-                { $eq: ['$action', 'LEAD_STATUS_CHANGED'] },
-                { $eq: ['$metadata.requestedAction', 'LEAD_STATUS_CHANGED'] }
-              ]
-            },
-            {
-              $or: [
-                { $eq: [{ $toString: '$metadata.toStageId' }, filters.stageId] },
-                { $eq: ['$metadata.toStageId', filters.stageId] }
-              ]
-            }
-          ]
-        },
-        {
-          $and: [
-            {
-              $or: [
-                { $eq: ['$action', 'LEAD_CREATED'] },
-                { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
-              ]
-            },
-            {
-              $or: [
-                { $eq: [{ $toString: '$metadata.stageId' }, filters.stageId] },
-                { $eq: ['$metadata.stageId', filters.stageId] }
-              ]
-            }
-          ]
-        }
-      ]
-    })
+  if (filters.stageIds && filters.stageIds.length > 0) {
+    const stageMatch = buildStageAuditMatchCondition(filters.stageIds)
+
+    if (stageMatch) auditMatchConditions.push(stageMatch)
+  } else if (filters.stageId) {
+    const stageMatch = buildStageAuditMatchCondition(filters.stageId)
+
+    if (stageMatch) auditMatchConditions.push(stageMatch)
   }
 
   const stagedDateConditions: Record<string, unknown>[] = [
@@ -564,7 +610,7 @@ async function runHistoricalReport(
         $group: {
           _id: null,
           totalCases: { $sum: 1 },
-          totalAmount: { $sum: { $ifNull: ['$requestedAmount', 0] } },
+          totalAmount: { $sum: reportLeadAmountMongoExpression() },
           customers: { $addToSet: '$customerId' }
         }
       }
@@ -610,7 +656,7 @@ async function runHistoricalReport(
           $group: {
             _id: historicalGroupField(),
             count: { $sum: 1 },
-            amount: { $sum: { $ifNull: ['$requestedAmount', 0] } },
+            amount: { $sum: reportLeadAmountMongoExpression() },
             stageName: { $first: '$auditStageName' }
           }
         },
@@ -700,7 +746,7 @@ async function runHistoricalReport(
           $group: {
             _id: trendField,
             count: { $sum: 1 },
-            amount: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            amount: { $sum: reportLeadAmountMongoExpression() }
           }
         },
         { $sort: { _id: 1 } }
@@ -752,17 +798,21 @@ async function runHistoricalReport(
           }
         },
         { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+        ...buildDisbursementTrackerDetailsLookupStages(tenantIdObj, tenantIdHex),
         {
           $project: {
             leadId: { $toString: '$_id' },
+            leadCode: '$code',
             customerName: '$customer.fullName',
             loanTypeName: '$loanType.name',
             bankName: 1,
             agentName: '$agent.name',
+            approvedAmount: 1,
             requestedAmount: 1,
             createdAt: 1,
             auditStagedDate: 1,
-            auditStageName: 1
+            auditStageName: 1,
+            disbursementTracker: 1
           }
         }
       ])
@@ -770,19 +820,52 @@ async function runHistoricalReport(
 
     details = detailRows.map(r => ({
       leadId: String(r.leadId),
+      leadCode: r.leadCode ? String(r.leadCode) : null,
       customerName: r.customerName ? String(r.customerName) : null,
       loanTypeName: r.loanTypeName ? String(r.loanTypeName) : null,
       bankName: r.bankName != null ? String(r.bankName) : null,
       stageName: r.auditStageName ? String(r.auditStageName) : null,
       agentName: r.agentName ? String(r.agentName) : null,
-      requestedAmount: r.requestedAmount != null ? Number(r.requestedAmount) : null,
+      requestedAmount: resolveReportLeadAmount({
+        approvedAmount: r.approvedAmount != null ? Number(r.approvedAmount) : null,
+        requestedAmount: r.requestedAmount != null ? Number(r.requestedAmount) : null
+      }),
       createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
       auditStagedDate: r.auditStagedDate ? String(r.auditStagedDate) : null,
-      auditStageName: r.auditStageName ? String(r.auditStageName) : null
+      auditStageName: r.auditStageName ? String(r.auditStageName) : null,
+      ...mapReportDisbursementFields(r.disbursementTracker)
     }))
   }
 
-  return { summary, breakdown, trend, details }
+  let result = { summary, breakdown, trend, details }
+
+  if (filters.includeDisbursementActivityInRange) {
+    const disbursementLeads = await getDisbursementActivityLeadsInRange(
+      db,
+      tenantIdObj,
+      tenantIdHex,
+      userId,
+      role,
+      filters.dateFrom,
+      filters.dateTo,
+      {
+        showInactive: filters.showInactive,
+        assignedAgentId: filters.assignedAgentId,
+        customerId: filters.customerId,
+        loanTypeId: filters.loanTypeId,
+        bankName: filters.bankName
+      }
+    )
+
+    result = mergeHistoricalWithDisbursementActivity(result, disbursementLeads, groupBy)
+  }
+
+  return {
+    summary: enrichSummaryWithDisbursement(result.summary, result.details),
+    breakdown: result.breakdown,
+    trend: result.trend,
+    details: result.details
+  }
 }
 
 export async function GET(request: Request) {
@@ -799,7 +882,9 @@ export async function GET(request: Request) {
 
   const disclaimer =
     filters.dataMode === 'historical'
-      ? 'Historical report: counts reflect stage movements recorded in audit logs during the selected period. A lead may appear multiple times if it moved through multiple stages. Current pipeline position may differ.'
+      ? filters.includeDisbursementActivityInRange
+        ? 'Historical report: includes leads that reached the Disbursed stage and leads with progressive disbursement payments recorded during the selected period. Amounts for disbursement activity reflect payments in the period; stage entries use approved/requested loan amounts. Current pipeline position may differ.'
+        : 'Historical report: counts reflect stage movements recorded in audit logs during the selected period. A lead may appear multiple times if it moved through multiple stages. Current pipeline position may differ.'
       : null
 
   let result: { summary: ReportSummary; breakdown: ReportBreakdownRow[]; trend: ReportTrendRow[]; details: ReportDetailRow[] }
@@ -830,7 +915,9 @@ export async function GET(request: Request) {
       filters.groupBy,
       filters.view,
       filters.trendGranularity,
-      progressiveStages
+      progressiveStages,
+      tenantIdObj,
+      tenantIdHex
     )
   }
 

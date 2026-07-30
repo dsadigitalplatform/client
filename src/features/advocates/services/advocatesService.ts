@@ -25,6 +25,26 @@ export async function getAdvocates(params: GetAdvocatesParams = {}) {
   return (data?.advocates ?? []) as any
 }
 
+export async function previewAdvocateCode(name: string) {
+  const res = await fetch('/api/advocates/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview advocate code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
+}
+
 export async function createAdvocate(body: CreateAdvocateInput) {
   const res = await fetch('/api/advocates', {
     method: 'POST',

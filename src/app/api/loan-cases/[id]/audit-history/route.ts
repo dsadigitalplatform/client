@@ -74,6 +74,7 @@ function actionLabel(action: string) {
 function buildChanges(action: string, metadata: any) {
   if (action === 'LEAD_CREATED') {
     return [
+      { label: 'Lead code', from: null, to: null, value: toNullableText(metadata?.leadCode) },
       { label: 'Customer', from: null, to: null, value: toNullableText(metadata?.customerName) || toNullableText(metadata?.customerId) },
       { label: 'Loan Type', from: null, to: null, value: toNullableText(metadata?.loanTypeName) || toNullableText(metadata?.loanTypeId) },
       { label: 'Status', from: null, to: null, value: toNullableText(metadata?.stageName) || toNullableText(metadata?.stageId) },

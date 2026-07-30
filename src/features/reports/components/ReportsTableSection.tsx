@@ -9,6 +9,7 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import Collapse from '@mui/material/Collapse'
+import LinearProgress from '@mui/material/LinearProgress'
 import MuiLink from '@mui/material/Link'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -21,8 +22,14 @@ import { alpha, useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
 import type { ReportDetailGroupDimension, ReportDetailRow, ReportQueryResponse } from '../reports.types'
+import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
 import { buildDetailGroups } from '../utils/buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from '../utils/exportReport'
+import {
+  disbursementStatusChipColor,
+  disbursementStatusLabel,
+  hasReportDisbursementData
+} from '../utils/reportDisbursement'
 
 type Props = {
   data: ReportQueryResponse
@@ -60,19 +67,64 @@ function toggleGroupOnKeyDown(event: KeyboardEvent, onToggle: () => void) {
   }
 }
 
+function DisbursementStatusChip({ row }: { row: ReportDetailRow }) {
+  if (row.disbursementStatus == null) return null
+
+  return (
+    <Chip
+      size='small'
+      label={disbursementStatusLabel(row.disbursementStatus)}
+      color={disbursementStatusChipColor(row.disbursementStatus)}
+      variant='outlined'
+      sx={{ height: 22 }}
+    />
+  )
+}
+
+function DisbursementBalanceCell({ row }: { row: ReportDetailRow }) {
+  if (row.disbursementStatus == null) return null
+
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant='body2' fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
+        {formatINR(row.remainingAmount)}
+      </Typography>
+      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.3 }}>
+        remaining
+      </Typography>
+      <Box sx={{ mt: 0.75, maxWidth: 120 }}>
+        <LinearProgress
+          variant='determinate'
+          value={row.progressPercent ?? 0}
+          color={row.disbursementStatus === 'COMPLETED' ? 'success' : 'primary'}
+          sx={{ height: 4, borderRadius: 2 }}
+        />
+        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.25 }}>
+          {formatINR(row.totalDisbursedAmount)} paid
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
+
 function DetailRowCells({
   row,
   isHistorical,
+  showDisbursement,
   indent = 0
 }: {
   row: ReportDetailRow
   isHistorical: boolean
+  showDisbursement: boolean
   indent?: number
 }) {
   return (
     <>
       <TableCell sx={{ pl: 2 + indent * 3 }}>
         <Typography variant='body2'>{row.customerName ?? '—'}</Typography>
+      </TableCell>
+      <TableCell>
+        <LeadCodeText code={row.leadCode} />
       </TableCell>
       <TableCell />
       <TableCell>{row.loanTypeName ?? '—'}</TableCell>
@@ -89,6 +141,16 @@ function DetailRowCells({
       <TableCell align='right'>
         <Typography variant='body2'>{formatINR(row.requestedAmount)}</Typography>
       </TableCell>
+      {showDisbursement ? (
+        <>
+          <TableCell>
+            <DisbursementStatusChip row={row} />
+          </TableCell>
+          <TableCell align='right'>
+            <DisbursementBalanceCell row={row} />
+          </TableCell>
+        </>
+      ) : null}
       {!isHistorical ? <TableCell>{formatDate(row.createdAt)}</TableCell> : null}
       <TableCell align='right'>
         <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} underline='hover'>
@@ -219,7 +281,52 @@ function MobileDetailField({ label, value }: { label: string; value: ReactNode }
   )
 }
 
-function MobileDetailCard({ row, isHistorical }: { row: ReportDetailRow; isHistorical: boolean }) {
+function MobileDisbursementBlock({ row }: { row: ReportDetailRow }) {
+  if (row.disbursementStatus == null) return null
+
+  return (
+    <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+        <Typography variant='caption' color='text.secondary' fontWeight={600}>
+          Disbursement
+        </Typography>
+        <DisbursementStatusChip row={row} />
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
+        <Box>
+          <Typography variant='caption' color='text.secondary' display='block'>
+            Balance left
+          </Typography>
+          <Typography variant='subtitle2' fontWeight={800}>
+            {formatINR(row.remainingAmount)}
+          </Typography>
+        </Box>
+        <Typography variant='caption' color='text.secondary' textAlign='right'>
+          {formatINR(row.totalDisbursedAmount)} of {formatINR(row.trackerApprovedAmount)}
+        </Typography>
+      </Box>
+      <LinearProgress
+        variant='determinate'
+        value={row.progressPercent ?? 0}
+        color={row.disbursementStatus === 'COMPLETED' ? 'success' : 'primary'}
+        sx={{ height: 6, borderRadius: 3 }}
+      />
+      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
+        {row.progressPercent ?? 0}% disbursed
+      </Typography>
+    </Box>
+  )
+}
+
+function MobileDetailCard({
+  row,
+  isHistorical,
+  showDisbursement
+}: {
+  row: ReportDetailRow
+  isHistorical: boolean
+  showDisbursement: boolean
+}) {
   const stageValue = isHistorical ? (
     <Chip size='small' color='warning' variant='outlined' label={row.auditStageName ?? row.stageName ?? '—'} sx={{ height: 22 }} />
   ) : (
@@ -230,9 +337,14 @@ function MobileDetailCard({ row, isHistorical }: { row: ReportDetailRow; isHisto
     <Card variant='outlined' sx={{ borderColor: 'divider' }}>
       <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1.25 }}>
-          <Typography variant='subtitle2' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
-            {row.customerName ?? 'Unknown customer'}
-          </Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant='subtitle2' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
+              {row.customerName ?? 'Unknown customer'}
+            </Typography>
+            <Box sx={{ mt: 0.5 }}>
+              <LeadCodeChip code={row.leadCode} />
+            </Box>
+          </Box>
           <MuiLink
             component={Link}
             href={`/loan-cases/${row.leadId}`}
@@ -256,12 +368,20 @@ function MobileDetailCard({ row, isHistorical }: { row: ReportDetailRow; isHisto
           <MobileDetailField label='Bank' value={row.bankName ?? '—'} />
           <MobileDetailField label={isHistorical ? 'Stage (audit)' : 'Stage'} value={stageValue} />
           <MobileDetailField label='Agent' value={row.agentName ?? '—'} />
-          <MobileDetailField label='Amount' value={<Typography component='span' fontWeight={700}>{formatINR(row.requestedAmount)}</Typography>} />
+          <MobileDetailField
+            label='Amount'
+            value={
+              <Typography component='span' fontWeight={700}>
+                {formatINR(row.requestedAmount)}
+              </Typography>
+            }
+          />
           <MobileDetailField
             label={isHistorical ? 'Staged' : 'Created'}
             value={isHistorical ? (row.auditStagedDate ?? '—') : formatDate(row.createdAt)}
           />
         </Box>
+        {showDisbursement ? <MobileDisbursementBlock row={row} /> : null}
       </CardContent>
     </Card>
   )
@@ -272,7 +392,8 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const isHistorical = data.dataMode === 'historical'
   const hasSecondary = Boolean(groupBySecondary && groupBySecondary !== data.groupBy)
-  const emptyDetailCols = isHistorical ? 5 : 4
+  const showDisbursement = useMemo(() => hasReportDisbursementData(data.details), [data.details])
+  const emptyDetailCols = isHistorical ? 6 : 5
 
   const groups = useMemo(
     () =>
@@ -352,6 +473,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
           <Typography variant='body2' color='text.secondary'>
             Nested by {groupingLabel}
             {data.details.length >= 500 ? ' (showing first 500 rows)' : ''}
+            {showDisbursement ? ' · Includes disbursement balance & status' : ''}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
             <Button size='small' variant='outlined' onClick={expandAll}>
@@ -412,6 +534,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                     key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
                                     row={row}
                                     isHistorical={isHistorical}
+                                    showDisbursement={showDisbursement}
                                   />
                                 ))}
                               </Box>
@@ -424,6 +547,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                           key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
                           row={row}
                           isHistorical={isHistorical}
+                          showDisbursement={showDisbursement}
                         />
                       ))}
                 </Box>
@@ -444,6 +568,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
             <Typography variant='body2' color='text.secondary'>
               Nested by {groupingLabel}
               {data.details.length >= 500 ? ' (showing first 500 rows)' : ''}
+              {showDisbursement ? ' · Includes disbursement balance & status' : ''}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -478,12 +603,13 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
           </Box>
         </Box>
 
-        <TableContainer>
-          <Table size='small' sx={{ tableLayout: 'fixed' }}>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? 1100 : 900 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 44, px: 0.5, textAlign: 'center' }} aria-label='Row level' />
-                <TableCell sx={{ minWidth: 200 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
+                <TableCell sx={{ minWidth: 180 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
+                <TableCell sx={{ width: 120 }}>Lead code</TableCell>
                 <TableCell align='center' sx={{ width: 72 }}>
                   Cases
                 </TableCell>
@@ -492,9 +618,17 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                 <TableCell>{isHistorical ? 'Stage (audit)' : 'Stage'}</TableCell>
                 {isHistorical ? <TableCell>Staged date</TableCell> : null}
                 <TableCell>Agent</TableCell>
-                <TableCell align='right' sx={{ width: 140 }}>
+                <TableCell align='right' sx={{ width: 120 }}>
                   Amount
                 </TableCell>
+                {showDisbursement ? (
+                  <>
+                    <TableCell sx={{ width: 110 }}>Status</TableCell>
+                    <TableCell align='right' sx={{ width: 140 }}>
+                      Balance
+                    </TableCell>
+                  </>
+                ) : null}
                 {!isHistorical ? <TableCell>Created</TableCell> : null}
                 <TableCell sx={{ width: 64 }} />
               </TableRow>
@@ -537,6 +671,12 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                       </TableCell>
                       <TableCell colSpan={emptyDetailCols} />
                       <GroupAmountCell amount={group.amount} label='Group total' />
+                      {showDisbursement ? (
+                        <>
+                          <TableCell />
+                          <TableCell />
+                        </>
+                      ) : null}
                       {!isHistorical ? <TableCell /> : null}
                       <TableCell />
                     </TableRow>
@@ -579,6 +719,12 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                 </TableCell>
                                 <TableCell colSpan={emptyDetailCols} />
                                 <GroupAmountCell amount={subgroup.amount} label='Subtotal' />
+                                {showDisbursement ? (
+                                  <>
+                                    <TableCell />
+                                    <TableCell />
+                                  </>
+                                ) : null}
                                 {!isHistorical ? <TableCell /> : null}
                                 <TableCell />
                               </TableRow>
@@ -589,7 +735,12 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                       <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
                                         <GroupLevelMarker level='detail' />
                                       </TableCell>
-                                      <DetailRowCells row={row} isHistorical={isHistorical} indent={2} />
+                                      <DetailRowCells
+                                        row={row}
+                                        isHistorical={isHistorical}
+                                        showDisbursement={showDisbursement}
+                                        indent={2}
+                                      />
                                     </TableRow>
                                   ))
                                 : null}
@@ -604,7 +755,12 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                             <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
                               <GroupLevelMarker level='detail' />
                             </TableCell>
-                            <DetailRowCells row={row} isHistorical={isHistorical} indent={1} />
+                            <DetailRowCells
+                              row={row}
+                              isHistorical={isHistorical}
+                              showDisbursement={showDisbursement}
+                              indent={1}
+                            />
                           </TableRow>
                         ))
                       : null}

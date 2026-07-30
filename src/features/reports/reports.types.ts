@@ -25,12 +25,16 @@ export type ReportFilters = {
   dateFrom: string | null
   dateTo: string | null
   stageId: string | null
+  /** When set, historical reports include audit records for all listed stages. */
+  stageIds: string[] | null
   assignedAgentId: string | null
   customerId: string | null
   loanTypeId: string | null
   bankName: string | null
   showInactive: boolean
   progressivePaymentFilter: ReportProgressivePaymentFilter | null
+  /** Include leads with progressive disbursement line items in the date range. */
+  includeDisbursementActivityInRange: boolean
 }
 
 export type ReportBreakdownRow = {
@@ -48,8 +52,11 @@ export type ReportTrendRow = {
   amount: number
 }
 
+export type ReportDisbursementStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED'
+
 export type ReportDetailRow = {
   leadId: string
+  leadCode: string | null
   customerName: string | null
   loanTypeName: string | null
   bankName: string | null
@@ -61,12 +68,27 @@ export type ReportDetailRow = {
   /** Historical mode: when the lead reached this stage per audit */
   auditStagedDate?: string | null
   auditStageName?: string | null
+
+  /** Present when a progressive disbursement tracker exists for the lead */
+  disbursementStatus?: ReportDisbursementStatus | null
+  totalDisbursedAmount?: number | null
+  remainingAmount?: number | null
+  progressPercent?: number | null
+  trackerApprovedAmount?: number | null
 }
 
 export type ReportSummary = {
   totalCases: number
   totalAmount: number
   uniqueCustomers: number
+
+  /** Deduped tracker metrics from detail rows (when any trackers exist) */
+  disbursementTrackedCases?: number
+  totalDisbursedAmount?: number
+  totalRemainingAmount?: number
+  disbursementPending?: number
+  disbursementPartial?: number
+  disbursementCompleted?: number
 }
 
 export type ReportQueryResponse = {
@@ -122,16 +144,32 @@ export const DEFAULT_REPORT_FILTERS: ReportFilters = {
   dateFrom: null,
   dateTo: null,
   stageId: null,
+  stageIds: null,
   assignedAgentId: null,
   customerId: null,
   loanTypeId: null,
   bankName: null,
   showInactive: false,
-  progressivePaymentFilter: null
+  progressivePaymentFilter: null,
+  includeDisbursementActivityInRange: false
 }
 
 export function filtersEqual(a: ReportFilters, b: ReportFilters) {
-  return (Object.keys(DEFAULT_REPORT_FILTERS) as Array<keyof ReportFilters>).every(key => a[key] === b[key])
+  return (Object.keys(DEFAULT_REPORT_FILTERS) as Array<keyof ReportFilters>).every(key => {
+    if (key === 'stageIds') {
+      const aIds = a.stageIds ?? []
+      const bIds = b.stageIds ?? []
+
+      if (aIds.length !== bIds.length) return false
+
+      const sortedA = [...aIds].sort()
+      const sortedB = [...bIds].sort()
+
+      return sortedA.every((id, index) => id === sortedB[index])
+    }
+
+    return a[key] === b[key]
+  })
 }
 
 export function hasActiveDimensionFilters(filters: ReportFilters) {
@@ -139,12 +177,14 @@ export function hasActiveDimensionFilters(filters: ReportFilters) {
     filters.dateFrom ||
       filters.dateTo ||
       filters.stageId ||
+      (filters.stageIds && filters.stageIds.length > 0) ||
       filters.assignedAgentId ||
       filters.customerId ||
       filters.loanTypeId ||
       filters.bankName ||
       filters.showInactive ||
-      filters.progressivePaymentFilter
+      filters.progressivePaymentFilter ||
+      filters.includeDisbursementActivityInRange
   )
 }
 

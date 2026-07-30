@@ -36,6 +36,7 @@ import {
   getDisbursementAuditHistory,
   getDisbursementTrackerById
 } from '@features/loan-disbursements/services/loanDisbursementsService'
+import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type Props = {
   trackerId: string
@@ -211,6 +212,9 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
             All trackers
           </Button>
           <Typography variant='h5'>{tracker.customerName}</Typography>
+          <Box sx={{ mt: 0.5, mb: 0.5 }}>
+            <LeadCodeChip code={tracker.leadCode} />
+          </Box>
           <Typography variant='body2' color='text.secondary'>
             {tracker.loanTypeName}
             {tracker.bankName ? ` · ${tracker.bankName}` : ''} · {tracker.stageName}

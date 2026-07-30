@@ -166,6 +166,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
                 Invite User
               </MenuItem>
             )}
+            {hasTenant && (
+              <MenuItem href='/admin/code-generation' icon={<i className='ri-barcode-box-line' />}>
+                Code Generation
+              </MenuItem>
+            )}
             {showSuperAdmin && (
               <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
                 Create Organisation

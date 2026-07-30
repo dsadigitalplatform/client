@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography'
 import { alpha, useTheme } from '@mui/material/styles'
 
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import DashboardHeroAmbient from '@features/dashboard/components/DashboardHeroAmbient'
 import DashboardHeroPeriodControls from '@features/dashboard/components/DashboardPeriodBar'
 import type { DashboardTimePeriod } from '@features/dashboard/utils/timelineBuckets'
 
@@ -103,32 +104,9 @@ export default function DashboardHero({
         boxShadow: '0 20px 48px rgb(var(--mui-palette-primary-mainChannel) / 0.28)'
       }}
     >
-      <Box
-        sx={{
-          position: 'absolute',
-          width: 220,
-          height: 220,
-          borderRadius: '50%',
-          top: -80,
-          right: -40,
-          background: 'rgb(255 255 255 / 0.08)',
-          pointerEvents: 'none'
-        }}
-      />
-      <Box
-        sx={{
-          position: 'absolute',
-          width: 140,
-          height: 140,
-          borderRadius: '50%',
-          bottom: -50,
-          left: -30,
-          background: 'rgb(255 255 255 / 0.06)',
-          pointerEvents: 'none'
-        }}
-      />
+      <DashboardHeroAmbient />
 
-      <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <Box
           sx={{
             display: 'flex',

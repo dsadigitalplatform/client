@@ -33,47 +33,6 @@ function isValidPayout(v: unknown) {
   return Number.isFinite(n) && n >= 0 && n <= 100
 }
 
-const buildBaseCode = (associateName: string, companyName: string, mobile: string) => {
-  const nameWords = associateName.trim().split(/\s+/).filter(Boolean)
-  const companyWords = companyName.trim().split(/\s+/).filter(Boolean)
-
-  const nameInitials =
-    nameWords.length > 0 ? nameWords.slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : associateName.trim().slice(0, 2).toUpperCase()
-
-  const companyKeyRaw = companyWords.length > 0 ? companyWords.join('') : companyName
-  const companyKey = companyKeyRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3)
-
-  const last4 = mobile.replace(/\D/g, '').slice(-4)
-
-  return [nameInitials, companyKey, last4].filter(Boolean).join('-')
-}
-
-const generateUniqueCode = async (
-  db: any,
-  tenantId: ObjectId,
-  associateName: string,
-  companyName: string,
-  mobile: string,
-  excludeId?: ObjectId
-) => {
-  const base = buildBaseCode(associateName, companyName, mobile)
-  const safeBase = base.length > 0 ? base : 'ASSOC'
-  let suffix = 0
-
-  for (let i = 0; i < 50; i++) {
-    const code = suffix === 0 ? safeBase : `${safeBase}-${suffix + 1}`
-    const filter: any = { tenantId, code }
-
-    if (excludeId) filter._id = { $ne: excludeId }
-    const existing = await db.collection('associates').findOne(filter, { projection: { _id: 1 } })
-
-    if (!existing) return code
-    suffix += 1
-  }
-
-  return `${safeBase}-${Date.now()}`
-}
-
 async function getRequestContext(session: any) {
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
@@ -195,6 +154,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const errors: Record<string, string> = {}
 
+  if (body.code != null) errors.code = 'Associate code is auto-generated and cannot be changed'
+
   if (patch.associateName != null && patch.associateName.length < 2)
     errors.associateName = 'Associate name must be at least 2 characters'
   if (patch.companyName != null && patch.companyName.length < 2)
@@ -222,25 +183,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     patch.associateTypeId = new ObjectId(patch.associateTypeId)
-  }
-
-  if (patch.associateName != null || patch.companyName != null || patch.mobile != null) {
-    const userScopedFilter =
-      role === 'ADMIN' || role === 'OWNER'
-        ? {}
-        : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
-
-    const existing = await db
-      .collection('associates')
-      .findOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { projection: { associateName: 1, companyName: 1, mobile: 1 } })
-
-    if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-
-    const nextName = patch.associateName ?? String((existing as any).associateName || '')
-    const nextCompany = patch.companyName ?? String((existing as any).companyName || '')
-    const nextMobile = patch.mobile ?? String((existing as any).mobile || '')
-
-    patch.code = await generateUniqueCode(db, tenantIdObj, nextName, nextCompany, nextMobile, new ObjectId(id))
   }
 
   try {

@@ -13,6 +13,8 @@ function buildQueryString(filters: ReportFilters) {
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
   if (filters.dateTo) params.set('dateTo', filters.dateTo)
   if (filters.stageId) params.set('stageId', filters.stageId)
+  if (filters.stageIds && filters.stageIds.length > 0) params.set('stageIds', filters.stageIds.join(','))
+  if (filters.includeDisbursementActivityInRange) params.set('includeDisbursementActivityInRange', 'true')
   if (filters.assignedAgentId) params.set('assignedAgentId', filters.assignedAgentId)
   if (filters.customerId) params.set('customerId', filters.customerId)
   if (filters.loanTypeId) params.set('loanTypeId', filters.loanTypeId)

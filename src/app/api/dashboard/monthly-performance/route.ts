@@ -8,9 +8,10 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 import { getHistoricalStageSummary } from '@features/reports/server/historicalStageSummary.server'
+import { getMergedMonthlyDisbursedSummary } from '@features/reports/server/monthlyDisbursedMetrics.server'
 import {
   findDisbursedStageId,
-  findLoggedInStageId,
+  findLoggedInStageIds,
   getCurrentMonthDateRange
 } from '@features/reports/utils/monthlyReportHelpers'
 
@@ -90,13 +91,13 @@ export async function GET(request: Request) {
     isDisbursed: Boolean((s as { isDisbursed?: boolean }).isDisbursed)
   }))
 
-  const loggedInStageId = findLoggedInStageId(stages)
+  const loggedInStageIds = findLoggedInStageIds(stages)
   const disbursedStageId = findDisbursedStageId(stages)
 
   const stageNameById = new Map(stages.map(s => [s.id, s.name]))
 
-  async function loadMetric(stageId: string | null): Promise<StageMetric> {
-    if (!stageId) {
+  async function loadLoggedInMetric(): Promise<StageMetric> {
+    if (loggedInStageIds.length === 0) {
       return {
         stageId: null,
         stageName: null,
@@ -112,22 +113,48 @@ export async function GET(request: Request) {
       tenantIdHex,
       userId,
       role,
-      stageId,
+      loggedInStageIds,
       dateFrom,
       dateTo,
       assignedAgentId
     )
 
+    const stageNames = loggedInStageIds
+      .map(id => stageNameById.get(id))
+      .filter((name): name is string => Boolean(name))
+
     return {
-      stageId,
-      stageName: stageNameById.get(stageId) || null,
+      stageId: loggedInStageIds.length === 1 ? loggedInStageIds[0] : null,
+      stageName: stageNames.length > 0 ? stageNames.join(', ') : null,
       configured: true,
       totalCases: summary.totalCases,
       totalAmount: summary.totalAmount
     }
   }
 
-  const [loggedIn, disbursed] = await Promise.all([loadMetric(loggedInStageId), loadMetric(disbursedStageId)])
+  async function loadDisbursedMetric(): Promise<StageMetric> {
+    const summary = await getMergedMonthlyDisbursedSummary(
+      db,
+      tenantIdObj,
+      tenantIdHex,
+      userId,
+      role,
+      disbursedStageId,
+      dateFrom,
+      dateTo,
+      assignedAgentId
+    )
+
+    return {
+      stageId: disbursedStageId,
+      stageName: disbursedStageId ? stageNameById.get(disbursedStageId) || null : null,
+      configured: summary.configured,
+      totalCases: summary.totalCases,
+      totalAmount: summary.totalAmount
+    }
+  }
+
+  const [loggedIn, disbursed] = await Promise.all([loadLoggedInMetric(), loadDisbursedMetric()])
 
   return NextResponse.json({
     dateFrom,

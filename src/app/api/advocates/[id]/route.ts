@@ -82,6 +82,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const data = {
     id: String((row as any)._id),
+    code: (row as any).code ? String((row as any).code) : null,
     name: (row as any).name || '',
     countryCode: isValidCountryCode((row as any).countryCode) ? String((row as any).countryCode) : '+91',
     mobile: (row as any).mobile || '',
@@ -107,6 +108,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const { db, tenantIdObj, userId, role } = context
   const body = await request.json().catch(() => ({}))
+
+  if (body.code != null) {
+    return NextResponse.json(
+      { error: 'validation_error', details: { code: 'Advocate code is auto-generated and cannot be changed' } },
+      { status: 400 }
+    )
+  }
 
   const patch: any = {}
 

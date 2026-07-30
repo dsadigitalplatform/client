@@ -76,6 +76,8 @@ import type { Corporate } from '@features/corporates/corporates.types'
 import { getBanks } from '@features/banks/services/banksService'
 import type { Bank } from '@features/banks/banks.types'
 import LeadDisbursementProgressPanel from '@features/loan-cases/components/LeadDisbursementProgressPanel'
+import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadCodePreview } from '@features/loan-cases/components/LeadCodeFormationBanner'
 import {
   createLoanCase,
   getLoanCases,
@@ -125,6 +127,7 @@ const CREATE_CUSTOMER_OPTION_ID = '__create_customer__'
 
 const CREATE_CUSTOMER_OPTION: Customer = {
   id: CREATE_CUSTOMER_OPTION_ID,
+  code: null,
   fullName: 'Add New Customer',
   countryCode: '+91',
   mobile: '',
@@ -290,6 +293,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [deleting, setDeleting] = useState(false)
 
   const [id, setId] = useState<string | null>(caseId ?? null)
+  const [leadCode, setLeadCode] = useState<string>('')
   const [isLocked, setIsLocked] = useState(false)
   const [isActive, setIsActive] = useState<boolean>(true)
   const [enableProgressivePayment, setEnableProgressivePayment] = useState<boolean>(false)
@@ -311,13 +315,14 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const [advocateId, setAdvocateId] = useState<string>('')
   const [advocateFallbackLabel, setAdvocateFallbackLabel] = useState<string>('')
 
-  const [bankName, setBankName] = useState<string>('')
+  const [bankId, setBankId] = useState<string>('')
   const [banks, setBanks] = useState<Bank[]>([])
+  const [bankFallbackLabel, setBankFallbackLabel] = useState<string>('')
   const [corporateId, setCorporateId] = useState<string>('')
   const [corporateFallbackLabel, setCorporateFallbackLabel] = useState<string>('')
   const [requestedAmount, setRequestedAmount] = useState<string>('')
   const [approvedAmount, setApprovedAmount] = useState<string>('')
-  const [eligibleAmount, setEligibleAmount] = useState<string>('')
+  const [loanAccount, setLoanAccount] = useState<string>('')
   const [interestRate, setInterestRate] = useState<string>('')
   const [tenureMonths, setTenureMonths] = useState<string>('')
   const [emi, setEmi] = useState<string>('')
@@ -390,20 +395,24 @@ const LoanCaseForm = ({ caseId }: Props) => {
     [corporates]
   )
 
-  const bankNameOptions = useMemo(
-    () => banks.map(b => b.name).sort((a, b) => a.localeCompare(b)),
+  const bankOptions = useMemo(
+    () => banks.sort((a, b) => a.name.localeCompare(b.name)),
     [banks]
   )
 
-  const selectedBankName = useMemo(() => {
-    const trimmed = bankName.trim()
+  const selectedBank = useMemo(() => {
+    if (!bankId) return null
 
-    if (!trimmed) return null
+    return banks.find(b => b.id === bankId) ?? null
+  }, [bankId, banks])
 
-    return bankNameOptions.find(name => name.toLowerCase() === trimmed.toLowerCase()) ?? null
-  }, [bankName, bankNameOptions])
+  const selectedBankLabel = useMemo(() => {
+    if (!bankId) return ''
 
-  const bankNameNotInMaster = Boolean(bankName.trim()) && !selectedBankName
+    if (selectedBank) return `${selectedBank.name} (${selectedBank.code})`
+
+    return bankFallbackLabel
+  }, [bankFallbackLabel, bankId, selectedBank])
 
   const assignedAgentLabel = useMemo(() => {
     if (!assignedAgentId) return 'Unassigned'
@@ -488,10 +497,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
         associateId,
         advocateId,
         corporateId,
-        bankName: bankName.trim(),
+        bankId,
         requestedAmount,
         approvedAmount,
-        eligibleAmount,
+        loanAccount,
         interestRate,
         tenureMonths,
         emi,
@@ -519,12 +528,12 @@ const LoanCaseForm = ({ caseId }: Props) => {
       associateId,
       advocateId,
       corporateId,
-      bankName,
+      bankId,
       customerId,
       documents,
       draftAppointments,
       approvedAmount,
-      eligibleAmount,
+      loanAccount,
       emi,
       enableProgressivePayment,
       interestRate,
@@ -742,9 +751,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
         const data = (await getLoanCaseById(caseId)) as LoanCaseDetails
 
         setId(data.id)
+        setLeadCode(data.code?.trim() || '')
         setCustomerId(data.customerId)
         setCustomerValue({
           id: data.customerId,
+          code: null,
           fullName: data.customerName || '',
           countryCode: '+91',
           mobile: '',
@@ -774,7 +785,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
             ? `${data.advocateName}${data.advocateMobile ? ` (${data.advocateMobile})` : ''}`
             : ''
         )
-        setBankName(data.bankName || '')
+        setBankId(data.bankId || '')
+        setBankFallbackLabel(
+          data.bankName ? `${data.bankName}${data.bankCode ? ` (${data.bankCode})` : ''}` : ''
+        )
         setCorporateId(data.corporateId || '')
         setCorporateFallbackLabel(
           data.corporateName ? `${data.corporateName}${data.corporateCode ? ` (${data.corporateCode})` : ''}` : ''
@@ -787,7 +801,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
               ? String(data.requestedAmount)
               : ''
         )
-        setEligibleAmount(data.eligibleAmount != null ? String(data.eligibleAmount) : '')
+        setLoanAccount(data.loanAccount ?? '')
         setInterestRate(data.interestRate != null ? String(data.interestRate) : '')
         setTenureMonths(data.tenureMonths != null ? String(data.tenureMonths) : '')
         setEmi(data.emi != null ? String(data.emi) : '')
@@ -1076,7 +1090,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
     const next: Record<string, string> = {}
     const requested = parseNumber(requestedAmount)
     const approved = approvedAmount.trim().length === 0 ? null : parseNumber(approvedAmount)
-    const eligible = eligibleAmount.trim().length === 0 ? null : parseNumber(eligibleAmount)
+    const loanAccountValue = loanAccount.trim().length === 0 ? null : loanAccount.trim()
     const rate = interestRate.trim().length === 0 ? null : parseNumber(interestRate)
     const tenure = tenureMonths.trim().length === 0 ? null : parseNumber(tenureMonths)
     const emiN = emi.trim().length === 0 ? null : parseNumber(emi)
@@ -1090,7 +1104,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
     if (emiN != null && typeof emiN !== 'number') next.emi = 'EMI must be numeric'
     if (rate != null && typeof rate !== 'number') next.interestRate = 'Interest rate must be numeric'
     if (tenure != null && typeof tenure !== 'number') next.tenureMonths = 'Tenure must be numeric'
-    if (eligible != null && typeof eligible !== 'number') next.eligibleAmount = 'Eligible amount must be numeric'
+    if (loanAccountValue != null && loanAccountValue.length > 20)
+      next.loanAccount = 'Loan account must be at most 20 characters'
 
     if (assignedAgentId) {
       const isValid = users.some(u => u.id === assignedAgentId)
@@ -1102,11 +1117,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     if (corporateId && !corporates.some(c => c.id === corporateId)) next.corporateId = 'Corporate not found'
 
-    if (bankName.trim()) {
-      const matchedBank = banks.find(b => b.name.toLowerCase() === bankName.trim().toLowerCase())
-
-      if (!matchedBank) next.bankName = 'Select a bank from bank master'
-    }
+    if (bankId && !banks.some(b => b.id === bankId)) next.bankId = 'Bank not found'
 
     if (leadSource === 'ASSOCIATE') {
       if (!associateId) next.associateId = 'Associate is required'
@@ -1115,7 +1126,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
     setFieldErrors(next)
 
-    return { ok: Object.keys(next).length === 0, parsed: { requested, approved, eligible, rate, tenure, emiN } }
+    return { ok: Object.keys(next).length === 0, parsed: { requested, approved, loanAccountValue, rate, tenure, emiN } }
   }
 
   const handleDelete = async () => {
@@ -1158,10 +1169,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
         associateId: resolvedAssociateId,
         advocateId: resolvedAdvocateId,
         corporateId: resolvedCorporateId,
-        bankName: selectedBankName,
+        bankId: bankId || null,
         requestedAmount: parsed.requested as number,
         approvedAmount: parsed.approved ?? (parsed.requested as number),
-        eligibleAmount: parsed.eligible,
+        loanAccount: parsed.loanAccountValue,
         interestRate: parsed.rate,
         tenureMonths: parsed.tenure,
         emi: parsed.emiN
@@ -1180,6 +1191,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
         const res = await createLoanCase({ ...payloadBase, allowDuplicate: shouldAllowDuplicate })
 
         setId(res.id)
+        if (res.code) setLeadCode(String(res.code))
 
         try {
           for (const a of draftAppointments) {
@@ -1261,9 +1273,21 @@ const LoanCaseForm = ({ caseId }: Props) => {
       <Card sx={{ borderRadius: 3, boxShadow: 'var(--mui-customShadows-lg, 0px 6px 24px rgba(0,0,0,0.08))' }}>
         <CardHeader
           title={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              {headerTitle}
-
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <Typography component='span' variant='h5' sx={{ fontWeight: 700 }}>
+                {headerTitle}
+              </Typography>
+              {leadCode ? (
+                <LeadCodeChip code={leadCode} color='primary' variant='outlined' />
+              ) : !id && !loading ? (
+                <LeadCodePreview
+                  customerName={customerValue?.fullName || customerInputValue.split(' (')[0] || null}
+                  loanTypeName={selectedLoanType?.name || null}
+                  loanTypeCode={selectedLoanType?.code || null}
+                  bankName={selectedBank?.name || null}
+                  bankCode={selectedBank?.code || null}
+                />
+              ) : null}
             </Box>
           }
 
@@ -1339,7 +1363,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     <Typography variant='body2' fontWeight={600} color='text.secondary'>
                       Bank / NBFC
                     </Typography>
-                    <Typography variant='body1'>{bankName || 'N/A'}</Typography>
+                    <Typography variant='body1'>{selectedBankLabel || 'N/A'}</Typography>
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <Typography variant='body2' fontWeight={600} color='text.secondary'>
@@ -1372,10 +1396,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                     <Typography variant='body2' fontWeight={600} color='text.secondary'>
-                      Eligible
+                      Loan account
                     </Typography>
-                    <Typography variant='body1'>
-                      {eligibleAmount ? `₹${Number(eligibleAmount).toLocaleString('en-IN')}` : 'N/A'}
+                    <Typography variant='body1' sx={{ wordBreak: 'break-word' }}>
+                      {loanAccount.trim() || 'N/A'}
                     </Typography>
                   </Grid>
                 </LeadFormSection>
@@ -1688,38 +1712,37 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <Autocomplete
-                    options={bankNameOptions}
-                    value={selectedBankName}
-                    onChange={(_, v) => setBankName(v || '')}
-                    disabled={!isActive}
-                    clearOnBlur
-                    selectOnFocus
-                    handleHomeEndKeys
-                    renderInput={params => (
-                      <TextField
-                        {...params}
-                        label='Bank / NBFC'
-                        fullWidth
-                        size='small'
-                        error={!!fieldErrors.bankName || bankNameNotInMaster}
-                        helperText={
-                          fieldErrors.bankName ||
-                          (bankNameNotInMaster
-                            ? `"${bankName.trim()}" is not in bank master — select a bank`
-                            : 'Select from bank master')
-                        }
-                        InputProps={{
-                          ...params.InputProps,
-                          startAdornment: (
-                            <InputAdornment position='start'>
-                              <i className='ri-bank-line' />
-                            </InputAdornment>
-                          )
-                        }}
-                      />
-                    )}
-                  />
+                  <FormControl fullWidth size='small' error={!!fieldErrors.bankId}>
+                    <InputLabel id='loan-case-bank'>Bank / NBFC</InputLabel>
+                    <Select
+                      labelId='loan-case-bank'
+                      label='Bank / NBFC'
+                      value={bankId}
+                      onChange={e => setBankId(String(e.target.value))}
+                      disabled={!isActive}
+                      renderValue={v =>
+                        v ? selectedBankLabel || bankOptions.find(b => b.id === v)?.name || 'Select' : 'None'
+                      }
+                    >
+                      <MenuItem value=''>None</MenuItem>
+                      {bankOptions.length === 0 ? (
+                        <MenuItem value='__none__' disabled>
+                          No banks available
+                        </MenuItem>
+                      ) : (
+                        bankOptions.map(b => (
+                          <MenuItem key={b.id} value={b.id}>
+                            {b.name} ({b.code})
+                          </MenuItem>
+                        ))
+                      )}
+                    </Select>
+                    {fieldErrors.bankId ? (
+                      <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                        {fieldErrors.bankId}
+                      </Typography>
+                    ) : null}
+                  </FormControl>
                 </Grid>
 
                 <Grid size={{ xs: 12, sm: 6 }}>
@@ -1760,7 +1783,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
               <LeadFormSection
                 icon='ri-money-rupee-circle-line'
                 title='Loan amounts & terms'
-                subtitle='Requested figures, eligibility, and repayment structure'
+                subtitle='Requested figures, loan account, and repayment structure'
                 accent='success'
               >
                 <Grid size={{ xs: 12, sm: 6, md: 4 }}>
@@ -1772,21 +1795,6 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     size='small'
                     error={!!fieldErrors.requestedAmount}
                     helperText={fieldErrors.requestedAmount}
-                    InputProps={{
-                      startAdornment: <InputAdornment position='start'>₹</InputAdornment>
-                    }}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                  <TextField
-                    label='Eligible Amount'
-                    value={eligibleAmount}
-                    onChange={e => setEligibleAmount(e.target.value.replace(/[^\d.]/g, ''))}
-                    fullWidth
-                    size='small'
-                    error={!!fieldErrors.eligibleAmount}
-                    helperText={fieldErrors.eligibleAmount}
                     InputProps={{
                       startAdornment: <InputAdornment position='start'>₹</InputAdornment>
                     }}
@@ -1809,6 +1817,19 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     InputProps={{
                       startAdornment: <InputAdornment position='start'>₹</InputAdornment>
                     }}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <TextField
+                    label='Loan Account'
+                    value={loanAccount}
+                    onChange={e => setLoanAccount(e.target.value.slice(0, 20))}
+                    fullWidth
+                    size='small'
+                    error={!!fieldErrors.loanAccount}
+                    helperText={fieldErrors.loanAccount || `${loanAccount.length}/20`}
+                    inputProps={{ maxLength: 20 }}
                   />
                 </Grid>
 

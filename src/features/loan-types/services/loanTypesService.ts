@@ -25,6 +25,26 @@ export async function getLoanTypes(params: GetLoanTypesParams = {}) {
   return (data?.loanTypes ?? []) as any
 }
 
+export async function previewLoanTypeCode(name: string) {
+  const res = await fetch('/api/loan-types/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview loan type code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
+}
+
 export async function createLoanType(body: CreateLoanTypeInput) {
   const res = await fetch('/api/loan-types', {
     method: 'POST',

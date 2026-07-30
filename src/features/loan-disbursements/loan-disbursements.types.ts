@@ -3,6 +3,7 @@ export type DisbursementStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED'
 export type DisbursementTrackerListItem = {
   id: string
   leadId: string
+  leadCode: string | null
   customerName: string
   loanTypeName: string
   stageName: string
@@ -22,6 +23,7 @@ export type DisbursementTrackerListItem = {
 
 export type EligibleLeadItem = {
   id: string
+  leadCode: string | null
   customerId: string
   customerName: string
   loanTypeName: string
@@ -48,6 +50,7 @@ export type LoanDisbursementLineItem = {
 export type DisbursementTrackerDetails = {
   id: string
   leadId: string
+  leadCode: string | null
   customerId: string
   customerName: string
   loanTypeName: string

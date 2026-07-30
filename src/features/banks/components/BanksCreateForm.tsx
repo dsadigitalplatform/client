@@ -20,7 +20,7 @@ import LinearProgress from '@mui/material/LinearProgress'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createBank } from '@features/banks/services/banksService'
+import { createBank, previewBankCode } from '@features/banks/services/banksService'
 
 type Props = {
   onSuccess?: () => void
@@ -53,6 +53,7 @@ const BanksCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const isEditMode = Boolean(initialValues)
 
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -62,6 +63,8 @@ const BanksCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
     if (!initialValues) {
@@ -79,14 +82,45 @@ const BanksCreateForm = ({
     if (initialValues.description !== undefined) setDescription(initialValues.description || '')
   }, [initialValues])
 
-  const canSubmit = code.trim().length >= 1 && name.trim().length >= 2
+  useEffect(() => {
+    if (isEditMode) return
+
+    const trimmed = name.trim()
+
+    if (trimmed.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewBankCode(trimmed)
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [isEditMode, name])
+
+  const canSubmit = name.trim().length >= 2
 
   const handleSubmit = async () => {
     setError(null)
 
     const validationErrors: Record<string, string> = {}
 
-    if (code.trim().length < 1) validationErrors.code = 'Code is required'
     if (name.trim().length < 2) validationErrors.name = 'Bank name must be at least 2 characters'
     if (description.length > 500) validationErrors.description = 'Description must be ≤ 500 characters'
 
@@ -101,7 +135,6 @@ const BanksCreateForm = ({
 
     try {
       const payload = {
-        code: code.trim(),
         name: name.trim(),
         description: description ? description.trim() : null
       }
@@ -109,7 +142,9 @@ const BanksCreateForm = ({
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
-        await createBank(payload)
+        const result = await createBank(payload)
+
+        if (result.code) setCode(result.code)
       }
 
       if (onSuccess) onSuccess()
@@ -122,9 +157,12 @@ const BanksCreateForm = ({
         return
       }
 
-      setCode('')
-      setName('')
-      setDescription('')
+      if (!isEditMode) {
+        setName('')
+        setDescription('')
+        setCode('')
+      }
+
       setFieldErrors({})
       setError(null)
     } catch (e: any) {
@@ -143,22 +181,36 @@ const BanksCreateForm = ({
           {error}
         </Alert>
       ) : null}
+      {!isEditMode && code ? (
+        <Alert severity='success'>
+          Bank created with code <strong>{code}</strong>
+        </Alert>
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <TextField
-          label='Code'
-          value={code}
-          onChange={e => setCode(e.target.value)}
-          error={Boolean(fieldErrors.code)}
-          helperText={fieldErrors.code || 'Must be unique within your organisation'}
-          fullWidth
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position='start'>
-                <i className='ri-hashtag' />
-              </InputAdornment>
-            )
-          }}
-        />
+        {isEditMode ? (
+          <TextField
+            label='Code'
+            value={code}
+            fullWidth
+            disabled
+            helperText='Auto-generated when the bank was created'
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <i className='ri-hashtag' />
+                </InputAdornment>
+              )
+            }}
+          />
+        ) : (
+          <Alert severity='info' icon={false} sx={{ py: 1 }}>
+            {previewLoading
+              ? 'Generating code preview...'
+              : codePreview
+                ? `Next code preview: ${codePreview}`
+                : 'A unique bank code will be generated from your code generation template.'}
+          </Alert>
+        )}
         <TextField
           label='Bank Name'
           value={name}

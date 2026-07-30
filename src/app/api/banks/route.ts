@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { generateBankBusinessCode } from '@features/banks/server/bankCode.server'
 import { DUPLICATE_BANK_CODE_ERROR, findDuplicateBankCode, normalizeBankCode } from './_helpers'
 
 function isNonEmptyString(v: unknown, min = 1) {
@@ -121,19 +122,29 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
 
-  const code = String(body.code || '').trim()
   const name = String(body.name || '').trim()
   const description =
     body.description == null || String(body.description).trim().length === 0 ? null : String(body.description).trim()
 
   const errors: Record<string, string> = {}
 
-  if (!isNonEmptyString(code)) errors.code = 'Code is required'
   if (!isNonEmptyString(name, 2)) errors.name = 'Bank name must be at least 2 characters'
   if (description != null && description.length > 500) errors.description = 'Description must be ≤ 500 characters'
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
+  }
+
+  let code: string
+
+  try {
+    code = await generateBankBusinessCode({
+      db,
+      tenantId: tenantIdObj,
+      name
+    })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'code_generation_failed' }, { status: 400 })
   }
 
   const duplicate = await findDuplicateBankCode(db, tenantIdObj, code)
@@ -158,7 +169,7 @@ export async function POST(request: Request) {
   try {
     const res = await db.collection('banks').insertOne(doc)
 
-    return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+    return NextResponse.json({ id: res.insertedId.toHexString(), code }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
       return NextResponse.json(DUPLICATE_BANK_CODE_ERROR, { status: 409 })

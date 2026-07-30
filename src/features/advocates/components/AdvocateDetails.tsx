@@ -20,6 +20,7 @@ import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
+import Chip from '@mui/material/Chip'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
@@ -48,6 +49,7 @@ const AdvocateDetails = ({ id }: Props) => {
     () =>
       data
         ? {
+            code: data.code ?? null,
             name: data.name,
             countryCode: data.countryCode,
             mobile: data.mobile,
@@ -131,6 +133,9 @@ const AdvocateDetails = ({ id }: Props) => {
                   <Typography variant='h6' sx={{ fontWeight: 600, textAlign: 'center' }}>
                     {data.name}
                   </Typography>
+                  {data.code ? (
+                    <Chip label={data.code} size='small' variant='outlined' sx={{ mt: 0.75, fontWeight: 600 }} />
+                  ) : null}
                 </Box>
               ) : null}
               {isMobile ? (
@@ -156,6 +161,11 @@ const AdvocateDetails = ({ id }: Props) => {
                 </Box>
               ) : (
                 <Box className='flex flex-col gap-1'>
+                  {data.code ? (
+                    <Typography color='text.secondary'>
+                      Code: <Chip label={data.code} size='small' variant='outlined' sx={{ ml: 0.5, fontWeight: 600 }} />
+                    </Typography>
+                  ) : null}
                   <Typography color='text.secondary'>Name: {data.name || '-'}</Typography>
                   <Typography color='text.secondary'>
                     Mobile: {[data.countryCode, data.mobile].filter(Boolean).join(' ')}

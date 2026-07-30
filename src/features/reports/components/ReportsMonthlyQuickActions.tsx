@@ -9,9 +9,9 @@ import Typography from '@mui/material/Typography'
 
 import type { ReportFilterOptions, ReportFilters } from '../reports.types'
 import {
+  buildMonthlyDisbursedReportFilters,
   buildMonthlyStageReportFilters,
-  findDisbursedStageId,
-  findLoggedInStageId,
+  findLoggedInStageIds,
   getCurrentMonthDateRange,
   isMonthlyDisbursedFilters,
   isMonthlyLoggedInFilters
@@ -28,13 +28,8 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
   const [error, setError] = useState<string | null>(null)
   const { dateFrom, dateTo } = getCurrentMonthDateRange()
 
-  const loggedInStageId = useMemo(
-    () => (filterOptions ? findLoggedInStageId(filterOptions.stages) : null),
-    [filterOptions]
-  )
-
-  const disbursedStageId = useMemo(
-    () => (filterOptions ? findDisbursedStageId(filterOptions.stages) : null),
+  const loggedInStageIds = useMemo(
+    () => (filterOptions ? findLoggedInStageIds(filterOptions.stages) : []),
     [filterOptions]
   )
 
@@ -49,25 +44,23 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
   )
 
   const handleLoggedIn = () => {
-    if (!loggedInStageId) {
+    if (loggedInStageIds.length === 0) {
       setError('No Logged In stage is configured in the pipeline. Mark a stage as Logged In under Loan Status Pipeline.')
 
       return
     }
 
     setError(null)
-    onApply(buildMonthlyStageReportFilters(loggedInStageId))
+    onApply(buildMonthlyStageReportFilters(loggedInStageIds))
   }
 
   const handleDisbursed = () => {
-    if (!disbursedStageId) {
-      setError('No Disbursed stage is configured in the pipeline. Mark a stage as Disbursed under Loan Status Pipeline.')
+    if (!filterOptions) return
 
-      return
-    }
+    const nextFilters = buildMonthlyDisbursedReportFilters(filterOptions.stages)
 
     setError(null)
-    onApply(buildMonthlyStageReportFilters(disbursedStageId))
+    onApply(nextFilters)
   }
 
   return (
@@ -94,7 +87,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
           Monthly Disbursed
         </Button>
         <Typography variant='caption' color='text.secondary'>
-          Stage history · {dateFrom} to {dateTo}
+          Stage history & disbursements · {dateFrom} to {dateTo}
         </Typography>
       </Box>
       {error ? <Alert severity='warning'>{error}</Alert> : null}

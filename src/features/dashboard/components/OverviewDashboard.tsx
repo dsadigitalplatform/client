@@ -33,6 +33,7 @@ import { useDashboardLayout } from '@features/dashboard/hooks/useDashboardLayout
 import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
 import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
 import type { DashboardWidgetId, TrendPoint } from '@features/dashboard/dashboard.types'
+import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
 import { getReminders, updateReminderStatus } from '@features/reminders/services/remindersService'
 import type { ReminderListItem, ReminderStatus } from '@features/reminders/reminders.types'
 
@@ -478,10 +479,10 @@ function GridWidgetShell({
 const ALL_WIDGETS: WidgetMeta[] = [
   { id: 'kpi-customers', title: 'Customers', icon: 'ri-user-3-line' },
   { id: 'kpi-cases', title: 'Cases', icon: 'ri-briefcase-4-line' },
-  { id: 'kpi-loan-volume', title: 'Requested Loan Volume', icon: 'ri-money-rupee-circle-line' },
+  { id: 'kpi-loan-volume', title: 'Approved Loan Volume', icon: 'ri-money-rupee-circle-line' },
   { id: 'kpi-conversion', title: 'Conversion', icon: 'ri-line-chart-line' },
   { id: 'trend-cases', title: 'Case Trend', icon: 'ri-rhythm-line' },
-  { id: 'trend-loan-volume', title: 'Loan Volume Trend', icon: 'ri-funds-line' },
+  { id: 'trend-loan-volume', title: 'Approved Loan Volume Trend', icon: 'ri-funds-line' },
   { id: 'stage-breakdown', title: 'Case Stages', icon: 'ri-git-merge-line' },
   { id: 'agents', title: 'Sales Agents', icon: 'ri-team-line' },
   { id: 'appointments', title: 'Appointments', icon: 'ri-calendar-event-line' },
@@ -770,14 +771,14 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
       }
 
       if (id === 'kpi-loan-volume') {
-        const points = data.loanCases.trend.map(p => ({ label: p.label, value: p.requestedLoanVolume }))
+        const points = data.loanCases.trend.map(p => ({ label: p.label, value: p.approvedLoanVolume }))
 
 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
               <Typography variant='h6' sx={{ fontWeight: 900 }}>
-                {formatINR(data.loanCases.requestedLoanVolume)}
+                {formatINR(data.loanCases.approvedLoanVolume)}
               </Typography>
               <Chip label='12-week trend' size='small' variant='outlined' />
             </Box>
@@ -842,18 +843,18 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
       }
 
       if (id === 'trend-loan-volume') {
-        const points = data.loanCases.trend.map(p => ({ label: p.label, value: p.requestedLoanVolume }))
+        const points = data.loanCases.trend.map(p => ({ label: p.label, value: p.approvedLoanVolume }))
         const last = data.loanCases.trend[data.loanCases.trend.length - 1]
 
 
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant='body2' color='text.secondary'>
-              Requested loan volume per week
+              Approved loan volume per week
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
               <Typography variant='h6' sx={{ fontWeight: 900 }}>
-                {formatINR(Number(last?.requestedLoanVolume || 0))}
+                {formatINR(Number(last?.approvedLoanVolume || 0))}
               </Typography>
               <Typography variant='body2' color='text.secondary'>
                 Latest week
@@ -952,7 +953,7 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                       size='small'
                       variant='outlined'
                       color='success'
-                      label={formatINR(r.requestedLoanVolume)}
+                      label={formatINR(r.approvedLoanVolume)}
                       sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
                     />
                   </Box>
@@ -1008,6 +1009,11 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                     <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={row.customerName || ''}>
                       {row.customerName || 'Customer'}
                     </Typography>
+                    {row.leadCode ? (
+                      <Box sx={{ mt: 0.35 }}>
+                        <LeadCodeChip code={row.leadCode} variant='outlined' color='default' />
+                      </Box>
+                    ) : null}
                     <Typography variant='caption' color='text.secondary' noWrap title={row.leadTitle || ''}>
                       {row.leadTitle || 'Lead'}
                     </Typography>
@@ -1097,6 +1103,11 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                         <Typography variant='caption' color='text.secondary' noWrap title={refLabel || ''}>
                           {refLabel || '—'}
                         </Typography>
+                        {r.leadCode ? (
+                          <Box sx={{ mt: 0.35 }}>
+                            <LeadCodeChip code={r.leadCode} variant='outlined' color='default' />
+                          </Box>
+                        ) : null}
                         <Typography variant='caption' color={overdue ? 'error.main' : 'text.secondary'} noWrap title={String(dateLabel)}>
                           <i className='ri-time-line' style={{ marginRight: 6 }} />
                           {dateLabel}

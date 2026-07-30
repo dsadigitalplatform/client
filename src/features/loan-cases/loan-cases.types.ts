@@ -22,10 +22,15 @@ export type LoanCaseListItem = {
   loanTypeId: string
   loanTypeName: string
   bankName: string | null
+  bankId: string | null
+  bankCode: string | null
   corporateId: string | null
   corporateName: string | null
   corporateCode: string | null
   requestedAmount: number | null
+  approvedAmount: number | null
+  loanAccount: string | null
+  code: string | null
   stageId: string
   stageName: string
   /** Present when list is filtered by staged date via audit history. */
@@ -63,12 +68,15 @@ export type LoanCaseDetails = {
   loanTypeId: string
   loanTypeName: string
   bankName: string | null
+  bankId: string | null
+  bankCode: string | null
   corporateId: string | null
   corporateName: string | null
   corporateCode: string | null
   requestedAmount: number | null
   approvedAmount: number | null
-  eligibleAmount: number | null
+  loanAccount: string | null
+  code: string | null
   interestRate: number | null
   tenureMonths: number | null
   emi: number | null
@@ -106,11 +114,11 @@ export type CreateLoanCaseInput = {
   leadSource?: LeadSource
   associateId?: string | null
   advocateId?: string | null
-  bankName?: string | null
+  bankId?: string | null
   corporateId?: string | null
   requestedAmount: number
   approvedAmount?: number | null
-  eligibleAmount?: number | null
+  loanAccount?: string | null
   interestRate?: number | null
   tenureMonths?: number | null
   emi?: number | null

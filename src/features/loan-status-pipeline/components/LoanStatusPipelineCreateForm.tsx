@@ -285,7 +285,7 @@ const LoanStatusPipelineCreateForm = ({
                     Stage Flags
                 </Typography>
                 <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: -1 }}>
-                    Only one stage in the pipeline can be Logged In, and only one can be Disbursed. Select either one, not both.
+                    Multiple stages can be marked as Logged In. Only one stage can be Disbursed. A stage cannot be both.
                 </Typography>
                 {fieldErrors.stageFlags ? (
                     <Typography variant='caption' color='error.main'>

@@ -25,6 +25,7 @@ import Typography from '@mui/material/Typography'
 import MuiLink from '@mui/material/Link'
 
 import type { EligibleLeadItem } from '@features/loan-disbursements/loan-disbursements.types'
+import { leadMatchesQuery, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
 import {
   createDisbursementTracker,
   getEligibleLeadsForDisbursement
@@ -76,12 +77,14 @@ export default function StartDisbursementDialog({ open, onClose, onCreated }: Pr
 
     if (!q) return leads
 
-    return leads.filter(
-      l =>
-        l.customerName.toLowerCase().includes(q) ||
-        l.loanTypeName.toLowerCase().includes(q) ||
-        (l.bankName || '').toLowerCase().includes(q) ||
-        l.stageName.toLowerCase().includes(q)
+    return leads.filter(l =>
+      leadMatchesQuery(q, {
+        code: l.leadCode,
+        customerName: l.customerName,
+        loanTypeName: l.loanTypeName,
+        bankName: l.bankName,
+        stageName: l.stageName
+      })
     )
   }, [leads, search])
 
@@ -128,7 +131,7 @@ export default function StartDisbursementDialog({ open, onClose, onCreated }: Pr
         <TextField
           fullWidth
           size='small'
-          placeholder='Search customer, loan type, bank…'
+          placeholder='Search code, customer, loan type, bank…'
           value={search}
           onChange={e => setSearch(e.target.value)}
           sx={{ mb: 2 }}
@@ -169,6 +172,7 @@ export default function StartDisbursementDialog({ open, onClose, onCreated }: Pr
               <TableHead>
                 <TableRow>
                   <TableCell padding='checkbox' />
+                  <TableCell>Lead code</TableCell>
                   <TableCell>Customer</TableCell>
                   <TableCell>Loan</TableCell>
                   <TableCell>Stage</TableCell>
@@ -189,6 +193,9 @@ export default function StartDisbursementDialog({ open, onClose, onCreated }: Pr
                     >
                       <TableCell padding='checkbox'>
                         <input type='radio' checked={selected} readOnly aria-label={`Select ${lead.customerName}`} />
+                      </TableCell>
+                      <TableCell>
+                        <LeadCodeText code={lead.leadCode} />
                       </TableCell>
                       <TableCell>
                         <Typography variant='body2' fontWeight={600}>

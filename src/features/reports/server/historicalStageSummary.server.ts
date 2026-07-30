@@ -1,5 +1,8 @@
 import { ObjectId, type Db } from 'mongodb'
 
+import { reportLeadAmountMongoExpression } from '@features/reports/utils/reportLeadAmount'
+import { buildStageAuditMatchCondition } from '@features/reports/server/stageAuditMatch.server'
+
 const STAGE_AUDIT_TIMEZONE = 'Asia/Kolkata'
 
 function effectiveStagedDateExpression() {
@@ -36,7 +39,7 @@ export async function getHistoricalStageSummary(
   tenantIdHex: string,
   userId: ObjectId,
   role: 'OWNER' | 'ADMIN' | 'USER',
-  stageId: string,
+  stageId: string | string[],
   dateFrom: string,
   dateTo: string,
   assignedAgentId?: string | null
@@ -53,42 +56,7 @@ export async function getHistoricalStageSummary(
         { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
       ]
     },
-    {
-      $or: [
-        {
-          $and: [
-            {
-              $or: [
-                { $eq: ['$action', 'LEAD_STATUS_CHANGED'] },
-                { $eq: ['$metadata.requestedAction', 'LEAD_STATUS_CHANGED'] }
-              ]
-            },
-            {
-              $or: [
-                { $eq: [{ $toString: '$metadata.toStageId' }, stageId] },
-                { $eq: ['$metadata.toStageId', stageId] }
-              ]
-            }
-          ]
-        },
-        {
-          $and: [
-            {
-              $or: [
-                { $eq: ['$action', 'LEAD_CREATED'] },
-                { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
-              ]
-            },
-            {
-              $or: [
-                { $eq: [{ $toString: '$metadata.stageId' }, stageId] },
-                { $eq: ['$metadata.stageId', stageId] }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+    buildStageAuditMatchCondition(stageId)!
   ]
 
   const stagedDateConditions: Record<string, unknown>[] = [
@@ -137,7 +105,7 @@ export async function getHistoricalStageSummary(
         $group: {
           _id: null,
           totalCases: { $sum: 1 },
-          totalAmount: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+          totalAmount: { $sum: reportLeadAmountMongoExpression() }
         }
       }
     ])
@@ -149,4 +117,90 @@ export async function getHistoricalStageSummary(
     totalCases: Number(row.totalCases || 0),
     totalAmount: Number(row.totalAmount || 0)
   }
+}
+
+export async function getHistoricalStageLeadAmountsInRange(
+  db: Db,
+  tenantIdObj: ObjectId,
+  tenantIdHex: string,
+  userId: ObjectId,
+  role: 'OWNER' | 'ADMIN' | 'USER',
+  stageId: string | string[],
+  dateFrom: string,
+  dateTo: string,
+  assignedAgentId?: string | null
+): Promise<Map<string, number>> {
+  const auditMatchConditions: Record<string, unknown>[] = [
+    {
+      $or: [{ $eq: ['$targetTenantId', tenantIdObj] }, { $eq: [{ $toString: '$targetTenantId' }, tenantIdHex] }]
+    },
+    {
+      $or: [
+        { $eq: ['$action', 'LEAD_STATUS_CHANGED'] },
+        { $eq: ['$metadata.requestedAction', 'LEAD_STATUS_CHANGED'] },
+        { $eq: ['$action', 'LEAD_CREATED'] },
+        { $eq: ['$metadata.requestedAction', 'LEAD_CREATED'] }
+      ]
+    },
+    buildStageAuditMatchCondition(stageId)!
+  ]
+
+  const stagedDateConditions: Record<string, unknown>[] = [
+    { $ne: ['$effectiveStagedDate', null] },
+    { $ne: ['$effectiveStagedDate', ''] },
+    { $gte: ['$effectiveStagedDate', dateFrom] },
+    { $lte: ['$effectiveStagedDate', dateTo] }
+  ]
+
+  const leadRoleFilter =
+    role !== 'ADMIN' && role !== 'OWNER'
+      ? { $or: [{ createdBy: userId }, { assignedAgentId: userId }] }
+      : {}
+
+  const leadDimensionFilter: Record<string, unknown> = { tenantId: tenantIdObj, ...leadRoleFilter, isActive: { $ne: false } }
+
+  if (assignedAgentId && ObjectId.isValid(assignedAgentId)) {
+    leadDimensionFilter.assignedAgentId = new ObjectId(assignedAgentId)
+  }
+
+  const rows = await db
+    .collection('auditLogs')
+    .aggregate([
+      { $match: { $expr: { $and: auditMatchConditions } } },
+      { $addFields: { effectiveStagedDate: effectiveStagedDateExpression() } },
+      { $match: { $expr: { $and: stagedDateConditions } } },
+      {
+        $addFields: {
+          leadIdObj: {
+            $convert: { input: '$metadata.leadId', to: 'objectId', onError: null, onNull: null }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'loanCases',
+          localField: 'leadIdObj',
+          foreignField: '_id',
+          as: 'lead'
+        }
+      },
+      { $unwind: '$lead' },
+      { $replaceRoot: { newRoot: '$lead' } },
+      { $match: leadDimensionFilter },
+      {
+        $group: {
+          _id: '$_id',
+          amount: { $max: reportLeadAmountMongoExpression() }
+        }
+      }
+    ])
+    .toArray()
+
+  const byLead = new Map<string, number>()
+
+  for (const row of rows) {
+    byLead.set(String(row._id), Number(row.amount || 0))
+  }
+
+  return byLead
 }

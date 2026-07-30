@@ -112,7 +112,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     leadIdObj
       ? db
           .collection('loanCases')
-          .findOne({ _id: leadIdObj, tenantId: tenantIdObj }, { projection: { loanTypeId: 1, bankName: 1 } })
+          .findOne({ _id: leadIdObj, tenantId: tenantIdObj }, { projection: { loanTypeId: 1, bankName: 1, code: 1 } })
       : null
   ])
 
@@ -125,10 +125,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const loanTypeName = loanType ? String((loanType as any).name || '') : null
   const bankName = lead && (lead as any).bankName != null ? String((lead as any).bankName) : null
   const leadTitle = loanTypeName ? `${loanTypeName}${bankName ? ` • ${bankName}` : ''}` : null
+  const leadCode = lead && (lead as any).code != null ? String((lead as any).code) : null
 
   return NextResponse.json({
     ...base,
     customerName: customer ? String((customer as any).fullName || '') : null,
+    leadCode,
     leadTitle,
     customer: customer
       ? {
@@ -140,7 +142,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         }
       : null,
     lead: base.leadId
-      ? { id: base.leadId, title: leadTitle, loanTypeName, bankName }
+      ? { id: base.leadId, code: leadCode, title: leadTitle, loanTypeName, bankName }
       : null
   })
 }

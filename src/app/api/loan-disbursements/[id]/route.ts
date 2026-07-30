@@ -66,6 +66,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   return NextResponse.json({
     id: String(t._id),
     leadId: String(t.leadId),
+    leadCode: (lead as { code?: string | null }).code ?? null,
     customerId: String(leadDoc.customerId || ''),
     customerName: (customer as { fullName?: string })?.fullName ? String((customer as { fullName?: string }).fullName) : '',
     loanTypeName: (loanType as { name?: string })?.name ? String((loanType as { name?: string }).name) : '',

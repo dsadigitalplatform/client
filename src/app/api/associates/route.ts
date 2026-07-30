@@ -8,6 +8,7 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
+import { generateAssociateBusinessCode } from '@features/associates/server/associateCode.server'
 
 function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
@@ -31,47 +32,6 @@ function isValidPayout(v: unknown) {
   const n = Number(v)
 
   return Number.isFinite(n) && n >= 0 && n <= 100
-}
-
-const buildBaseCode = (associateName: string, companyName: string, mobile: string) => {
-  const nameWords = associateName.trim().split(/\s+/).filter(Boolean)
-  const companyWords = companyName.trim().split(/\s+/).filter(Boolean)
-
-  const nameInitials =
-    nameWords.length > 0 ? nameWords.slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : associateName.trim().slice(0, 2).toUpperCase()
-
-  const companyKeyRaw = companyWords.length > 0 ? companyWords.join('') : companyName
-  const companyKey = companyKeyRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3)
-
-  const last4 = mobile.replace(/\D/g, '').slice(-4)
-
-  return [nameInitials, companyKey, last4].filter(Boolean).join('-')
-}
-
-const generateUniqueCode = async (
-  db: any,
-  tenantId: ObjectId,
-  associateName: string,
-  companyName: string,
-  mobile: string,
-  excludeId?: ObjectId
-) => {
-  const base = buildBaseCode(associateName, companyName, mobile)
-  const safeBase = base.length > 0 ? base : 'ASSOC'
-  let suffix = 0
-
-  for (let i = 0; i < 50; i++) {
-    const code = suffix === 0 ? safeBase : `${safeBase}-${suffix + 1}`
-    const filter: any = { tenantId, code }
-
-    if (excludeId) filter._id = { $ne: excludeId }
-    const existing = await db.collection('associates').findOne(filter, { projection: { _id: 1 } })
-
-    if (!existing) return code
-    suffix += 1
-  }
-
-  return `${safeBase}-${Date.now()}`
 }
 
 export async function GET(request: Request) {
@@ -253,7 +213,12 @@ export async function POST(request: Request) {
     )
   }
 
-  const code = await generateUniqueCode(db, tenantIdObj, associateName, companyName, mobile)
+  const code = await generateAssociateBusinessCode({
+    db,
+    tenantId: tenantIdObj,
+    associateName,
+    companyName
+  })
   const now = new Date()
 
   const doc: any = {

@@ -105,7 +105,8 @@ export async function GET(request: Request) {
             customerName: { $ifNull: ['$customer.fullName', ''] },
             loanTypeName: { $ifNull: ['$loanType.name', ''] },
             stageName: { $ifNull: ['$stage.name', ''] },
-            assignedAgentName: { $ifNull: ['$assignedAgent.name', null] }
+            assignedAgentName: { $ifNull: ['$assignedAgent.name', null] },
+            code: 1
           }
         }
       ])
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
       return {
         id: trackerId,
         leadId: String(t.leadId),
+        leadCode: (lead?.code as string | null) ?? null,
         customerName: String(lead?.customerName || ''),
         loanTypeName: String(lead?.loanTypeName || ''),
         stageName: String(lead?.stageName || ''),

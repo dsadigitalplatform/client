@@ -15,6 +15,7 @@ export type ReminderListItem = {
   caseRef: string | null
   customerId: string | null
   customerName: string | null
+  leadCode: string | null
   appointmentId: string | null
 }
 
