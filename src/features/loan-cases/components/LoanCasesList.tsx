@@ -42,7 +42,7 @@ import { getBanks } from '@features/banks/services/banksService'
 import type { Bank } from '@features/banks/banks.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
-import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type StageOption = { id: string; name: string; order: number }
 
@@ -880,32 +880,21 @@ const LoanCasesList = () => {
                         backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)'
                       }}
                     />
-                    {c.code?.trim() ? <LeadCodeChip code={c.code} /> : null}
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ minWidth: 0 }}>
-                      <MuiLink
-                        component={Link}
+                      <LeadIdentity
+                        customerName={c.customerName}
+                        code={c.code}
                         href={`/loan-cases/${c.id}`}
-                        underline='hover'
-                        color='text.primary'
-                        sx={{
-                          fontSize: '1rem',
-                          fontWeight: 700,
-                          display: 'block',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          transition: 'color .2s ease',
+                        size='large'
+                        nameSx={{
                           color: c.isActive === false ? 'text.secondary' : 'text.primary',
+                          textDecoration: c.isActive === false ? 'line-through' : 'none',
                           '&:hover': { color: c.isActive === false ? 'text.secondary' : 'primary.main' }
                         }}
-                      >
-                        {c.customerName || 'Customer'}
-                      </MuiLink>
-                      <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
-                        {c.loanTypeName || 'Loan Type'} {c.bankName ? `• ${c.bankName}` : ''}
-                      </Typography>
+                        subtitle={`${c.loanTypeName || 'Loan Type'}${c.bankName ? ` • ${c.bankName}` : ''}`}
+                      />
                     </Box>
                     {isAuditSearchActive ? (
                       <StageCell
@@ -982,7 +971,6 @@ const LoanCasesList = () => {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 60 }}>#</TableCell>
-                  <TableCell>Code</TableCell>
                   <TableCell>Customer</TableCell>
                   <TableCell>Loan Type</TableCell>
                   <TableCell>Bank</TableCell>
@@ -1000,7 +988,7 @@ const LoanCasesList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={12}>
+                    <TableCell colSpan={11}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         Loading...
                       </Typography>
@@ -1008,7 +996,7 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : sortedCases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12}>
+                    <TableCell colSpan={11}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         No cases found
                       </Typography>
@@ -1038,24 +1026,15 @@ const LoanCasesList = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <LeadCodeText code={c.code} />
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <MuiLink
-                            component={Link}
-                            href={`/loan-cases/${c.id}`}
-                            underline='hover'
-                            sx={{
-                              fontWeight: 700,
-                              color: c.isActive === false ? 'error.main' : 'text.primary',
-                              textDecoration: c.isActive === false ? 'line-through' : 'none'
-                            }}
-                          >
-                            {c.customerName || 'Customer'}
-                          </MuiLink>
-
-                        </Box>
+                        <LeadIdentity
+                          customerName={c.customerName}
+                          code={c.code}
+                          href={`/loan-cases/${c.id}`}
+                          nameSx={{
+                            color: c.isActive === false ? 'error.main' : 'text.primary',
+                            textDecoration: c.isActive === false ? 'line-through' : 'none'
+                          }}
+                        />
                       </TableCell>
                       <TableCell>{c.loanTypeName || '—'}</TableCell>
                       <TableCell>{c.bankName || '—'}</TableCell>

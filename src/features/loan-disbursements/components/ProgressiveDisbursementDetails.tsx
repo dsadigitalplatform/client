@@ -36,7 +36,7 @@ import {
   getDisbursementAuditHistory,
   getDisbursementTrackerById
 } from '@features/loan-disbursements/services/loanDisbursementsService'
-import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type Props = {
   trackerId: string
@@ -211,14 +211,13 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
           <Button component={Link} href='/progressive-disbursements' startIcon={<i className='ri-arrow-left-line' />} size='small' sx={{ mb: 1 }}>
             All trackers
           </Button>
-          <Typography variant='h5'>{tracker.customerName}</Typography>
-          <Box sx={{ mt: 0.5, mb: 0.5 }}>
-            <LeadCodeChip code={tracker.leadCode} />
-          </Box>
-          <Typography variant='body2' color='text.secondary'>
-            {tracker.loanTypeName}
-            {tracker.bankName ? ` · ${tracker.bankName}` : ''} · {tracker.stageName}
-          </Typography>
+          <LeadIdentity
+            customerName={tracker.customerName}
+            code={tracker.leadCode}
+            size='large'
+            nameSx={{ fontSize: '1.5rem', lineHeight: 1.25 }}
+            subtitle={`${tracker.loanTypeName}${tracker.bankName ? ` · ${tracker.bankName}` : ''} · ${tracker.stageName}`}
+          />
           <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Chip size='small' label={chip.label} color={chip.color} />
             <MuiLink component={Link} href={`/loan-cases/${tracker.leadId}`} variant='body2'>

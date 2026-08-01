@@ -97,6 +97,7 @@ export async function GET(request: Request) {
         payout: 1,
         code: 1,
         pan: 1,
+        remarks: 1,
         isActive: 1,
         createdAt: 1
       }
@@ -133,6 +134,7 @@ export async function GET(request: Request) {
     payout: (r as any).payout ?? null,
     code: String((r as any).code || ''),
     pan: (r as any).pan ? String((r as any).pan) : null,
+    remarks: (r as any).remarks ? String((r as any).remarks) : null,
     isActive: Boolean((r as any).isActive),
     createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null
   }))
@@ -183,6 +185,8 @@ export async function POST(request: Request) {
   const email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
   const payout = body.payout == null || String(body.payout).trim().length === 0 ? null : Number(body.payout)
   const pan = body.pan ? String(body.pan).toUpperCase().trim() : null
+  const remarks =
+    body.remarks == null || String(body.remarks).trim().length === 0 ? null : String(body.remarks).trim()
   const isActive = body.isActive !== undefined ? Boolean(body.isActive) : true
 
   const errors: Record<string, string> = {}
@@ -195,6 +199,7 @@ export async function POST(request: Request) {
   if (email && !isValidEmail(email)) errors.email = 'Invalid email format'
   if (!isValidPAN(pan)) errors.pan = 'Invalid PAN format'
   if (payout != null && !isValidPayout(payout)) errors.payout = 'Payout must be between 0 and 100'
+  if (remarks != null && remarks.length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
@@ -232,6 +237,7 @@ export async function POST(request: Request) {
     payout,
     code,
     pan,
+    remarks,
     isActive,
     createdBy: userId,
     createdAt: now,

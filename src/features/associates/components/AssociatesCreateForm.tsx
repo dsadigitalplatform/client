@@ -51,6 +51,7 @@ type Props = {
     payout: number | null
     code: string
     pan: string | null
+    remarks: string | null
     isActive: boolean
   }>
   onSubmitOverride?: (payload: any) => Promise<void>
@@ -84,6 +85,7 @@ const AssociatesCreateForm = ({
   const [email, setEmail] = useState('')
   const [payout, setPayout] = useState<string>('')
   const [pan, setPan] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [associateTypes, setAssociateTypes] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
   const [associateTypesLoading, setAssociateTypesLoading] = useState(false)
@@ -116,6 +118,7 @@ const AssociatesCreateForm = ({
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.payout !== undefined && initialValues.payout !== null) setPayout(String(initialValues.payout))
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
+    if (initialValues.remarks !== undefined) setRemarks(initialValues.remarks || '')
     if (initialValues.isActive !== undefined) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
 
@@ -255,6 +258,7 @@ const AssociatesCreateForm = ({
         email: email ? email.trim() : null,
         payout: payout ? Number(payout) : null,
         pan: pan ? pan.toUpperCase() : null,
+        remarks: remarks ? remarks.trim() : null,
         isActive
       }
 
@@ -284,6 +288,7 @@ const AssociatesCreateForm = ({
       setEmail('')
       setPayout('')
       setPan('')
+      setRemarks('')
       setIsActive(true)
       setFieldErrors({})
       setError(null)
@@ -423,6 +428,17 @@ const AssociatesCreateForm = ({
           error={Boolean(fieldErrors.pan)}
           helperText={fieldErrors.pan}
           fullWidth
+        />
+        <TextField
+          label='Remarks'
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          error={Boolean(fieldErrors.remarks)}
+          helperText={fieldErrors.remarks || 'Optional (max 500 characters)'}
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={4}
         />
       </Box>
       <FormControlLabel

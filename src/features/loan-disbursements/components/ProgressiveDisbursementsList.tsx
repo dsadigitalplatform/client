@@ -33,7 +33,7 @@ import type {
   DisbursementStatus,
   DisbursementTrackerListItem
 } from '@features/loan-disbursements/loan-disbursements.types'
-import { LeadCodeChip, LeadIdentity, leadMatchesQuery } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity, leadMatchesQuery } from '@features/loan-cases/components/LeadCodeDisplay'
 import { useLoanDisbursements } from '@features/loan-disbursements/hooks/useLoanDisbursements'
 import StartDisbursementDialog from '@features/loan-disbursements/components/StartDisbursementDialog'
 import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
@@ -413,7 +413,6 @@ export default function ProgressiveDisbursementsList() {
               <TableHead>
                 <TableRow>
                   <TableCell>Customer</TableCell>
-                  <TableCell>Lead code</TableCell>
                   <TableCell>Loan</TableCell>
                   <TableCell>Progress</TableCell>
                   <TableCell align='right'>Disbursed</TableCell>
@@ -425,7 +424,7 @@ export default function ProgressiveDisbursementsList() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={7}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 3, textAlign: 'center' }}>
                         Loading…
                       </Typography>
@@ -433,7 +432,7 @@ export default function ProgressiveDisbursementsList() {
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={7}>
                       <Box sx={{ py: 5, textAlign: 'center' }}>
                         <Typography variant='body1' gutterBottom>
                           No disbursement trackers yet
@@ -454,15 +453,11 @@ export default function ProgressiveDisbursementsList() {
                     return (
                       <TableRow key={row.id} hover>
                         <TableCell>
-                          <Typography variant='body2' fontWeight={600}>
-                            {row.customerName}
-                          </Typography>
-                          <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} variant='caption'>
-                            View lead
-                          </MuiLink>
-                        </TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', fontWeight: 700 }}>
-                          {row.leadCode?.trim() || '—'}
+                          <LeadIdentity
+                            customerName={row.customerName}
+                            code={row.leadCode}
+                            href={`/loan-cases/${row.leadId}`}
+                          />
                         </TableCell>
                         <TableCell>
                           <Typography variant='body2'>{row.loanTypeName}</Typography>

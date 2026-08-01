@@ -115,6 +115,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     payout: (row as any).payout ?? null,
     code: (row as any).code || '',
     pan: (row as any).pan ?? null,
+    remarks: (row as any).remarks ?? null,
     isActive: Boolean((row as any).isActive),
     canManage
   }
@@ -148,6 +149,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.email !== undefined) patch.email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
   if (body.payout !== undefined) patch.payout = body.payout == null ? null : Number(body.payout)
   if (body.pan !== undefined) patch.pan = body.pan ? String(body.pan).toUpperCase().trim() : null
+  if (body.remarks !== undefined)
+    patch.remarks = body.remarks == null || String(body.remarks).trim().length === 0 ? null : String(body.remarks).trim()
   if (body.isActive !== undefined) patch.isActive = Boolean(body.isActive)
 
   patch.updatedAt = new Date()
@@ -167,6 +170,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'
   if (patch.payout != null && !isValidPayout(patch.payout)) errors.payout = 'Payout must be between 0 and 100'
+  if (patch.remarks != null && String(patch.remarks).length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 

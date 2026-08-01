@@ -31,7 +31,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
 import AppointmentDetailsDialog from '@features/appointments/components/AppointmentDetailsDialog'
-import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { listAppointments, listAppointmentsByLead } from '@features/appointments/services/appointments'
 import type { AppointmentStatus } from '@features/appointments/appointments.types'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
@@ -1145,17 +1145,11 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a?.customerName || ''}>
-                                            {a?.customerName || 'Customer'}
-                                        </Typography>
-                                        {a?.leadCode ? (
-                                            <Box sx={{ mt: 0.35 }}>
-                                                <LeadCodeChip code={a.leadCode} variant='outlined' color='default' />
-                                            </Box>
-                                        ) : null}
-                                        <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
-                                            {a?.leadTitle || ''}
-                                        </Typography>
+                                        <LeadIdentity
+                                            customerName={a?.customerName}
+                                            code={a?.leadCode}
+                                            subtitle={a?.leadTitle || undefined}
+                                        />
                                         <Typography variant='body2' sx={{ mt: 0.75 }}>
                                             {formatDateTime(a?.scheduledAt || null)}
                                         </Typography>

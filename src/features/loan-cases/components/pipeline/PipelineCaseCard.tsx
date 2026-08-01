@@ -2,8 +2,6 @@
 
 import { memo, useMemo, useState } from 'react'
 
-import Link from 'next/link'
-
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -12,12 +10,11 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
-import MuiLink from '@mui/material/Link'
 
 import { useDraggable } from '@dnd-kit/core'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
-import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 type Props = {
@@ -80,28 +77,12 @@ const PipelineCaseCardView = ({
         <CardContent sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <MuiLink
-                component={Link}
+              <LeadIdentity
+                customerName={loanCase.customerName}
+                code={loanCase.code}
                 href={`/loan-cases/${loanCase.id}`}
-                underline='hover'
-                color='text.primary'
-                sx={{
-                  fontSize: '0.95rem',
-                  fontWeight: 800,
-                  display: 'block',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {loanCase.customerName || 'Customer'}
-              </MuiLink>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mt: 0.35 }}>
-                <LeadCodeChip code={loanCase.code} />
-              </Box>
-              <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
-                {loanCase.loanTypeName || 'Loan Type'} {loanCase.bankName ? `• ${loanCase.bankName}` : ''}
-              </Typography>
+                subtitle={`${loanCase.loanTypeName || 'Loan Type'}${loanCase.bankName ? ` • ${loanCase.bankName}` : ''}`}
+              />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, flexShrink: 0 }}>
               {showDocsChip && (

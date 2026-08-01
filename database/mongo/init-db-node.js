@@ -297,6 +297,7 @@ async function main() {
         payout: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
         code: { bsonType: 'string', minLength: 3 },
         pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
+        remarks: { bsonType: ['string', 'null'], maxLength: 500 },
         isActive: { bsonType: 'bool' },
         createdBy: { bsonType: ['objectId', 'null'] },
         createdAt: { bsonType: 'date' },

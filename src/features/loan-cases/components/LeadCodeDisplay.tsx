@@ -1,8 +1,11 @@
 'use client'
 
+import Link from 'next/link'
+
 import type { SxProps, Theme } from '@mui/material/styles'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
+import MuiLink from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 
 export function normalizeLeadCode(code: string | null | undefined) {
@@ -86,17 +89,19 @@ export function LeadCodeText({
   code,
   fallback = '—',
   monospace = true,
-  fontWeight = 700,
+  fontWeight = 600,
   sx
 }: LeadCodeTextProps) {
   const normalized = normalizeLeadCode(code)
 
   return (
     <Typography
-      variant='body2'
+      variant='caption'
       component='span'
+      color='text.secondary'
       sx={{
         fontWeight,
+        lineHeight: 1.35,
         ...(monospace ? { fontFamily: 'monospace', letterSpacing: 0.3 } : {}),
         overflow: 'hidden',
         textOverflow: 'ellipsis',
@@ -115,34 +120,45 @@ type LeadIdentityProps = {
   customerName: string | null | undefined
   code?: string | null
   subtitle?: string | null
-  codeFirst?: boolean
+  href?: string
+  nameSx?: SxProps<Theme>
+  size?: 'default' | 'large'
 }
 
-export function LeadIdentity({ customerName, code, subtitle, codeFirst = false }: LeadIdentityProps) {
+export function LeadIdentity({ customerName, code, subtitle, href, nameSx, size = 'default' }: LeadIdentityProps) {
   const normalizedCode = normalizeLeadCode(code)
   const name = String(customerName || '').trim() || 'Customer'
+  const nameVariant = size === 'large' ? 'body1' : 'body2'
+
+  const nameNode = href ? (
+    <MuiLink
+      component={Link}
+      href={href}
+      underline='hover'
+      color='text.primary'
+      sx={{
+        fontWeight: 800,
+        fontSize: size === 'large' ? '1rem' : undefined,
+        display: 'block',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        ...nameSx
+      }}
+      title={name}
+    >
+      {name}
+    </MuiLink>
+  ) : (
+    <Typography variant={nameVariant} sx={{ fontWeight: 800, ...nameSx }} noWrap title={name}>
+      {name}
+    </Typography>
+  )
 
   return (
     <Box sx={{ minWidth: 0 }}>
-      {codeFirst && normalizedCode ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: subtitle ? 0.25 : 0 }}>
-          <LeadCodeChip code={normalizedCode} />
-          <Typography variant='body2' color='text.secondary' noWrap sx={{ fontWeight: 600 }}>
-            {name}
-          </Typography>
-        </Box>
-      ) : (
-        <>
-          <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={name}>
-            {name}
-          </Typography>
-          {normalizedCode ? (
-            <Box sx={{ mt: 0.35 }}>
-              <LeadCodeChip code={normalizedCode} variant='outlined' color='default' />
-            </Box>
-          ) : null}
-        </>
-      )}
+      {nameNode}
+      {normalizedCode ? <LeadCodeText code={normalizedCode} sx={{ mt: 0.2 }} /> : null}
       {subtitle ? (
         <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', mt: 0.25 }} title={subtitle}>
           {subtitle}

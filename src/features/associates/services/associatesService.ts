@@ -9,6 +9,7 @@ export type CreateAssociateInput = {
   email?: string | null
   payout?: number | null
   pan?: string | null
+  remarks?: string | null
   isActive: boolean
 }
 

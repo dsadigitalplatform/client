@@ -6,26 +6,30 @@ import Link from 'next/link'
 // Third-party Imports
 import classnames from 'classnames'
 
-// Hook Imports
-import useVerticalNav from '@menu/hooks/useVerticalNav'
+// Component Imports
+import SidhiyanaLogo from '@core/svg/SidhiyanaLogo'
 
 // Util Imports
 import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
 
 const FooterContent = () => {
-  // Hooks
-  const { isBreakpointReached } = useVerticalNav()
-
   return (
     <div
-      className={classnames(verticalLayoutClasses.footerContent, 'flex items-center justify-between flex-wrap gap-4')}
+      className={classnames(verticalLayoutClasses.footerContent, 'flex items-center justify-end flex-wrap gap-4')}
     >
-      <p>
-        <Link href='https://sidhiyana.com/' target='_blank' className='text-primary'>
-          © Sidhiyana Pvt Ltd
-        </Link>
-      </p>
-      {!isBreakpointReached && <div className='flex items-center gap-4' />}
+      <Link
+        href='https://sidhiyana.com/'
+        target='_blank'
+        rel='noopener noreferrer'
+        className='inline-flex items-center text-textSecondary hover:opacity-90 transition-opacity'
+        aria-label='Sidhiyana Pvt Ltd'
+      >
+        <SidhiyanaLogo
+          showFrame={false}
+          className='h-10 w-auto sm:h-12 md:h-14 max-w-full'
+          title='Sidhiyana Pvt Ltd'
+        />
+      </Link>
     </div>
   )
 }

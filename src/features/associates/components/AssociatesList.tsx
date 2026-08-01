@@ -48,7 +48,7 @@ const AssociatesList = () => {
 
     const handleExport = () => {
         const rows = [
-            ['Associate Name', 'Company Name', 'Associate Type', 'Country Code', 'Mobile', 'Email', 'Payout (%)', 'Code', 'PAN Card No', 'IsActive'],
+            ['Associate Name', 'Company Name', 'Associate Type', 'Country Code', 'Mobile', 'Email', 'Payout (%)', 'Code', 'PAN Card No', 'Remarks', 'IsActive'],
             ...associates.map(a => [
                 a.associateName,
                 a.companyName,
@@ -59,6 +59,7 @@ const AssociatesList = () => {
                 a.payout != null ? String(a.payout) : '',
                 a.code,
                 a.pan ?? '',
+                a.remarks ?? '',
                 a.isActive ? 'Yes' : 'No'
             ])
         ]

@@ -33,7 +33,7 @@ import { useDashboardLayout } from '@features/dashboard/hooks/useDashboardLayout
 import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
 import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
 import type { DashboardWidgetId, TrendPoint } from '@features/dashboard/dashboard.types'
-import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { getReminders, updateReminderStatus } from '@features/reminders/services/remindersService'
 import type { ReminderListItem, ReminderStatus } from '@features/reminders/reminders.types'
 
@@ -1006,18 +1006,12 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
               upcoming.map(row => (
                 <Box key={row.id} sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={row.customerName || ''}>
-                      {row.customerName || 'Customer'}
-                    </Typography>
-                    {row.leadCode ? (
-                      <Box sx={{ mt: 0.35 }}>
-                        <LeadCodeChip code={row.leadCode} variant='outlined' color='default' />
-                      </Box>
-                    ) : null}
-                    <Typography variant='caption' color='text.secondary' noWrap title={row.leadTitle || ''}>
-                      {row.leadTitle || 'Lead'}
-                    </Typography>
-                    <Typography variant='caption' color='text.secondary' noWrap>
+                    <LeadIdentity
+                      customerName={row.customerName}
+                      code={row.leadCode}
+                      subtitle={row.leadTitle || 'Lead'}
+                    />
+                    <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', mt: 0.25 }}>
                       <i className='ri-time-line' style={{ marginRight: 6 }} />
                       {formatWhen(row.scheduledAt)}
                       {row.followUpType ? ` • ${row.followUpType}` : ''}
@@ -1100,14 +1094,17 @@ export default function OverviewDashboard({ hasTenantSelected, tenantRole }: Pro
                             label={overdue ? 'Overdue' : 'Upcoming'}
                           />
                         </Box>
-                        <Typography variant='caption' color='text.secondary' noWrap title={refLabel || ''}>
-                          {refLabel || '—'}
-                        </Typography>
-                        {r.leadCode ? (
-                          <Box sx={{ mt: 0.35 }}>
-                            <LeadCodeChip code={r.leadCode} variant='outlined' color='default' />
-                          </Box>
-                        ) : null}
+                        {r.customerName ? (
+                          <LeadIdentity
+                            customerName={r.customerName}
+                            code={r.leadCode}
+                            subtitle={r.caseRef ? `Case #${r.caseRef}` : undefined}
+                          />
+                        ) : (
+                          <Typography variant='caption' color='text.secondary' noWrap title={refLabel || ''}>
+                            {refLabel || '—'}
+                          </Typography>
+                        )}
                         <Typography variant='caption' color={overdue ? 'error.main' : 'text.secondary'} noWrap title={String(dateLabel)}>
                           <i className='ri-time-line' style={{ marginRight: 6 }} />
                           {dateLabel}

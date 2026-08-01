@@ -58,6 +58,7 @@ const AssociateDetails = ({ id }: Props) => {
                       payout: data.payout,
                       code: data.code,
                       pan: data.pan,
+                      remarks: data.remarks,
                       isActive: data.isActive
                   }
                 : null,
@@ -188,6 +189,12 @@ const AssociateDetails = ({ id }: Props) => {
                                         <i className='ri-bank-card-line text-base' />
                                         <Typography color='text.secondary'>{data.pan || '-'}</Typography>
                                     </Box>
+                                    <Box className='flex items-start gap-1.5'>
+                                        <i className='ri-sticky-note-line text-base' />
+                                        <Typography color='text.secondary' sx={{ whiteSpace: 'pre-wrap' }}>
+                                            {data.remarks || '-'}
+                                        </Typography>
+                                    </Box>
                                 </Box>
                             ) : (
                                 <Box className='flex flex-col gap-1'>
@@ -200,6 +207,9 @@ const AssociateDetails = ({ id }: Props) => {
                                     <Typography color='text.secondary'>Payout: {data.payout != null ? `${data.payout}%` : '-'}</Typography>
                                     <Typography color='text.secondary'>Code: {data.code || '-'}</Typography>
                                     <Typography color='text.secondary'>PAN: {data.pan || '-'}</Typography>
+                                    <Typography color='text.secondary' sx={{ whiteSpace: 'pre-wrap' }}>
+                                        Remarks: {data.remarks || '-'}
+                                    </Typography>
                                     <Typography color='text.secondary'>Status: {data.isActive ? 'Active' : 'Inactive'}</Typography>
                                 </Box>
                             )}

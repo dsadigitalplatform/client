@@ -22,7 +22,7 @@ import { alpha, useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
 import type { ReportDetailGroupDimension, ReportDetailRow, ReportQueryResponse } from '../reports.types'
-import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { buildDetailGroups } from '../utils/buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from '../utils/exportReport'
 import {
@@ -121,12 +121,8 @@ function DetailRowCells({
   return (
     <>
       <TableCell sx={{ pl: 2 + indent * 3 }}>
-        <Typography variant='body2'>{row.customerName ?? '—'}</Typography>
+        <LeadIdentity customerName={row.customerName ?? '—'} code={row.leadCode} />
       </TableCell>
-      <TableCell>
-        <LeadCodeText code={row.leadCode} />
-      </TableCell>
-      <TableCell />
       <TableCell>{row.loanTypeName ?? '—'}</TableCell>
       <TableCell>{row.bankName ?? '—'}</TableCell>
       <TableCell>
@@ -212,8 +208,72 @@ function GroupAmountCell({ amount, label }: { amount: number; label: string }) {
   )
 }
 
+function GroupRowBannerCell({
+  groupLabel,
+  count,
+  collapsed,
+  tone,
+  indent = 0,
+  isHistorical
+}: {
+  groupLabel: string
+  count: number
+  collapsed: boolean
+  tone: 'primary' | 'secondary'
+  indent?: number
+  isHistorical: boolean
+}) {
+  const theme = useTheme()
+  const accent = tone === 'primary' ? theme.palette.primary : theme.palette.secondary
+  const caseLabel = count === 1 ? 'case' : 'cases'
+  const bannerColSpan = isHistorical ? 6 : 5
+
+  return (
+    <TableCell
+      colSpan={bannerColSpan}
+      sx={{
+        verticalAlign: 'middle',
+        pl: 2 + indent * 3,
+        ...(indent > 0 ? { boxShadow: `inset 3px 0 0 ${alpha(accent.main, 0.45)}` } : {})
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+        <ExpandChevron collapsed={collapsed} />
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 2
+          }}
+        >
+          <Typography
+            variant={tone === 'primary' ? 'subtitle1' : 'body1'}
+            fontWeight={800}
+            color={tone === 'secondary' ? 'secondary.main' : 'text.primary'}
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+              flex: 1
+            }}
+            title={groupLabel}
+          >
+            {groupLabel}
+          </Typography>
+          <Typography variant='body2' color='text.secondary' fontWeight={600} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {count} {caseLabel}
+          </Typography>
+        </Box>
+      </Box>
+    </TableCell>
+  )
+}
+
 function MobileGroupHeader({
-  dimensionLabel,
   groupLabel,
   count,
   amount,
@@ -221,7 +281,6 @@ function MobileGroupHeader({
   onToggle,
   tone
 }: {
-  dimensionLabel: string
   groupLabel: string
   count: number
   amount: number
@@ -253,10 +312,7 @@ function MobileGroupHeader({
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
         <ExpandChevron collapsed={collapsed} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.3 }}>
-            {dimensionLabel}
-          </Typography>
-          <Typography variant='subtitle1' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
+          <Typography variant='subtitle1' fontWeight={800} sx={{ wordBreak: 'break-word', lineHeight: 1.3 }}>
             {groupLabel}
           </Typography>
           <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
@@ -338,12 +394,7 @@ function MobileDetailCard({
       <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1.25 }}>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant='subtitle2' fontWeight={700} sx={{ wordBreak: 'break-word' }}>
-              {row.customerName ?? 'Unknown customer'}
-            </Typography>
-            <Box sx={{ mt: 0.5 }}>
-              <LeadCodeChip code={row.leadCode} />
-            </Box>
+            <LeadIdentity customerName={row.customerName ?? 'Unknown customer'} code={row.leadCode} />
           </Box>
           <MuiLink
             component={Link}
@@ -393,7 +444,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
   const isHistorical = data.dataMode === 'historical'
   const hasSecondary = Boolean(groupBySecondary && groupBySecondary !== data.groupBy)
   const showDisbursement = useMemo(() => hasReportDisbursementData(data.details), [data.details])
-  const emptyDetailCols = isHistorical ? 6 : 5
 
   const groups = useMemo(
     () =>
@@ -492,7 +542,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
           return (
             <Card key={group.key} variant='outlined' sx={{ overflow: 'hidden' }}>
               <MobileGroupHeader
-                dimensionLabel={groupByLabel(data.groupBy)}
                 groupLabel={group.label}
                 count={group.count}
                 amount={group.amount}
@@ -519,7 +568,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                             }}
                           >
                             <MobileGroupHeader
-                              dimensionLabel={groupByLabel(groupBySecondary!)}
                               groupLabel={subgroup.label}
                               count={subgroup.count}
                               amount={subgroup.amount}
@@ -604,15 +652,11 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
         </Box>
 
         <TableContainer sx={{ overflowX: 'auto' }}>
-          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? 1100 : 900 }}>
+          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? 980 : 780 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 44, px: 0.5, textAlign: 'center' }} aria-label='Row level' />
-                <TableCell sx={{ minWidth: 180 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
-                <TableCell sx={{ width: 120 }}>Lead code</TableCell>
-                <TableCell align='center' sx={{ width: 72 }}>
-                  Cases
-                </TableCell>
+                <TableCell sx={{ minWidth: 200 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
                 <TableCell>Loan type</TableCell>
                 <TableCell>Bank</TableCell>
                 <TableCell>{isHistorical ? 'Stage (audit)' : 'Stage'}</TableCell>
@@ -651,25 +695,13 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                       <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
                         <GroupLevelMarker level='primary' />
                       </TableCell>
-                      <TableCell sx={{ verticalAlign: 'middle' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <ExpandChevron collapsed={primaryCollapsed} />
-                          <Box>
-                            <Typography variant='caption' color='text.secondary'>
-                              {groupByLabel(data.groupBy)}
-                            </Typography>
-                            <Typography variant='subtitle1' fontWeight={800}>
-                              {group.label}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell align='center'>
-                        <Typography variant='subtitle2' fontWeight={800}>
-                          {group.count}
-                        </Typography>
-                      </TableCell>
-                      <TableCell colSpan={emptyDetailCols} />
+                      <GroupRowBannerCell
+                        groupLabel={group.label}
+                        collapsed={primaryCollapsed}
+                        tone='primary'
+                        count={group.count}
+                        isHistorical={isHistorical}
+                      />
                       <GroupAmountCell amount={group.amount} label='Group total' />
                       {showDisbursement ? (
                         <>
@@ -699,25 +731,14 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                 <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
                                   <GroupLevelMarker level='secondary' />
                                 </TableCell>
-                                <TableCell sx={{ pl: 5, verticalAlign: 'middle' }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <ExpandChevron collapsed={secondaryCollapsed} />
-                                    <Box>
-                                      <Typography variant='caption' color='text.secondary'>
-                                        {groupByLabel(groupBySecondary!)}
-                                      </Typography>
-                                      <Typography variant='body2' fontWeight={700}>
-                                        {subgroup.label}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                </TableCell>
-                                <TableCell align='center'>
-                                  <Typography variant='subtitle2' fontWeight={700} color='secondary.main'>
-                                    {subgroup.count}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell colSpan={emptyDetailCols} />
+                                <GroupRowBannerCell
+                                  groupLabel={subgroup.label}
+                                  collapsed={secondaryCollapsed}
+                                  tone='secondary'
+                                  indent={1}
+                                  count={subgroup.count}
+                                  isHistorical={isHistorical}
+                                />
                                 <GroupAmountCell amount={subgroup.amount} label='Subtotal' />
                                 {showDisbursement ? (
                                   <>

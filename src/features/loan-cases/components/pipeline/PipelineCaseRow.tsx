@@ -2,18 +2,15 @@
 
 import { memo, useMemo, useState } from 'react'
 
-import Link from 'next/link'
-
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
-import MuiLink from '@mui/material/Link'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
-import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 type Props = {
@@ -37,7 +34,7 @@ const PipelineCaseRow = ({ loanCase, stageColor, stages, onMoveCaseStage }: Prop
         display: 'grid',
         gridTemplateColumns: {
           xs: '1fr auto',
-          sm: 'minmax(0, 1.1fr) minmax(96px, 0.55fr) minmax(0, 1fr) minmax(96px, 0.7fr) auto'
+          sm: 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(96px, 0.7fr) auto'
         },
         alignItems: 'center',
         gap: { xs: 1, sm: 1.5 },
@@ -52,29 +49,12 @@ const PipelineCaseRow = ({ loanCase, stageColor, stages, onMoveCaseStage }: Prop
       }}
     >
       <Box sx={{ minWidth: 0 }}>
-        <MuiLink
-          component={Link}
+        <LeadIdentity
+          customerName={loanCase.customerName}
+          code={loanCase.code}
           href={`/loan-cases/${loanCase.id}`}
-          underline='hover'
-          color='text.primary'
-          sx={{
-            fontWeight: 800,
-            fontSize: '0.9rem',
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {loanCase.customerName || 'Customer'}
-        </MuiLink>
-        <Box sx={{ mt: 0.35 }}>
-          <LeadCodeChip code={loanCase.code} />
-        </Box>
-        <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block' }}>
-          {loanCase.loanTypeName || 'Loan Type'}
-          {loanCase.bankName ? ` · ${loanCase.bankName}` : ''}
-        </Typography>
+          subtitle={`${loanCase.loanTypeName || 'Loan Type'}${loanCase.bankName ? ` · ${loanCase.bankName}` : ''}`}
+        />
         <Box sx={{ display: { xs: 'flex', sm: 'none' }, alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
           <Typography variant='caption' sx={{ fontWeight: 700 }}>
             {typeof approvedAmount === 'number' ? `₹${approvedAmount.toLocaleString('en-IN')}` : '—'}
@@ -83,10 +63,6 @@ const PipelineCaseRow = ({ loanCase, stageColor, stages, onMoveCaseStage }: Prop
             <Chip size='small' color='warning' label={`${pendingDocumentsCount} docs`} sx={{ height: 20, fontWeight: 700 }} />
           ) : null}
         </Box>
-      </Box>
-
-      <Box sx={{ display: { xs: 'none', sm: 'block' }, minWidth: 0 }}>
-        <LeadCodeText code={loanCase.code} sx={{ fontSize: '0.8125rem' }} />
       </Box>
 
       <Typography
