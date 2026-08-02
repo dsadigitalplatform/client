@@ -27,6 +27,7 @@ type RenderExpandIconProps = {
 
 type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
+  subscriptionPlanName?: string
 }
 
 type Props = {
