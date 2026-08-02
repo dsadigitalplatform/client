@@ -101,6 +101,7 @@ import type {
   UpdateLoanCaseInput
 } from '@features/loan-cases/loan-cases.types'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
+import { SubscriptionGateAlert, useTenantLimitAccess, useTenantModuleAccess } from '@features/subscriptions'
 
 type StageOption = { id: string; name: string; order: number }
 
@@ -271,6 +272,30 @@ const LoanCaseForm = ({ caseId }: Props) => {
   const { data: session } = useSession()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+  const isCreateMode = !caseId
+  const {
+    loading: leadsLimitLoading,
+    atLimit: leadsAtLimit,
+    limit: leadsLimit,
+    used: leadsUsed,
+    planName: leadsPlanName
+  } = useTenantLimitAccess('maxLeads')
+  const {
+    loading: customersLimitLoading,
+    atLimit: customersAtLimit,
+    limit: customersLimit,
+    used: customersUsed,
+    planName: customersPlanName
+  } = useTenantLimitAccess('maxCustomers')
+  const {
+    loading: progressiveAccessLoading,
+    enabled: progressiveEnabled
+  } = useTenantModuleAccess('progressiveDisbursement')
+
+  const createLeadLocked = isCreateMode && !leadsLimitLoading && leadsAtLimit
+  const createCustomerLocked = !customersLimitLoading && customersAtLimit
+  const progressiveLocked = !progressiveAccessLoading && !progressiveEnabled
 
   const [loanTypes, setLoanTypes] = useState<LoanType[]>([])
   const [stages, setStages] = useState<StageOption[]>([])
@@ -460,7 +485,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
     return match?.fullName || ''
   }, [customerId, customerValue?.fullName, customers])
 
-  const customerOptions = useMemo(() => [...customers, CREATE_CUSTOMER_OPTION], [customers])
+  const customerOptions = useMemo(
+    () => (createCustomerLocked ? customers : [...customers, CREATE_CUSTOMER_OPTION]),
+    [customers, createCustomerLocked]
+  )
 
   const groupedAuditHistory = useMemo(() => {
     const groups: Array<{ key: string; label: string; items: LeadAuditHistoryItem[] }> = []
@@ -1148,6 +1176,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
   }
 
   const handleSave = async (allowDuplicate = false) => {
+    if (createLeadLocked) return
     setError(null)
     const { ok, parsed } = validate()
 
@@ -1229,7 +1258,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
       } else {
         const updatePayload: UpdateLoanCaseInput = {
           ...payloadBase,
-          enableProgressivePayment: disbursementTracker ? true : enableProgressivePayment,
+          enableProgressivePayment: disbursementTracker
+            ? true
+            : progressiveLocked
+              ? false
+              : enableProgressivePayment,
           documents: documents.map(d => ({ documentId: d.documentId, status: d.status }))
         }
 
@@ -1310,6 +1343,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
         />
         <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '& .MuiFormHelperText-root': { mt: 0.75 } }}>
           {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+          {createLeadLocked ? (
+            <Box sx={{ mb: 2 }}>
+              <SubscriptionGateAlert
+                title='Lead limit reached'
+                message='Please upgrade your subscription to create more leads'
+                planName={leadsPlanName}
+                detail={leadsLimit >= 0 ? `${leadsUsed} / ${leadsLimit} leads used` : null}
+              />
+            </Box>
+          ) : null}
           {duplicateFound && !id ? (
             <Alert severity='warning' sx={{ mb: 2 }}>
               This customer already has similar lead created. Do you want to continue?
@@ -1618,6 +1661,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     onChange={(_, v) => {
                       if (v?.id === CREATE_CUSTOMER_OPTION_ID) {
+                        if (createCustomerLocked) return
                         setOpenAddCustomer(true)
 
                         return
@@ -2105,9 +2149,10 @@ const LoanCaseForm = ({ caseId }: Props) => {
                             checked={enableProgressivePayment}
                             onChange={e => {
                               if (disbursementTracker && !e.target.checked) return
+                              if (progressiveLocked && e.target.checked) return
                               setEnableProgressivePayment(e.target.checked)
                             }}
-                            disabled={!isActive || Boolean(disbursementTracker)}
+                            disabled={!isActive || Boolean(disbursementTracker) || progressiveLocked}
                           />
                         }
                         label={
@@ -2116,9 +2161,11 @@ const LoanCaseForm = ({ caseId }: Props) => {
                               Progressive payment
                             </Typography>
                             <Typography variant='caption' color='text.secondary'>
-                              {disbursementTracker
-                                ? 'Locked while disbursement tracking is active'
-                                : 'Unlock approved amount in stages'}
+                              {progressiveLocked
+                                ? 'Not included in your plan — upgrade to enable'
+                                : disbursementTracker
+                                  ? 'Locked while disbursement tracking is active'
+                                  : 'Unlock approved amount in stages'}
                             </Typography>
                           </Box>
                         }
@@ -2723,7 +2770,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: '100%' }}>
               <Button
                 variant='contained'
-                disabled={submitting || loading || !isActive}
+                disabled={submitting || loading || !isActive || createLeadLocked}
                 onClick={() => void handleSave()}
                 fullWidth={isMobile}
               >
@@ -2779,30 +2826,39 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 <i className='ri-delete-bin-line' />
               </Button>
             )}
-            <Button variant='contained' disabled={submitting || loading || !isActive} onClick={() => void handleSave()} fullWidth>
+            <Button variant='contained' disabled={submitting || loading || !isActive || createLeadLocked} onClick={() => void handleSave()} fullWidth>
               {saveLabel}
             </Button>
           </Box>
         </Paper>
       ) : null}
 
-      <Dialog open={openAddCustomer} onClose={() => setOpenAddCustomer(false)} fullScreen={isMobile} maxWidth='sm' fullWidth>
+      <Dialog open={openAddCustomer && !createCustomerLocked} onClose={() => setOpenAddCustomer(false)} fullScreen={isMobile} maxWidth='sm' fullWidth>
         <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <CustomersCreateForm
-            showTitle={!isMobile}
-            variant='plain'
-            onCancel={() => setOpenAddCustomer(false)}
-            onSuccess={async () => {
-              setOpenAddCustomer(false)
-              await refreshCustomers()
-            }}
-            onSubmitOverride={async payload => {
-              const res = await createCustomer(payload)
+          {createCustomerLocked ? (
+            <SubscriptionGateAlert
+              title='Customer limit reached'
+              message='Please upgrade your subscription to create more customers'
+              planName={customersPlanName}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used` : null}
+            />
+          ) : (
+            <CustomersCreateForm
+              showTitle={!isMobile}
+              variant='plain'
+              onCancel={() => setOpenAddCustomer(false)}
+              onSuccess={async () => {
+                setOpenAddCustomer(false)
+                await refreshCustomers()
+              }}
+              onSubmitOverride={async payload => {
+                const res = await createCustomer(payload)
 
-              setCustomerId(res.id)
-            }}
-            submitLabel='Create Customer'
-          />
+                setCustomerId(res.id)
+              }}
+              submitLabel='Create Customer'
+            />
+          )}
         </DialogContent>
       </Dialog>
 

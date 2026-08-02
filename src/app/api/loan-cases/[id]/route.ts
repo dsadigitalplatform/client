@@ -16,6 +16,7 @@ import { authOptions } from '@/lib/auth'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 import { resolveBankForLead } from '@/app/api/banks/_helpers'
+import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
 const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
@@ -653,6 +654,17 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     !(typeof patch.approvedAmount === 'number' && Number.isFinite(patch.approvedAmount) && patch.approvedAmount >= 0)
   )
     errors.approvedAmount = 'Approved amount must be numeric'
+
+  if (patch.enableProgressivePayment === true && !Boolean((existing as any).enableProgressivePayment)) {
+    const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+    const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+      bypass: bypassEntitlements
+    })
+
+    if (progressiveGate) {
+      errors.enableProgressivePayment = progressiveGate.message
+    }
+  }
 
   if (patch.enableProgressivePayment === false && Boolean((existing as any).enableProgressivePayment)) {
     const activeTracker = await db.collection('loanDisbursementTrackers').findOne(

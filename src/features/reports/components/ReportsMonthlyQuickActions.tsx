@@ -35,10 +35,11 @@ type Props = {
   filters: ReportFilters
   filterOptions: ReportFilterOptions | null
   loading: boolean
+  disabled?: boolean
   onApply: (filters: ReportFilters) => void
 }
 
-export default function ReportsMonthlyQuickActions({ filters, filterOptions, loading, onApply }: Props) {
+export default function ReportsMonthlyQuickActions({ filters, filterOptions, loading, disabled = false, onApply }: Props) {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [error, setError] = useState<string | null>(null)
@@ -156,7 +157,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
                 Monthly shortcuts
               </Typography>
               <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
-                Stage history and progressive disbursements for the selected month
+                Logged-In and Disbursed reports for the selected month
               </Typography>
             </Box>
 
@@ -164,7 +165,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
               <Button
                 variant={loggedInActive ? 'contained' : 'outlined'}
                 color='info'
-                disabled={loading || !filterOptions}
+                disabled={loading || disabled || !filterOptions}
                 onClick={handleLoggedIn}
                 startIcon={<i className='ri-login-circle-line' />}
                 sx={{ textTransform: 'none', fontWeight: loggedInActive ? 700 : 500, flex: isMobile ? 1 : undefined }}
@@ -174,7 +175,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
               <Button
                 variant={disbursedActive ? 'contained' : 'outlined'}
                 color='success'
-                disabled={loading || !filterOptions}
+                disabled={loading || disabled || !filterOptions}
                 onClick={handleDisbursed}
                 startIcon={<i className='ri-money-rupee-circle-line' />}
                 sx={{ textTransform: 'none', fontWeight: disbursedActive ? 700 : 500, flex: isMobile ? 1 : undefined }}
@@ -203,7 +204,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
                 size='small'
                 aria-label='Previous month'
                 onClick={() => shiftMonth(-1)}
-                disabled={loading}
+                disabled={loading || disabled}
                 sx={{
                   bgcolor: 'background.paper',
                   border: '1px solid',
@@ -238,7 +239,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
                 size='small'
                 aria-label='Next month'
                 onClick={() => shiftMonth(1)}
-                disabled={loading || !canGoForward}
+                disabled={loading || disabled || !canGoForward}
                 sx={{
                   bgcolor: 'background.paper',
                   border: '1px solid',
@@ -255,7 +256,7 @@ export default function ReportsMonthlyQuickActions({ filters, filterOptions, loa
                 size='small'
                 variant='outlined'
                 onClick={goToThisMonth}
-                disabled={loading}
+                disabled={loading || disabled}
                 startIcon={<i className='ri-calendar-check-line' />}
                 sx={{ textTransform: 'none', alignSelf: { xs: 'stretch', sm: 'center' }, whiteSpace: 'nowrap' }}
               >

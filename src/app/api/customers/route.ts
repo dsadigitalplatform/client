@@ -9,6 +9,7 @@ import { authOptions } from '@/lib/auth'
 import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
 import { generateCustomerBusinessCode } from '@features/customers/server/customerCode.server'
+import { assertWithinLimit } from '@features/subscriptions/services/entitlements.server'
 
 type EmploymentType = 'SALARIED' | 'SELF_EMPLOYED'
 type SourceType = 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
@@ -289,6 +290,21 @@ export async function POST(request: Request) {
     .findOne({ tenantId: tenantIdObj, status: 'active', $or: orFilters }, { projection: { role: 1 } })
 
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const customerLimit = await assertWithinLimit(db, tenantIdObj, 'maxCustomers', { bypass: bypassEntitlements })
+
+  if (customerLimit) {
+    return NextResponse.json(
+      {
+        error: customerLimit.error,
+        message: customerLimit.message,
+        limit: customerLimit.limit,
+        used: customerLimit.used
+      },
+      { status: 403 }
+    )
+  }
 
   // parse + normalize payload
   const body = await request.json().catch(() => ({}))

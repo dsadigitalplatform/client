@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { DEFAULT_CURRENCY, isSupportedCurrency, normalizeCurrency } from '@features/subscription-plans/currencies'
+import { TRIAL_DAYS } from '@features/subscription-plans/featureCatalog'
+import { parseEntitlementsFromBody, serializePlanDoc } from '@features/subscription-plans/services/planSerialization'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -36,14 +39,13 @@ export async function GET() {
 
   const rawPlans = await db
     .collection('subscriptionPlans')
-    .find({}, { projection: { _id: 1, name: 1, slug: 1, description: 1, priceMonthly: 1, priceYearly: 1, currency: 1, maxUsers: 1, features: 1, isActive: 1, isDefault: 1, createdAt: 1, updatedAt: 1 } })
+    .find({})
     .sort({ createdAt: -1 })
     .toArray()
 
-  const plans = rawPlans.map(p => ({ ...p, _id: String(p._id) }))
+  const plans = rawPlans.map(p => serializePlanDoc(p as any))
 
-  
-return NextResponse.json({ plans })
+  return NextResponse.json({ plans })
 }
 
 export async function POST(req: Request) {
@@ -64,13 +66,26 @@ export async function POST(req: Request) {
   const description = isNonEmptyString(body?.description) ? body.description.trim() : ''
   const priceMonthly = isPositiveNumber(body?.priceMonthly) ? body.priceMonthly : NaN
   const priceYearlyNumber = isPositiveNumber(body?.priceYearly) ? body.priceYearly : undefined
-  const currency = isNonEmptyString(body?.currency) ? body.currency.trim() : 'USD'
-  const maxUsers = isPositiveInt(body?.maxUsers) ? body.maxUsers : NaN
-  const features = typeof body?.features === 'object' && body?.features != null ? body.features : {}
+  const currencyRaw = isNonEmptyString(body?.currency) ? body.currency.trim() : DEFAULT_CURRENCY
+
+  if (!isSupportedCurrency(currencyRaw)) {
+    return NextResponse.json({ error: 'invalid_currency' }, { status: 400 })
+  }
+
+  const currency = normalizeCurrency(currencyRaw)
+  const entitlements = parseEntitlementsFromBody(body, isPositiveInt(body?.maxUsers) ? body.maxUsers : undefined)
+  const maxUsers = entitlements.limits.maxUsers
+  const features = typeof body?.features === 'object' && body?.features != null ? body.features : { ...entitlements.modules }
+  const trialEnabled = typeof body?.trialEnabled === 'boolean' ? body.trialEnabled : true
+  const trialDaysRaw =
+    typeof body?.trialDays === 'number' && Number.isInteger(body.trialDays) && body.trialDays >= 0
+      ? body.trialDays
+      : TRIAL_DAYS
+  const trialDays = trialEnabled ? Math.max(1, trialDaysRaw) : 0
   const isActive = typeof body?.isActive === 'boolean' ? body.isActive : true
   const isDefault = typeof body?.isDefault === 'boolean' ? body.isDefault : false
 
-  if (!name || !slug || !description || Number.isNaN(priceMonthly) || Number.isNaN(maxUsers)) {
+  if (!name || !slug || !description || Number.isNaN(priceMonthly) || maxUsers < 1) {
     return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
   }
 
@@ -88,7 +103,11 @@ export async function POST(req: Request) {
       priceMonthly,
       currency,
       maxUsers,
+      entitlements,
       features,
+      trialEnabled,
+      trialDays,
+      entitlementsVersion: 1,
       isActive,
       isDefault,
       createdAt: now,
@@ -96,20 +115,29 @@ export async function POST(req: Request) {
     }
 
     if (priceYearlyNumber !== undefined) doc.priceYearly = priceYearlyNumber
+
+    if (isDefault) {
+      await db.collection('subscriptionPlans').updateMany({}, { $set: { isDefault: false, updatedAt: now } })
+    }
+
     const res = await db.collection('subscriptionPlans').insertOne(doc)
     const planDoc = await db.collection('subscriptionPlans').findOne({ _id: res.insertedId })
-    const plan = planDoc ? { ...planDoc, _id: String(planDoc._id) } : null
+    const plan = planDoc ? serializePlanDoc(planDoc as any) : null
 
-    
-return NextResponse.json({ plan }, { status: 201 })
+    return NextResponse.json({ plan }, { status: 201 })
   } catch (e: any) {
     const msg = String(e?.message || '')
     const isDup = msg.includes('duplicate key')
     const isValidation = msg.includes('Document failed validation') || e?.code === 121
 
-    if (isDup) return NextResponse.json({ error: 'duplicate' }, { status: 409 })
-    if (isValidation) return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
-    
-return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+    if (isDup) {
+      return NextResponse.json(
+        { error: 'duplicate', message: 'A plan with this name or slug already exists. Choose a unique name and slug.' },
+        { status: 409 }
+      )
+    }
+    if (isValidation) return NextResponse.json({ error: 'invalid_input', message: 'Plan failed validation.' }, { status: 400 })
+
+    return NextResponse.json({ error: 'internal_error', message: 'Failed to create plan.' }, { status: 500 })
   }
 }

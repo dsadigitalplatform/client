@@ -6,6 +6,12 @@ export type CreatePlanInput = {
   priceYearly?: number | null
   currency?: string
   maxUsers: number
+  trialDays?: number
+  trialEnabled?: boolean
+  entitlements?: {
+    limits: { maxUsers: number; maxCustomers: number; maxLeads: number }
+    modules: { reports: boolean; progressiveDisbursement: boolean; associateCommission: boolean }
+  }
   features?: Record<string, boolean>
   isActive?: boolean
   isDefault?: boolean
@@ -25,7 +31,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
 
-    throw new Error(err?.error || 'request_failed')
+    throw new Error(err?.message || err?.error || 'request_failed')
   }
 
   
@@ -43,6 +49,11 @@ export const subscriptionPlansService = {
     }),
   remove: (id: string) =>
     api<{ success: boolean }>(`/api/super-admin/subscription-plans/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  previewImpact: (input: UpdatePlanInput) =>
+    api<{ impact: { expands: boolean; shrinks: boolean; priceChanged: boolean; activeSubscriberCount: number }; messages: string[] }>(
+      `/api/super-admin/subscription-plans/${encodeURIComponent(input.id)}/impact`,
+      { method: 'POST', body: JSON.stringify(input) }
+    ),
   getFeatures: (id: string) =>
     api<{ features: Record<string, boolean> }>(
       `/api/super-admin/subscription-plans/${encodeURIComponent(id)}/features`

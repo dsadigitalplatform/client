@@ -12,6 +12,7 @@ import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
+import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
@@ -38,6 +39,7 @@ import { useLoanDisbursements } from '@features/loan-disbursements/hooks/useLoan
 import StartDisbursementDialog from '@features/loan-disbursements/components/StartDisbursementDialog'
 import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import { SubscriptionGateAlert, useTenantModuleAccess } from '@features/subscriptions'
 
 const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
 
@@ -190,6 +192,9 @@ export default function ProgressiveDisbursementsList() {
   const [users, setUsers] = useState<TenantUserOption[]>([])
   const [startOpen, setStartOpen] = useState(false)
 
+  const { loading: accessLoading, enabled: moduleEnabled, planName } = useTenantModuleAccess('progressiveDisbursement')
+  const locked = !accessLoading && !moduleEnabled
+
   const effectiveAssignedAgentId = isUserRole ? undefined : assignedAgentId || undefined
 
   const { trackers, summary, loading, error, refresh } = useLoanDisbursements({
@@ -270,13 +275,45 @@ export default function ProgressiveDisbursementsList() {
         <Button
           variant='contained'
           startIcon={<i className='ri-add-line' />}
-          onClick={() => setStartOpen(true)}
+          onClick={() => {
+            if (locked) return
+            setStartOpen(true)
+          }}
+          disabled={locked}
           fullWidth={isMobile}
         >
           Start tracking
         </Button>
       </Box>
 
+      {accessLoading ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant='body2' color='text.secondary'>
+            Checking subscription access…
+          </Typography>
+        </Box>
+      ) : null}
+
+      {locked ? (
+        <SubscriptionGateAlert
+          title='Progressive disbursement not included in your plan'
+          message='Please upgrade your subscription to track staged loan payouts'
+          planName={planName}
+        />
+      ) : null}
+
+      <Box
+        sx={{
+          opacity: locked ? 0.55 : 1,
+          pointerEvents: locked ? 'none' : 'auto',
+          transition: theme => theme.transitions.create('opacity'),
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4
+        }}
+        aria-disabled={locked}
+      >
       <Box
         sx={{
           display: 'grid',
@@ -501,7 +538,13 @@ export default function ProgressiveDisbursementsList() {
         </Card>
       )}
 
-      <StartDisbursementDialog open={startOpen} onClose={() => setStartOpen(false)} onCreated={() => void refresh()} />
+      </Box>
+
+      <StartDisbursementDialog
+        open={startOpen && !locked}
+        onClose={() => setStartOpen(false)}
+        onCreated={() => void refresh()}
+      />
     </Box>
   )
 }

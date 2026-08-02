@@ -39,6 +39,7 @@ type Props = {
     showAdmin: boolean
     showSuperAdmin: boolean
     canInviteUser: boolean
+    canManageSubscription: boolean
   }
 }
 
@@ -62,6 +63,7 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
   const showSuperAdmin = Boolean(menuVisibility?.showSuperAdmin)
   const showAdmin = Boolean(menuVisibility?.showAdmin)
   const canInviteUser = Boolean(menuVisibility?.canInviteUser)
+  const canManageSubscription = Boolean(menuVisibility?.canManageSubscription)
 
   return (
     // eslint-disable-next-line lines-around-comment
@@ -150,8 +152,14 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
 
         {showSuperAdmin && (
           <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
+            <MenuItem href='/super-admin/tenants' icon={<i className='ri-building-4-line' />}>
+              Organisations
+            </MenuItem>
             <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
               Subscription Plans
+            </MenuItem>
+            <MenuItem href='/super-admin/discount-codes' icon={<i className='ri-coupon-3-line' />}>
+              Discount Codes
             </MenuItem>
             <MenuItem href='/super-admin/db-maintenance' icon={<i className='ri-database-line' />}>
               DB Maintenance
@@ -179,6 +187,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
               Organisation Details
             </MenuItem>
+            {canManageSubscription && (
+              <MenuItem href='/admin/subscription' icon={<i className='ri-vip-crown-line' />}>
+                Subscription & Billing
+              </MenuItem>
+            )}
           </SubMenu>
         )}
       </Menu>

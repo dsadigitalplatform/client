@@ -22,6 +22,7 @@ import { getMode, getSystemMode } from '@core/utils/serverHelpers'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 import { getMenuVisibility } from '@configs/menu'
+import { resolveSubscriptionPlan } from '@features/subscription-plans/services/resolveSubscriptionPlan.server'
 
 
 const Layout = async (props: ChildrenType) => {
@@ -118,11 +119,17 @@ const Layout = async (props: ChildrenType) => {
     if (active) {
       const t = await db
         .collection('tenants')
-        .findOne({ _id: active.tenantId as ObjectId }, { projection: { name: 1, 'theme.primaryColor': 1 } })
+        .findOne(
+          { _id: active.tenantId as ObjectId },
+          { projection: { name: 1, subscriptionPlanId: 1, 'theme.primaryColor': 1 } }
+        )
+
+      const subscriptionPlan = await resolveSubscriptionPlan(db, (t as any)?.subscriptionPlanId)
 
       tenant = {
         tenantName: (t?.name as string | undefined) || undefined,
-        role: (active as any).role as 'OWNER' | 'ADMIN' | 'USER' | undefined
+        role: (active as any).role as 'OWNER' | 'ADMIN' | 'USER' | undefined,
+        subscriptionPlanName: subscriptionPlan?.name
       }
 
       tenantPrimaryColor = ((t as any)?.theme?.primaryColor as string | undefined) || undefined

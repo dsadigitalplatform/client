@@ -5,6 +5,13 @@ export type TenantItem = {
   status: 'active' | 'suspended'
   role: 'OWNER' | 'ADMIN' | 'USER'
   subscriptionPlanId?: string | null
+  subscriptionPlan?: {
+    _id: string
+    name: string
+    priceMonthly: number
+    currency: string
+    maxUsers: number
+  } | null
 }
 
 export async function listTenantsByUser(): Promise<{ tenants: TenantItem[] }> {

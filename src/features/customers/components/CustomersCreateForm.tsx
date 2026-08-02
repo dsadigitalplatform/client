@@ -38,6 +38,8 @@ import TableContainer from '@mui/material/TableContainer'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
+import { SubscriptionGateAlert, useTenantLimitAccess } from '@features/subscriptions'
+
 import { createCustomer, getCustomerByMobile, previewCustomerCode, updateCustomer } from '@features/customers/services/customersService'
 import CountryCodeField from '@/components/CountryCodeField'
 import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
@@ -109,6 +111,13 @@ const CustomersCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const {
+    loading: customersLimitLoading,
+    atLimit: customersAtLimit,
+    limit: customersLimit,
+    used: customersUsed,
+    planName: customersPlanName
+  } = useTenantLimitAccess('maxCustomers')
 
   const [fullName, setFullName] = useState('')
   const [countryCode, setCountryCode] = useState('+91')
@@ -182,6 +191,8 @@ const CustomersCreateForm = ({
   }, [initialValues])
 
   const isEditMode = Boolean(initialValues)
+  const isCreatingCustomer = !isEditMode && !matchedCustomerId
+  const createCustomerLocked = isCreatingCustomer && !customersLimitLoading && customersAtLimit
 
   useEffect(() => {
     if (isEditMode || matchedCustomerId) {
@@ -314,6 +325,7 @@ const CustomersCreateForm = ({
     isValidCountryCode(contact.countryCode) && isValidMobile(contact.mobile) && isValidContactType(contact.type)
 
   const canSubmit =
+    !createCustomerLocked &&
     fullName.trim().length >= 2 &&
     isValidCountryCode(countryCode) &&
     isValidMobile(mobile) &&
@@ -402,6 +414,7 @@ const CustomersCreateForm = ({
   }
 
   const handleSubmit = async () => {
+    if (createCustomerLocked) return
     setError(null)
 
     const validationErrors = collectValidationErrors()
@@ -652,6 +665,16 @@ const CustomersCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {createCustomerLocked ? (
+          <Box sx={{ mb: 2 }}>
+            <SubscriptionGateAlert
+              title='Customer limit reached'
+              message='Please upgrade your subscription to create more customers'
+              planName={customersPlanName}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used` : null}
+            />
+          </Box>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
@@ -1149,6 +1172,16 @@ const CustomersCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {createCustomerLocked ? (
+          <Box sx={{ mb: 2 }}>
+            <SubscriptionGateAlert
+              title='Customer limit reached'
+              message='Please upgrade your subscription to create more customers'
+              planName={customersPlanName}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used` : null}
+            />
+          </Box>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information

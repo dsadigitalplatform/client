@@ -38,6 +38,7 @@ import {
 } from '@features/reports/utils/reportDisbursement'
 import { buildStageAuditMatchCondition } from '@features/reports/server/stageAuditMatch.server'
 import { getDisbursementActivityLeadsInRange } from '@features/reports/server/disbursementActivityReport.server'
+import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 import { mergeHistoricalWithDisbursementActivity } from '@features/reports/server/mergeHistoricalDisbursementReport.server'
 
 type ReportDb = Db
@@ -878,6 +879,17 @@ export async function GET(request: Request) {
   if ('error' in ctx) return ctx.error
 
   const { db, tenantIdObj, tenantIdHex, userId, role } = ctx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const reportsGate = await assertModuleEnabled(db, tenantIdObj, 'reports', { bypass: bypassEntitlements })
+
+  if (reportsGate) {
+    return NextResponse.json(
+      { error: reportsGate.error, message: reportsGate.message, feature: reportsGate.feature },
+      { status: 403 }
+    )
+  }
+
   const filters = parseQueryParams(new URL(request.url).searchParams)
 
   const disclaimer =

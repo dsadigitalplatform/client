@@ -43,6 +43,7 @@ import type { Bank } from '@features/banks/banks.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
 import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
+import { useTenantLimitAccess } from '@features/subscriptions'
 
 type StageOption = { id: string; name: string; order: number }
 
@@ -332,6 +333,8 @@ const LoanCasesList = () => {
   const isAuditSearchActive = Boolean(stagedDateFrom || stagedDateTo)
 
   const { cases, loading } = useLoanCases(filters)
+  const { loading: leadsLimitLoading, atLimit: leadsAtLimit } = useTenantLimitAccess('maxLeads')
+  const createLeadLocked = !leadsLimitLoading && leadsAtLimit
 
   const sortedCases = useMemo(() => {
     const list = cases.slice()
@@ -465,15 +468,27 @@ const LoanCasesList = () => {
             justifyContent: 'flex-end'
           }}
         >
-          <Button
-            component={Link}
-            href='/loan-cases/create'
-            variant='contained'
-            startIcon={<i className='ri-add-line' />}
-            fullWidth={isMobile}
-          >
-            Create Lead
-          </Button>
+          {createLeadLocked ? (
+            <Button
+              variant='contained'
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+              disabled
+              title='Lead limit reached — upgrade your plan to create more'
+            >
+              Create Lead
+            </Button>
+          ) : (
+            <Button
+              component={Link}
+              href='/loan-cases/create'
+              variant='contained'
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+            >
+              Create Lead
+            </Button>
+          )}
         </Box>
       </Box>
 

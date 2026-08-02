@@ -228,15 +228,3 @@ export const REPORT_PRESETS: ReportPreset[] = [
     }
   }
 ]
-
-export const DATA_MODE_LABELS: Record<ReportDataMode, { title: string; description: string }> = {
-  snapshot: {
-    title: 'Current snapshot',
-    description: 'Shows leads in their current state. Date filters apply to lead creation date.'
-  },
-  historical: {
-    title: 'Stage history (audit)',
-    description:
-      'Based on audit logs when leads moved into stages. Date filters apply to the staged date recorded in audit history, not the current stage.'
-  }
-}

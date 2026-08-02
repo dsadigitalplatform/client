@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { ObjectId } from 'mongodb'
 
 import { getDb } from '@/lib/mongodb'
+import { assertWithinLimit } from '@features/subscriptions/services/entitlements.server'
 
 export type InviteRole = 'ADMIN' | 'USER'
 
@@ -42,6 +43,19 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Cr
 
   if (!isSuperAdmin && requesterRole === 'ADMIN' && input.role === 'ADMIN') {
     throw Object.assign(new Error('admin_cannot_invite_admin'), { status: 403 })
+  }
+
+  const seatLimit = await assertWithinLimit(db, tenantId, 'maxUsers', {
+    bypass: Boolean(input.requesterIsSuperAdmin)
+  })
+
+  if (seatLimit) {
+    throw Object.assign(new Error(seatLimit.message), {
+      status: 403,
+      code: seatLimit.error,
+      limit: seatLimit.limit,
+      used: seatLimit.used
+    })
   }
 
   const tenant = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })

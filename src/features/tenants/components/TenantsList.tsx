@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -135,7 +136,20 @@ export const TenantsList = () => {
 return (
               <Card key={t._id}>
                 <CardContent className='flex flex-col gap-2'>
-                  <Typography variant='h6'>{t.name}</Typography>
+                  <Box className='flex items-start justify-between gap-2'>
+                    <Typography variant='h6'>{t.name}</Typography>
+                    {t.subscriptionPlan ? (
+                      <Chip
+                        size='small'
+                        color='primary'
+                        variant='outlined'
+                        label={t.subscriptionPlan.name}
+                        icon={<i className='ri-vip-crown-line' />}
+                      />
+                    ) : (
+                      <Chip size='small' variant='outlined' label='No plan' />
+                    )}
+                  </Box>
                   <Typography variant='body2' color='text.secondary'>
                     Type: {t.type} • Status: {t.status}
                   </Typography>

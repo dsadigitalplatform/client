@@ -23,9 +23,10 @@ import { fetchProfileName, fetchSessionTenant } from '../services/reportsService
 type Props = {
   data: ReportQueryResponse | null
   groupBySecondary: ReportDetailGroupDimension | null
+  disabled?: boolean
 }
 
-export default function ReportsExportActions({ data, groupBySecondary }: Props) {
+export default function ReportsExportActions({ data, groupBySecondary, disabled = false }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [meta, setMeta] = useState<Omit<ReportExportMeta, 'reportTitle'> | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -96,7 +97,7 @@ export default function ReportsExportActions({ data, groupBySecondary }: Props) 
         <Button
           startIcon={exporting ? <CircularProgress size={14} color='inherit' /> : <i className='ri-download-2-line' />}
           onClick={e => setAnchorEl(e.currentTarget)}
-          disabled={exporting}
+          disabled={exporting || disabled}
         >
           {exporting ? 'Preparing…' : 'Export'}
         </Button>

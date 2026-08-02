@@ -6,6 +6,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { DEFAULT_CURRENCY, isSupportedCurrency, normalizeCurrency } from '@features/subscription-plans/currencies'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -53,7 +54,13 @@ export async function POST(req: Request) {
   const description = isNonEmptyString(body?.description) ? body.description.trim() : ''
   const priceMonthly = isPositiveNumber(body?.priceMonthly) ? body.priceMonthly : NaN
   const priceYearly = body?.priceYearly == null ? null : (isPositiveNumber(body?.priceYearly) ? body.priceYearly : NaN)
-  const currency = isNonEmptyString(body?.currency) ? body.currency.trim() : 'USD'
+  const currencyRaw = isNonEmptyString(body?.currency) ? body.currency.trim() : DEFAULT_CURRENCY
+
+  if (!isSupportedCurrency(currencyRaw)) {
+    return NextResponse.json({ error: 'invalid_currency' }, { status: 400 })
+  }
+
+  const currency = normalizeCurrency(currencyRaw)
   const maxUsers = isPositiveInt(body?.maxUsers) ? body.maxUsers : NaN
   const features = typeof body?.features === 'object' && body?.features != null ? body.features : {}
   const isActive = typeof body?.isActive === 'boolean' ? body.isActive : true
@@ -126,7 +133,13 @@ export async function PUT(req: Request) {
     update.priceYearly = body.priceYearly
   }
 
-  if (isNonEmptyString(body?.currency)) update.currency = body.currency.trim()
+  if (isNonEmptyString(body?.currency)) {
+    if (!isSupportedCurrency(body.currency)) {
+      return NextResponse.json({ error: 'invalid_currency' }, { status: 400 })
+    }
+
+    update.currency = normalizeCurrency(body.currency)
+  }
 
   if (body?.maxUsers != null) {
     if (!isPositiveInt(body.maxUsers)) return NextResponse.json({ error: 'invalid_maxUsers' }, { status: 400 })

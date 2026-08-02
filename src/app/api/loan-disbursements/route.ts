@@ -20,6 +20,7 @@ import {
 } from '@features/loan-disbursements/server/disbursementApiShared'
 
 import { authOptions } from '@/lib/auth'
+import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
@@ -31,6 +32,19 @@ export async function GET(request: Request) {
   if ('error' in ctx) return ctx.error
 
   const { db, tenantIdObj, userId, role } = ctx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+    bypass: bypassEntitlements
+  })
+
+  if (progressiveGate) {
+    return NextResponse.json(
+      { error: progressiveGate.error, message: progressiveGate.message, feature: progressiveGate.feature },
+      { status: 403 }
+    )
+  }
+
   const url = new URL(request.url)
   const assignedAgentIdParam = url.searchParams.get('assignedAgentId') || ''
   const filterAssignedAgentId =
@@ -185,6 +199,19 @@ export async function POST(request: Request) {
   if ('error' in ctx) return ctx.error
 
   const { db, tenantIdObj, userId, role } = ctx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+    bypass: bypassEntitlements
+  })
+
+  if (progressiveGate) {
+    return NextResponse.json(
+      { error: progressiveGate.error, message: progressiveGate.message, feature: progressiveGate.feature },
+      { status: 403 }
+    )
+  }
+
   const body = await request.json().catch(() => ({}))
   const leadId = String(body?.leadId || '').trim()
   const errors: Record<string, string> = {}

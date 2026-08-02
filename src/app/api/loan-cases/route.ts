@@ -23,6 +23,7 @@ import {
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { assertModuleEnabled, assertWithinLimit } from '@features/subscriptions/services/entitlements.server'
 import { findBankByCode, findBankByName, resolveBankForLead } from '@/app/api/banks/_helpers'
 
 const AUDIT_ACTIONS = {
@@ -685,7 +686,35 @@ export async function POST(request: Request) {
 
   const { db, tenantIdObj, userId } = ctx
 
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const leadLimit = await assertWithinLimit(db, tenantIdObj, 'maxLeads', { bypass: bypassEntitlements })
+
+  if (leadLimit) {
+    return NextResponse.json(
+      {
+        error: leadLimit.error,
+        message: leadLimit.message,
+        limit: leadLimit.limit,
+        used: leadLimit.used
+      },
+      { status: 403 }
+    )
+  }
+
   const body = await request.json().catch(() => ({}))
+
+  if (body?.enableProgressivePayment === true) {
+    const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+      bypass: bypassEntitlements
+    })
+
+    if (progressiveGate) {
+      return NextResponse.json(
+        { error: progressiveGate.error, message: progressiveGate.message, feature: progressiveGate.feature },
+        { status: 403 }
+      )
+    }
+  }
   const customerId = String(body?.customerId || '')
   const loanTypeId = String(body?.loanTypeId || '')
   const stageId = String(body?.stageId || '')

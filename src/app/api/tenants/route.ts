@@ -7,6 +7,9 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 
 import { getDb } from '@/lib/mongodb'
+import { TRIAL_DAYS } from '@features/subscription-plans/featureCatalog'
+import { findApplicableDiscount } from '@features/subscriptions/services/discountCodes.server'
+import { createTenantSubscription } from '@features/subscriptions/services/tenantSubscription.server'
 
 export async function POST(request: Request) {
   const HEX = /^#([A-Fa-f0-9]{6})$/
@@ -27,6 +30,7 @@ export async function POST(request: Request) {
   const subscriptionPlanIdRaw = typeof body?.subscriptionPlanId === 'string' ? body.subscriptionPlanId : ''
   const primaryColorRaw = typeof body?.primaryColor === 'string' ? body.primaryColor.trim() : ''
   const primaryColor = primaryColorRaw && HEX.test(primaryColorRaw) ? primaryColorRaw : undefined
+  const discountCodeRaw = typeof body?.discountCode === 'string' ? body.discountCode.trim() : ''
 
   if (!name || !type) return NextResponse.json({ success: false, error: 'invalid_input' }, { status: 400 })
 
@@ -35,14 +39,41 @@ export async function POST(request: Request) {
   const createdBy = new ObjectId(session.userId!)
 
   let subscriptionPlanId: ObjectId | undefined
+  let trialDays = TRIAL_DAYS
+  let trialEnabled = true
 
   if (subscriptionPlanIdRaw && ObjectId.isValid(subscriptionPlanIdRaw)) {
     const plan = await db
       .collection('subscriptionPlans')
-      .findOne({ _id: new ObjectId(subscriptionPlanIdRaw), isActive: true }, { projection: { _id: 1 } })
+      .findOne(
+        { _id: new ObjectId(subscriptionPlanIdRaw), isActive: true },
+        { projection: { _id: 1, trialDays: 1, trialEnabled: 1 } }
+      )
 
     if (plan?._id) {
       subscriptionPlanId = plan._id as ObjectId
+      if (typeof (plan as any).trialDays === 'number') trialDays = (plan as any).trialDays
+      trialEnabled = (plan as any).trialEnabled !== false && trialDays > 0
+    }
+  }
+
+  let discountCodeId: ObjectId | null = null
+  let discountSnapshot = null as any
+
+  if (discountCodeRaw) {
+    const applied = await findApplicableDiscount({
+      db,
+      code: discountCodeRaw,
+      planId: subscriptionPlanId || null
+    })
+
+    if (applied && 'error' in applied) {
+      return NextResponse.json({ success: false, error: applied.error }, { status: 400 })
+    }
+
+    if (applied && 'discount' in applied) {
+      discountCodeId = new ObjectId(applied.discount._id)
+      discountSnapshot = applied.snapshot
     }
   }
 
@@ -65,6 +96,23 @@ export async function POST(request: Request) {
     createdAt: now,
     activatedAt: now
   })
+
+  if (subscriptionPlanId) {
+    await createTenantSubscription({
+      db,
+      tenantId: insertTenant.insertedId,
+      planId: subscriptionPlanId,
+      ownerUserId: createdBy,
+      discountCodeId,
+      discountSnapshot,
+      trialEnabled,
+      trialDays
+    })
+
+    if (discountCodeId) {
+      await db.collection('discountCodes').updateOne({ _id: discountCodeId }, { $inc: { redemptionCount: 1 } })
+    }
+  }
 
   return NextResponse.json({ success: true, tenantId: insertTenant.insertedId.toHexString() }, { status: 201 })
 }

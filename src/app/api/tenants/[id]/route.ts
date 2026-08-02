@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { resolveSubscriptionPlan } from '@features/subscription-plans/services/resolveSubscriptionPlan.server'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -80,14 +81,19 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   if (!t) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  
-return NextResponse.json({
+  const subscriptionPlan = await resolveSubscriptionPlan(db, (t as any).subscriptionPlanId)
+  const subscriptionPlanId = (t as any).subscriptionPlanId
+    ? (t as any).subscriptionPlanId.toHexString()
+    : null
+
+  return NextResponse.json({
     tenant: {
       _id: (t._id as ObjectId).toHexString(),
       name: t.name as string,
       type: t.type as 'sole_trader' | 'company',
       status: t.status as 'active' | 'suspended',
-      subscriptionPlanId: (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null,
+      subscriptionPlanId,
+      subscriptionPlan,
       updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''
     }
   })
@@ -134,13 +140,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   if (!t) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
+  const subscriptionPlan = await resolveSubscriptionPlan(db, (t as any).subscriptionPlanId)
+
   return NextResponse.json({
     tenant: {
       _id: (t._id as ObjectId).toHexString(),
       name: t.name as string,
       type: t.type as 'sole_trader' | 'company',
       status: t.status as 'active' | 'suspended',
-      subscriptionPlanId: (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null,
+      subscriptionPlanId: subscriptionPlan?._id ?? ((t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null),
+      subscriptionPlan,
       themePrimaryColor: ((t as any)?.theme?.primaryColor as string | undefined) || undefined,
       createdAt: (t.createdAt as Date)?.toISOString?.() || '',
       updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''

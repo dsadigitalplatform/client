@@ -13,9 +13,10 @@ import { REPORT_PRESETS, type ReportPreset } from '../reports.types'
 type Props = {
   onSelect: (preset: ReportPreset) => void
   activePresetId?: string | null
+  disabled?: boolean
 }
 
-export default function ReportsPresetCards({ onSelect, activePresetId }: Props) {
+export default function ReportsPresetCards({ onSelect, activePresetId, disabled = false }: Props) {
   const theme = useTheme()
 
   return (
@@ -34,10 +35,17 @@ export default function ReportsPresetCards({ onSelect, activePresetId }: Props) 
                 sx={{
                   height: '100%',
                   borderColor: active ? 'primary.main' : 'divider',
-                  bgcolor: active ? alpha(theme.palette.primary.main, 0.06) : 'background.paper'
+                  bgcolor: active ? alpha(theme.palette.primary.main, 0.06) : 'background.paper',
+                  opacity: disabled ? 0.7 : 1
                 }}
               >
-                <CardActionArea onClick={() => onSelect(preset)} sx={{ height: '100%' }}>
+                <CardActionArea
+                  onClick={() => {
+                    if (!disabled) onSelect(preset)
+                  }}
+                  disabled={disabled}
+                  sx={{ height: '100%' }}
+                >
                   <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 2.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box
@@ -61,11 +69,6 @@ export default function ReportsPresetCards({ onSelect, activePresetId }: Props) 
                     <Typography variant='body2' color='text.secondary'>
                       {preset.description}
                     </Typography>
-                    {preset.filters.dataMode === 'historical' ? (
-                      <Typography variant='caption' sx={{ color: 'warning.main', fontWeight: 600 }}>
-                        Uses audit history
-                      </Typography>
-                    ) : null}
                   </CardContent>
                 </CardActionArea>
               </Card>

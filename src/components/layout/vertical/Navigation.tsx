@@ -39,6 +39,7 @@ type Props = {
     showAdmin: boolean
     showSuperAdmin: boolean
     canInviteUser: boolean
+    canManageSubscription: boolean
   }
 }
 

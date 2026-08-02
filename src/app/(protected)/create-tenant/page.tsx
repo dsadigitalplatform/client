@@ -25,15 +25,27 @@ const CreateTenantPage = async () => {
     const hasActiveMembership = Boolean(activeMembership)
 
     return (
-        <Box className='p-6 flex flex-col gap-4'>
-            <Typography variant='h4'>Create Organisation</Typography>
-            {!hasActiveMembership ? (
-                <Typography color='text.secondary'>You have no active memberships.</Typography>
-            ) : (
-                <Typography color='text.secondary'>You can create another tenant as Owner.</Typography>
-            )}
+        <Box
+            sx={{
+                px: { xs: 2, sm: 6 },
+                py: { xs: 2, sm: 4 },
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.5,
+                maxWidth: 1200,
+                mx: 'auto',
+                width: '100%'
+            }}
+        >
+            <Typography variant='h4' sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+                Create organisation
+            </Typography>
+            <Typography color='text.secondary' sx={{ mb: 1, maxWidth: 640 }}>
+                {hasActiveMembership
+                    ? 'Set up another organisation with a subscription plan that matches how you work.'
+                    : 'Get started by choosing a plan, then add your organisation details.'}
+            </Typography>
             <CreateTenantForm />
-
         </Box>
     )
 }
