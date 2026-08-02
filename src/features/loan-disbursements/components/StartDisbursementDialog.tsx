@@ -25,7 +25,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import MuiLink from '@mui/material/Link'
-import { useTheme } from '@mui/material/styles'
+import { useTheme, type Theme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
 import type { EligibleLeadItem } from '@features/loan-disbursements/loan-disbursements.types'
@@ -50,7 +50,7 @@ const mobileCardSx = {
   borderColor: 'divider',
   backgroundColor: 'background.paper',
   cursor: 'pointer',
-  transition: theme => theme.transitions.create(['border-color', 'background-color'], { duration: 150 })
+  transition: (theme: Theme) => theme.transitions.create(['border-color', 'background-color'], { duration: 150 })
 } as const
 
 function EligibleLeadMobileCard({
