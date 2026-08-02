@@ -13,7 +13,7 @@ const orbitronLight = Orbitron({
 
 const SAFFRON = '#FF7722'
 const TAGLINE = '#8d8281'
-/** One continuous star journey + quick sharp splash on the frame lines */
+/** One continuous shooting-star journey + quick sharp splash on the frame lines */
 const CYCLE = '11s'
 
 /**
@@ -34,37 +34,90 @@ type OpacityAnim = {
   keyTimes: string
 }
 
-const StarSpark = ({ opacity, shine = false }: { opacity: OpacityAnim; shine?: boolean }) => (
-  <g>
-    <path
-      d='M0 -3.4 L0.9 -0.9 L3.4 0 L0.9 0.9 L0 3.4 L-0.9 0.9 L-3.4 0 L-0.9 -0.9 Z'
-      fill='#FFFFFF'
-    >
-      <animate attributeName='opacity' values={opacity.values} keyTimes={opacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
-    </path>
-    {shine ? (
+/**
+ * Sharp comet-style shooting star: long tapered trail, bright needle core, pointed head.
+ * Oriented so +X is travel direction (trail streams behind via rotate="auto").
+ */
+const ShootingStar = ({ opacity, shine = false }: { opacity: OpacityAnim; shine?: boolean }) => {
+  // Trail stays softer / shorter than the head so the star reads clearly
+  const trailOpacity = {
+    values: opacity.values
+      .split(';')
+      .map(v => {
+        const n = Number(v)
+
+        return Number.isFinite(n) ? String(Number((n * 0.55).toFixed(2))) : v
+      })
+      .join(';'),
+    keyTimes: opacity.keyTimes
+  }
+
+  // Launch zoom tied to visibility — blooms as the star appears
+  const scaleValues = opacity.values
+    .split(';')
+    .map(v => {
+      const n = Number(v)
+
+      if (!Number.isFinite(n) || n <= 0) return '0.4'
+      if (n >= 0.9) return '1'
+      if (n >= 0.3) return '1.12'
+
+      return String(Number((0.4 + n * 0.7).toFixed(2)))
+    })
+    .join(';')
+
+  return (
+    <g>
+      <animateTransform
+        attributeName='transform'
+        type='scale'
+        values={scaleValues}
+        keyTimes={opacity.keyTimes}
+        dur={CYCLE}
+        repeatCount='indefinite'
+      />
+      {/* Soft plume — enough length to read as a launch zoom */}
+      <path d='M-24 0 L-0.9 -1.9 L0.35 0 L-0.9 1.9 Z' fill='url(#sidhiyanaStarTrail)' opacity='0'>
+        <animate attributeName='opacity' values={trailOpacity.values} keyTimes={trailOpacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
+      </path>
+      {/* Soft core streak */}
+      <path d='M-18 0 L-0.2 -0.4 L0.7 0 L-0.2 0.4 Z' fill='url(#sidhiyanaStarTrailCore)' opacity='0'>
+        <animate attributeName='opacity' values={trailOpacity.values} keyTimes={trailOpacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
+      </path>
+      {/* Soft head bloom */}
+      <circle cx='0' cy='0' r='2.4' fill='#FFF8EC' opacity='0' filter='url(#sidhiyanaStarHeadGlow)'>
+        <animate attributeName='opacity' values={opacity.values} keyTimes={opacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
+      </circle>
+      {/* Crisp 4-point star (hero) */}
       <path
-        d='M0 -5.2 L1.2 -1.2 L5.2 0 L1.2 1.2 L0 5.2 L-1.2 1.2 L-5.2 0 L-1.2 -1.2 Z'
+        d='M0 -5.4 L0.72 -0.72 L5.4 0 L0.72 0.72 L0 5.4 L-0.72 0.72 L-5.4 0 L-0.72 -0.72 Z'
         fill='#FFFFFF'
         opacity='0'
       >
-        <animate
-          attributeName='opacity'
-          values='0;0;0;0.6;0;0.75;0;0'
-          keyTimes='0;0.62;0.66;0.7;0.74;0.77;0.8;1'
-          dur={CYCLE}
-          repeatCount='indefinite'
-        />
+        <animate attributeName='opacity' values={opacity.values} keyTimes={opacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
       </path>
-    ) : null}
-  </g>
-)
-
-const StarTrail = ({ opacity }: { opacity: OpacityAnim }) => (
-  <rect x='-12' y='-2.8' width='12' height='5.6' rx='0.8' fill='url(#sidhiyanaStarTrail)'>
-    <animate attributeName='opacity' values={opacity.values} keyTimes={opacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
-  </rect>
-)
+      {/* Bright center tip */}
+      <circle cx='0' cy='0' r='1.25' fill='#FFFFFF' opacity='0'>
+        <animate attributeName='opacity' values={opacity.values} keyTimes={opacity.keyTimes} dur={CYCLE} repeatCount='indefinite' />
+      </circle>
+      {shine ? (
+        <path
+          d='M0 -6.2 L0.78 -0.78 L6.2 0 L0.78 0.78 L0 6.2 L-0.78 0.78 L-6.2 0 L-0.78 -0.78 Z'
+          fill='#FFFFFF'
+          opacity='0'
+        >
+          <animate
+            attributeName='opacity'
+            values='0;0;0;0.4;0;0.5;0;0'
+            keyTimes='0;0.62;0.66;0.7;0.74;0.77;0.8;1'
+            dur={CYCLE}
+            repeatCount='indefinite'
+          />
+        </path>
+      ) : null}
+    </g>
+  )
+}
 
 /**
  * Thin shiny splash along a path (frame brackets or wordmark baselines),
@@ -112,7 +165,7 @@ const LineSplash = ({
       >
         <animate
           attributeName='opacity'
-          values='0;0;0.7;0.7;0;0'
+          values='0;0;0.45;0.45;0;0'
           keyTimes={opacityKeys}
           dur={CYCLE}
           repeatCount='indefinite'
@@ -139,7 +192,7 @@ const LineSplash = ({
       >
         <animate
           attributeName='opacity'
-          values='0;0;1;1;0;0'
+          values='0;0;0.7;0.7;0;0'
           keyTimes={opacityKeys}
           dur={CYCLE}
           repeatCount='indefinite'
@@ -188,11 +241,11 @@ const TextGlyphFlash = ({
 
   return (
     <g className='sidhiyana-star-anim' clipPath={`url(#${clipPathId})`}>
-      {/* Soft glow band */}
-      <rect x={xFrom} y={y} width={beamWidth * 1.35} height={height} fill='#FFFFFF' opacity='0'>
+      {/* Soft glow band — kept mild so the shooting star stays the hero */}
+      <rect x={xFrom} y={y} width={beamWidth * 1.2} height={height} fill='#FFFFFF' opacity='0'>
         <animate
           attributeName='opacity'
-          values='0;0;0.45;0.45;0;0'
+          values='0;0;0.14;0.14;0;0'
           keyTimes={opacityKeys}
           dur={CYCLE}
           repeatCount='indefinite'
@@ -207,11 +260,11 @@ const TextGlyphFlash = ({
           keySplines='0 0 1 1; 0.2 0 0.1 1; 0 0 1 1'
         />
       </rect>
-      {/* Bright core band */}
-      <rect x={xFrom} y={y} width={beamWidth} height={height} fill='#FFFFFF' opacity='0'>
+      {/* Soft core band */}
+      <rect x={xFrom} y={y} width={beamWidth * 0.7} height={height} fill='#FFFFFF' opacity='0'>
         <animate
           attributeName='opacity'
-          values='0;0;0.95;0.95;0;0'
+          values='0;0;0.26;0.26;0;0'
           keyTimes={opacityKeys}
           dur={CYCLE}
           repeatCount='indefinite'
@@ -231,7 +284,7 @@ const TextGlyphFlash = ({
 }
 
 /**
- * Sidhiyana brand mark — continuous star on the logo;
+ * Sidhiyana brand mark — continuous shooting star on the logo;
  * finishing splash runs each frame corner top-left → bottom-right.
  */
 const SidhiyanaLogo = ({
@@ -278,13 +331,28 @@ const SidhiyanaLogo = ({
         </clipPath>
 
         <linearGradient id='sidhiyanaStarTrail' x1='1' y1='0' x2='0' y2='0'>
-          <stop offset='0%' stopColor='#FFFFFF' stopOpacity='0.95' />
-          <stop offset='35%' stopColor='#FFFFFF' stopOpacity='0.45' />
+          <stop offset='0%' stopColor='#FFFFFF' stopOpacity='0.7' />
+          <stop offset='25%' stopColor='#FFF4E8' stopOpacity='0.4' />
+          <stop offset='65%' stopColor='#FFE0C0' stopOpacity='0.12' />
+          <stop offset='100%' stopColor='#FF7722' stopOpacity='0' />
+        </linearGradient>
+
+        <linearGradient id='sidhiyanaStarTrailCore' x1='1' y1='0' x2='0' y2='0'>
+          <stop offset='0%' stopColor='#FFFFFF' stopOpacity='0.85' />
+          <stop offset='40%' stopColor='#FFFFFF' stopOpacity='0.35' />
           <stop offset='100%' stopColor='#FFFFFF' stopOpacity='0' />
         </linearGradient>
 
-        <filter id='sidhiyanaStarGlow' x='-120%' y='-120%' width='340%' height='340%'>
+        <filter id='sidhiyanaStarGlow' x='-140%' y='-140%' width='380%' height='380%'>
           <feGaussianBlur stdDeviation='1.1' result='b' />
+          <feMerge>
+            <feMergeNode in='b' />
+            <feMergeNode in='SourceGraphic' />
+          </feMerge>
+        </filter>
+
+        <filter id='sidhiyanaStarHeadGlow' x='-200%' y='-200%' width='500%' height='500%'>
+          <feGaussianBlur stdDeviation='1.9' result='b' />
           <feMerge>
             <feMergeNode in='b' />
             <feMergeNode in='SourceGraphic' />
@@ -375,8 +443,7 @@ const SidhiyanaLogo = ({
             calcMode='spline'
             keySplines='0 0 1 1; 0.25 0 0.12 1; 0 0 1 1'
           />
-          <StarTrail opacity={{ values: '0;0;0.85;0.85;0;0', keyTimes: '0;0.03;0.06;0.3;0.36;1' }} />
-          <StarSpark opacity={{ values: '0;0;1;1;0;0', keyTimes: '0;0.02;0.05;0.32;0.38;1' }} />
+          <ShootingStar opacity={{ values: '0;0;1;1;0;0', keyTimes: '0;0.02;0.05;0.32;0.38;1' }} />
         </g>
       </g>
 
@@ -393,11 +460,10 @@ const SidhiyanaLogo = ({
             calcMode='spline'
             keySplines='0 0 1 1; 0 0 1 1; 0.25 0 0.12 1; 0 0 1 1'
           />
-          <StarTrail opacity={{ values: '0;0;0.85;0.85;0;0', keyTimes: '0;0.42;0.46;0.58;0.64;1' }} />
-          <StarSpark
+          <ShootingStar
             shine
             opacity={{
-              values: '0;0;1;1;1;0.2;1;0;0',
+              values: '0;0;1;1;1;0.35;1;0;0',
               keyTimes: '0;0.38;0.44;0.62;0.66;0.7;0.74;0.8;1'
             }}
           />
@@ -437,7 +503,7 @@ const SidhiyanaLogo = ({
             xTo={350}
             y={120}
             height={36}
-            beamWidth={58}
+            beamWidth={40}
             start={0.62}
             end={0.78}
           />
@@ -447,7 +513,7 @@ const SidhiyanaLogo = ({
             xTo={300}
             y={162}
             height={22}
-            beamWidth={44}
+            beamWidth={30}
             start={0.72}
             end={0.88}
           />

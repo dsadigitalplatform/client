@@ -21,7 +21,7 @@ const FooterContent = () => {
         href='https://sidhiyana.com/'
         target='_blank'
         rel='noopener noreferrer'
-        className='inline-flex items-center text-textSecondary hover:opacity-90 transition-opacity'
+        className='inline-flex items-center me-14 sm:me-16 text-textSecondary hover:opacity-90 transition-opacity'
         aria-label='Sidhiyana Pvt Ltd'
       >
         <SidhiyanaLogo
