@@ -1134,6 +1134,161 @@ ensureIndex('loanDisbursements', { tenantId: 1 }, { name: 'idx_loanDisbursements
 ensureIndex('loanDisbursements', { trackerId: 1, disbursedDate: -1 }, { name: 'idx_loanDisbursements_tracker_date' })
 ensureIndex('loanDisbursements', { leadId: 1 }, { name: 'idx_loanDisbursements_leadId' })
 
+/* =========================
+   Referral program
+   Platform-wide refer-a-DSA credits, invites, and withdrawals.
+   ========================= */
+const referralProgramSettingsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['_id', 'commissionPercent', 'headline', 'subheadline', 'benefits', 'termsHtml', 'ctaLabel', 'updatedAt'],
+    properties: {
+      _id: { bsonType: 'string' },
+      commissionPercent: { bsonType: 'number', minimum: 0, maximum: 100 },
+      headline: { bsonType: 'string' },
+      subheadline: { bsonType: 'string' },
+      benefits: {
+        bsonType: 'array',
+        items: { bsonType: 'string' }
+      },
+      termsHtml: { bsonType: 'string' },
+      ctaLabel: { bsonType: 'string' },
+      updatedAt: { bsonType: 'date' },
+      updatedByUserId: { bsonType: ['objectId', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralProgramSettings', referralProgramSettingsValidator)
+
+const referralInvitesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'referrerUserId',
+      'referrerTenantId',
+      'inviteeEmail',
+      'inviteeMobile',
+      'token',
+      'status',
+      'commissionCancelled',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      referrerUserId: { bsonType: 'objectId' },
+      referrerTenantId: { bsonType: 'objectId' },
+      inviteeName: { bsonType: ['string', 'null'] },
+      inviteeEmail: { bsonType: 'string' },
+      inviteeMobile: { bsonType: 'string' },
+      token: { bsonType: 'string' },
+      status: { enum: ['invited', 'onboarded', 'subscribed', 'paid', 'cancelled'] },
+      referredTenantId: { bsonType: ['objectId', 'null'] },
+      onboardedAt: { bsonType: ['date', 'null'] },
+      subscribedAt: { bsonType: ['date', 'null'] },
+      lastCreditedAt: { bsonType: ['date', 'null'] },
+      commissionPercentOverride: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
+      commissionCancelled: { bsonType: 'bool' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralInvites', referralInvitesValidator)
+ensureIndex('referralInvites', { token: 1 }, { unique: true, name: 'uniq_referralInvites_token' })
+ensureIndex('referralInvites', { referrerUserId: 1, status: 1 }, { name: 'idx_referralInvites_referrer_status' })
+ensureIndex(
+  'referralInvites',
+  { referredTenantId: 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: 'uniq_referralInvites_referredTenantId',
+    partialFilterExpression: { referredTenantId: { $type: 'objectId' } }
+  }
+)
+ensureIndex('referralInvites', { inviteeEmail: 1 }, { name: 'idx_referralInvites_email' })
+ensureIndex('referralInvites', { inviteeMobile: 1 }, { name: 'idx_referralInvites_mobile' })
+ensureIndex('referralInvites', { createdAt: -1 }, { name: 'idx_referralInvites_createdAt' })
+
+const referralCreditsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'referralInviteId',
+      'referrerUserId',
+      'referredTenantId',
+      'subscriptionAmount',
+      'commissionPercent',
+      'commissionAmount',
+      'status',
+      'createdAt',
+      'createdByUserId'
+    ],
+    properties: {
+      referralInviteId: { bsonType: 'objectId' },
+      referrerUserId: { bsonType: 'objectId' },
+      referredTenantId: { bsonType: 'objectId' },
+      sourceInvoiceId: { bsonType: ['objectId', 'null'] },
+      sourcePaymentNote: { bsonType: ['string', 'null'] },
+      subscriptionAmount: { bsonType: 'number', minimum: 0 },
+      commissionPercent: { bsonType: 'number', minimum: 0, maximum: 100 },
+      commissionAmount: { bsonType: 'number', minimum: 0 },
+      status: { enum: ['available', 'locked', 'withdrawn', 'void'] },
+      withdrawalId: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      createdByUserId: { bsonType: 'objectId' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralCredits', referralCreditsValidator)
+ensureIndex('referralCredits', { referrerUserId: 1, status: 1 }, { name: 'idx_referralCredits_referrer_status' })
+ensureIndex('referralCredits', { referralInviteId: 1 }, { name: 'idx_referralCredits_invite' })
+ensureIndex('referralCredits', { referredTenantId: 1, createdAt: -1 }, { name: 'idx_referralCredits_tenant' })
+ensureIndex('referralCredits', { withdrawalId: 1 }, { name: 'idx_referralCredits_withdrawal' })
+
+const referralWithdrawalsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['referrerUserId', 'creditIds', 'amount', 'payoutDetails', 'status', 'requestedAt'],
+    properties: {
+      referrerUserId: { bsonType: 'objectId' },
+      creditIds: {
+        bsonType: 'array',
+        items: { bsonType: 'objectId' }
+      },
+      amount: { bsonType: 'number', minimum: 0 },
+      payoutDetails: {
+        bsonType: 'object',
+        required: ['method'],
+        properties: {
+          method: { enum: ['upi', 'bank'] },
+          upiId: { bsonType: ['string', 'null'] },
+          accountName: { bsonType: ['string', 'null'] },
+          accountNumber: { bsonType: ['string', 'null'] },
+          ifsc: { bsonType: ['string', 'null'] }
+        },
+        additionalProperties: true
+      },
+      status: { enum: ['requested', 'paid', 'rejected'] },
+      note: { bsonType: ['string', 'null'] },
+      requestedAt: { bsonType: 'date' },
+      resolvedAt: { bsonType: ['date', 'null'] },
+      resolvedByUserId: { bsonType: ['objectId', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralWithdrawals', referralWithdrawalsValidator)
+ensureIndex('referralWithdrawals', { referrerUserId: 1, status: 1 }, { name: 'idx_referralWithdrawals_referrer_status' })
+ensureIndex('referralWithdrawals', { status: 1, requestedAt: -1 }, { name: 'idx_referralWithdrawals_status' })
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {

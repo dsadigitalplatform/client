@@ -134,6 +134,10 @@ export type TenantSubscriptionView = {
     TenantSubscriptionSummary & {
       entitlements: PlanEntitlements
       changeKind: 'upgrade' | 'downgrade' | 'lateral' | 'same' | null
+      isDefault?: boolean
+      trialDays?: number | null
+      trialEnabled?: boolean
+      priceLabel?: string
     }
   >
   changePolicy: {
@@ -145,6 +149,9 @@ export type TenantSubscriptionView = {
       cancel: string
       cancelAnnual: string
       trialSwitch: string
+      trialUpgrade: string
+      paidUpgradeToTrial: string
+      trialNoDowngrade: string
       usageBlocked: string
       paymentsPending: string
     }

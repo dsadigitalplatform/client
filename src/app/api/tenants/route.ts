@@ -10,6 +10,7 @@ import { getDb } from '@/lib/mongodb'
 import { TRIAL_DAYS } from '@features/subscription-plans/featureCatalog'
 import { findApplicableDiscount } from '@features/subscriptions/services/discountCodes.server'
 import { createTenantSubscription } from '@features/subscriptions/services/tenantSubscription.server'
+import { linkReferralAttribution } from '@features/referrals/services/referrals.server'
 
 export async function POST(request: Request) {
   const HEX = /^#([A-Fa-f0-9]{6})$/
@@ -31,6 +32,12 @@ export async function POST(request: Request) {
   const primaryColorRaw = typeof body?.primaryColor === 'string' ? body.primaryColor.trim() : ''
   const primaryColor = primaryColorRaw && HEX.test(primaryColorRaw) ? primaryColorRaw : undefined
   const discountCodeRaw = typeof body?.discountCode === 'string' ? body.discountCode.trim() : ''
+  const referralToken = typeof body?.referralToken === 'string' ? body.referralToken.trim() : ''
+  const referredByUserId =
+    typeof body?.referredByUserId === 'string' && ObjectId.isValid(body.referredByUserId)
+      ? body.referredByUserId
+      : ''
+  const isSuperAdmin = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
 
   if (!name || !type) return NextResponse.json({ success: false, error: 'invalid_input' }, { status: 400 })
 
@@ -112,6 +119,32 @@ export async function POST(request: Request) {
     if (discountCodeId) {
       await db.collection('discountCodes').updateOne({ _id: discountCodeId }, { $inc: { redemptionCount: 1 } })
     }
+  }
+
+  try {
+    if (referralToken) {
+      const invite = await db.collection('referralInvites').findOne({ token: referralToken })
+
+      if (invite) {
+        await linkReferralAttribution({
+          db,
+          referredTenantId: insertTenant.insertedId.toHexString(),
+          referrerUserId: String(invite.referrerUserId),
+          referralInviteId: String(invite._id),
+          inviteeEmail: invite.inviteeEmail ? String(invite.inviteeEmail) : null,
+          inviteeMobile: invite.inviteeMobile ? String(invite.inviteeMobile) : null,
+          inviteeName: invite.inviteeName ? String(invite.inviteeName) : null
+        })
+      }
+    } else if (isSuperAdmin && referredByUserId) {
+      await linkReferralAttribution({
+        db,
+        referredTenantId: insertTenant.insertedId.toHexString(),
+        referrerUserId: referredByUserId
+      })
+    }
+  } catch (e) {
+    console.error('[tenants] referral attribution failed', e)
   }
 
   return NextResponse.json({ success: true, tenantId: insertTenant.insertedId.toHexString() }, { status: 201 })

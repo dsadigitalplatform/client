@@ -234,15 +234,20 @@ export async function finalizeSuccessfulPayment(params: {
 export async function emailInvoice(params: {
   db: Db
   invoiceId: ObjectIdType
-}): Promise<{ sent: boolean; to: string | null }> {
+}): Promise<{ sent: boolean; to: string | null; cc: string | null }> {
   const doc = await params.db.collection('invoices').findOne({ _id: params.invoiceId })
 
-  if (!doc) return { sent: false, to: null }
+  if (!doc) return { sent: false, to: null, cc: null }
 
   const invoice = serializeInvoice(doc as any)
-  const to =
-    invoice.buyerSnapshot.email ||
-    (await resolveBillingContactEmail(params.db, new ObjectId(invoice.tenantId)))
+  const tenantId = new ObjectId(invoice.tenantId)
+  const billingContactEmail = await resolveBillingContactEmail(params.db, tenantId)
+  const gstBillingEmail = await resolveTenantGstBillingEmail(params.db, tenantId, invoice.buyerSnapshot?.email)
+
+  // Billing contact receives the invoice; GST billing email is CC'd when different.
+  const to = billingContactEmail || gstBillingEmail
+  const cc =
+    gstBillingEmail && to && normalizeEmail(gstBillingEmail) !== normalizeEmail(to) ? gstBillingEmail : null
 
   if (!to) {
     await params.db.collection('invoices').updateOne(
@@ -250,13 +255,13 @@ export async function emailInvoice(params: {
       {
         $set: {
           emailStatus: 'skipped',
-          emailError: 'No billing email on file',
+          emailError: 'No billing contact or GST billing email on file',
           updatedAt: new Date()
         }
       }
     )
 
-    return { sent: false, to: null }
+    return { sent: false, to: null, cc: null }
   }
 
   const html = buildInvoiceHtml(invoice)
@@ -264,6 +269,7 @@ export async function emailInvoice(params: {
 
   await sendMail({
     to,
+    ...(cc ? { cc } : {}),
     subject,
     html,
     text: `Tax Invoice ${invoice.invoiceNumber}. Total: ${formatPaiseInr(invoice.totalPaise)}. Status: ${invoice.status}.`
@@ -276,12 +282,33 @@ export async function emailInvoice(params: {
         emailStatus: 'sent',
         emailSentAt: new Date(),
         emailError: null,
+        emailTo: to,
+        emailCc: cc,
         updatedAt: new Date()
       }
     }
   )
 
-  return { sent: true, to }
+  return { sent: true, to, cc }
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+async function resolveTenantGstBillingEmail(
+  db: Db,
+  tenantId: ObjectIdType,
+  buyerSnapshotEmail?: string | null
+): Promise<string | null> {
+  if (typeof buyerSnapshotEmail === 'string' && buyerSnapshotEmail.trim()) {
+    return buyerSnapshotEmail.trim()
+  }
+
+  const tenant = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { billingEmail: 1 } })
+  const email = typeof tenant?.billingEmail === 'string' ? tenant.billingEmail.trim() : ''
+
+  return email || null
 }
 
 async function resolveBillingContactEmail(db: Db, tenantId: ObjectIdType): Promise<string | null> {
@@ -296,5 +323,5 @@ async function resolveBillingContactEmail(db: Db, tenantId: ObjectIdType): Promi
     { projection: { email: 1 } }
   )
 
-  return typeof user?.email === 'string' ? user.email : null
+  return typeof user?.email === 'string' && user.email.trim() ? user.email.trim() : null
 }

@@ -24,7 +24,10 @@ export { useTenantModuleAccess } from './hooks/useTenantModuleAccess'
 export { useTenantLimitAccess } from './hooks/useTenantLimitAccess'
 export {
   getSubscriptionStatusMessage,
+  getSubscriptionRenewalReminder,
   formatSubscriptionDueDate,
   toSubscriptionStatusSummary,
-  type SubscriptionStatusSummary
+  SUBSCRIPTION_REMINDER_DAYS,
+  type SubscriptionStatusSummary,
+  type SubscriptionRenewalReminder
 } from './subscriptionStatusMessage'

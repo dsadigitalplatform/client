@@ -117,6 +117,16 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
               Reports
             </MenuItem>
           )}
+          {hasTenant && (
+            <MenuItem href='/refer-and-earn' icon={<i className='ri-gift-line' />}>
+              Refer &amp; Earn
+            </MenuItem>
+          )}
+          {hasTenant && (
+            <MenuItem href='/rewards' icon={<i className='ri-medal-line' />}>
+              Rewards
+            </MenuItem>
+          )}
         </SubMenu>
 
         {hasTenant && (
@@ -164,6 +174,12 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             </MenuItem>
             <MenuItem href='/super-admin/db-maintenance' icon={<i className='ri-database-line' />}>
               DB Maintenance
+            </MenuItem>
+            <MenuItem href='/super-admin/referral-program' icon={<i className='ri-megaphone-line' />}>
+              Referral Program
+            </MenuItem>
+            <MenuItem href='/super-admin/referrals' icon={<i className='ri-share-forward-line' />}>
+              Referrals
             </MenuItem>
           </SubMenu>
         )}

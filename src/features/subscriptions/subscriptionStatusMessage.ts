@@ -153,3 +153,82 @@ export function toSubscriptionStatusSummary(input: {
     pendingChangeEffectiveAt: input.pendingChangeEffectiveAt || null
   }
 }
+
+/** Show header countdown when due within this many days (or already expired / overdue). */
+export const SUBSCRIPTION_REMINDER_DAYS = 7
+
+export type SubscriptionRenewalReminderKind = 'trial' | 'renewal' | 'access_end' | 'overdue' | 'expired'
+
+export type SubscriptionRenewalReminder = {
+  /** Whole days remaining; 0 = due today; negative = past due/expired. */
+  daysLeft: number
+  severity: 'warning' | 'error'
+  kind: SubscriptionRenewalReminderKind
+  dueAt: string | null
+}
+
+/**
+ * Compact renewal/expiry reminder for the navbar.
+ * Visible from ~1 week before due, and whenever overdue or expired.
+ */
+export function getSubscriptionRenewalReminder(
+  summary: SubscriptionStatusSummary | null | undefined,
+  now = new Date(),
+  withinDays = SUBSCRIPTION_REMINDER_DAYS
+): SubscriptionRenewalReminder | null {
+  if (!summary?.status) return null
+
+  if (summary.status === 'canceled' || summary.status === 'expired') {
+    const daysLeft = daysUntil(summary.currentPeriodEnd, now) ?? 0
+
+    return {
+      daysLeft: Math.min(daysLeft, 0),
+      severity: 'error',
+      kind: 'expired',
+      dueAt: summary.currentPeriodEnd
+    }
+  }
+
+  if (summary.status === 'past_due') {
+    const daysLeft = daysUntil(summary.currentPeriodEnd, now) ?? 0
+
+    return {
+      daysLeft,
+      severity: 'error',
+      kind: 'overdue',
+      dueAt: summary.currentPeriodEnd
+    }
+  }
+
+  const inTrial = summary.inTrial ?? summary.status === 'trialing'
+
+  if (inTrial || summary.status === 'trialing') {
+    const trialEnd = summary.trialEndsAt || summary.currentPeriodEnd
+    const daysLeft =
+      typeof summary.daysLeftInTrial === 'number' ? summary.daysLeftInTrial : (daysUntil(trialEnd, now) ?? 0)
+
+    if (daysLeft > withinDays) return null
+
+    return {
+      daysLeft: Math.max(0, daysLeft),
+      severity: daysLeft <= 1 ? 'error' : 'warning',
+      kind: 'trial',
+      dueAt: trialEnd
+    }
+  }
+
+  if (summary.status !== 'active') return null
+
+  const daysLeft = daysUntil(summary.currentPeriodEnd, now)
+
+  if (daysLeft == null || daysLeft > withinDays) return null
+
+  const kind: SubscriptionRenewalReminderKind = summary.cancelAtPeriodEnd ? 'access_end' : 'renewal'
+
+  return {
+    daysLeft: Math.max(0, daysLeft),
+    severity: daysLeft <= 1 || summary.cancelAtPeriodEnd ? 'error' : 'warning',
+    kind,
+    dueAt: summary.currentPeriodEnd
+  }
+}

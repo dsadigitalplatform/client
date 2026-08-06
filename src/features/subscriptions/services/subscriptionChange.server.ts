@@ -3,20 +3,18 @@ import 'server-only'
 import type { Db, ObjectId as ObjectIdType } from 'mongodb'
 import { ObjectId } from 'mongodb'
 
-import { normalizePlanEntitlements } from '@features/subscription-plans/featureCatalog'
+import { normalizePlanEntitlements, TRIAL_DAYS } from '@features/subscription-plans/featureCatalog'
 import { entitlementsSnapshotFromPlanDoc } from '@features/subscription-plans/services/planCatalogEdit.server'
 
 import {
   SUBSCRIPTION_CHANGE_COPY,
   appliesImmediately,
   classifyPlanChange,
-  estimateUpgradeProration,
   findDowngradeUsageBlocks,
-  priceForInterval,
   type PricedPlanRef
 } from '../subscriptionChangePolicy'
 import type { BillingInterval, TenantSubscription } from '../subscriptions.types'
-import { countTenantUsage, serializeTenantSubscription } from './entitlements.server'
+import { buildTrialPeriod, countTenantUsage, serializeTenantSubscription } from './entitlements.server'
 
 function periodLengthDays(interval: BillingInterval) {
   return interval === 'yearly' ? 365 : 30
@@ -39,6 +37,28 @@ async function loadPlan(db: Db, planId: ObjectIdType) {
   const doc = await db.collection('subscriptionPlans').findOne({ _id: planId, isActive: true })
 
   return doc ? toPricedPlan(doc as any) : null
+}
+
+function trialDaysFromPlanDoc(planDoc: Record<string, any> | null | undefined): number {
+  if (typeof planDoc?.trialDays === 'number' && planDoc.trialDays > 0) return planDoc.trialDays
+
+  return TRIAL_DAYS
+}
+
+/** End current period/trial and start a fresh trial window on the target plan. */
+function freshTrialFields(planDoc: Record<string, any> | null | undefined, now = new Date()) {
+  const trial = buildTrialPeriod(now, trialDaysFromPlanDoc(planDoc))
+
+  return {
+    status: trial.status,
+    trialStartsAt: trial.trialStartsAt,
+    trialEndsAt: trial.trialEndsAt,
+    currentPeriodStart: trial.currentPeriodStart,
+    currentPeriodEnd: trial.currentPeriodEnd,
+    lastPaymentStatus: 'none' as const,
+    cancelAtPeriodEnd: false,
+    canceledAt: null
+  }
 }
 
 function nextPeriodBounds(from: Date, interval: BillingInterval) {
@@ -90,16 +110,26 @@ export async function changeTenantSubscriptionPlan(params: {
     { sort: { updatedAt: -1 } }
   )
 
-  // Legacy orgs may only have tenants.subscriptionPlanId — start a live subscription row.
+  // Legacy orgs may only have tenants.subscriptionPlanId — start a trial on the chosen plan.
+  // Paid activation requires Super Admin "Mark as paid" (or a future online payment path).
   if (!sub) {
     const { createTenantSubscription } = await import('./tenantSubscription.server')
+    const planDoc = await db.collection('subscriptionPlans').findOne({ _id: new ObjectId(targetPlanId) })
+
+    if (!planDoc || (planDoc as any).isActive === false) {
+      return { ok: false, error: 'plan_not_found', message: 'Plan not found or inactive' }
+    }
+
+    // Owner self-serve choose always starts a trial — paid activation is Super Admin mark-paid only.
     const created = await createTenantSubscription({
       db,
       tenantId,
       planId: new ObjectId(targetPlanId),
       ownerUserId: params.actorUserId,
       billingInterval: params.billingInterval || 'monthly',
-      trialEnabled: false
+      renewalMode: 'manual',
+      trialEnabled: true,
+      trialDays: trialDaysFromPlanDoc(planDoc as any)
     })
 
     return {
@@ -107,7 +137,7 @@ export async function changeTenantSubscriptionPlan(params: {
       mode: 'immediate',
       subscription: created,
       prorationNote: SUBSCRIPTION_CHANGE_COPY.paymentsPending,
-      message: 'Subscription started on the selected plan.'
+      message: 'Trial started on the selected plan. Paid access begins after Super Admin confirms payment.'
     }
   }
 
@@ -135,14 +165,22 @@ export async function changeTenantSubscriptionPlan(params: {
     return { ok: false, error: 'same_plan', message: 'You are already on this plan and billing interval' }
   }
 
+  // Owners cannot downgrade while trialing — upgrade to a higher plan only.
+  if (inTrial && kind === 'downgrade' && !forceImmediate) {
+    return {
+      ok: false,
+      error: 'trial_no_downgrade',
+      message: SUBSCRIPTION_CHANGE_COPY.trialNoDowngrade
+    }
+  }
+
   const usage = await countTenantUsage(db, tenantId)
-  const usageBlocks = findDowngradeUsageBlocks(usage, targetPlan.entitlements)
+  const usageBlocks = kind === 'downgrade' ? findDowngradeUsageBlocks(usage, targetPlan.entitlements) : []
 
   const immediate = forceImmediate || appliesImmediately(kind, inTrial)
 
-  // Hard-block only when applying immediately would put them on a smaller plan while over limit.
-  // Super Admin forceImmediate still warns but allows over-limit (soft-locks after).
-  if (usageBlocks.length > 0 && immediate && !forceImmediate) {
+  // Usage over target limits only blocks downgrades (never price-based upgrades).
+  if (usageBlocks.length > 0 && kind === 'downgrade' && immediate && !forceImmediate) {
     return {
       ok: false,
       error: 'usage_exceeds_target',
@@ -169,22 +207,19 @@ export async function changeTenantSubscriptionPlan(params: {
       updatedAt: now
     }
 
-    // Monthly → yearly (or trial leave): start a fresh period on the new interval
-    if (inTrial || (currentInterval === 'monthly' && nextInterval === 'yearly') || kind === 'upgrade') {
-      if (!inTrial && currentInterval === 'monthly' && nextInterval === 'yearly') {
-        const bounds = nextPeriodBounds(now, 'yearly')
+    if (kind === 'upgrade') {
+      // Trial or paid: leftover days expire; start a fresh trial on the higher plan.
+      Object.assign(update, freshTrialFields(targetPlanDoc as any, now))
+    } else if (!inTrial && currentInterval === 'monthly' && nextInterval === 'yearly') {
+      const bounds = nextPeriodBounds(now, 'yearly')
 
-        update.currentPeriodStart = bounds.start
-        update.currentPeriodEnd = bounds.end
-        update.status = 'active'
-        update.trialStartsAt = null
-        update.trialEndsAt = null
-      } else if (inTrial && kind === 'upgrade') {
-        // Keep remaining trial window; plan rights change now
-      } else if (!inTrial && kind === 'upgrade') {
-        // Keep current period end; entitlements change now (proration later)
-      }
+      update.currentPeriodStart = bounds.start
+      update.currentPeriodEnd = bounds.end
+      update.status = 'active'
+      update.trialStartsAt = null
+      update.trialEndsAt = null
     }
+    // Lateral (and other immediate non-upgrade): keep current period / trial window.
 
     await db.collection('tenantSubscriptions').updateOne({ _id: sub._id }, { $set: update })
     await db.collection('tenants').updateOne(
@@ -192,26 +227,19 @@ export async function changeTenantSubscriptionPlan(params: {
       { $set: { subscriptionPlanId: new ObjectId(targetPlan._id), updatedAt: now } }
     )
 
-    const proration = estimateUpgradeProration({
-      currentPrice: priceForInterval(currentPlan, currentInterval),
-      targetPrice: priceForInterval(targetPlan, nextInterval),
-      currency: targetPlan.currency || 'INR',
-      periodStart: sub.currentPeriodStart instanceof Date ? sub.currentPeriodStart : new Date(sub.currentPeriodStart),
-      periodEnd: sub.currentPeriodEnd instanceof Date ? sub.currentPeriodEnd : new Date(sub.currentPeriodEnd),
-      now
-    })
-
     const updated = await db.collection('tenantSubscriptions').findOne({ _id: sub._id })
+    const upgradeMessage = inTrial
+      ? SUBSCRIPTION_CHANGE_COPY.trialUpgrade
+      : SUBSCRIPTION_CHANGE_COPY.paidUpgradeToTrial
 
     return {
       ok: true,
       mode: 'immediate',
       subscription: serializeTenantSubscription(updated as any),
-      prorationNote: kind === 'upgrade' && !inTrial ? proration.note : inTrial ? SUBSCRIPTION_CHANGE_COPY.trialSwitch : SUBSCRIPTION_CHANGE_COPY.paymentsPending,
-      message: inTrial
-        ? SUBSCRIPTION_CHANGE_COPY.trialSwitch
-        : kind === 'upgrade'
-          ? SUBSCRIPTION_CHANGE_COPY.upgrade
+      prorationNote: kind === 'upgrade' ? upgradeMessage : SUBSCRIPTION_CHANGE_COPY.paymentsPending,
+      message:
+        kind === 'upgrade'
+          ? upgradeMessage
           : forceImmediate
             ? 'Plan updated immediately.'
             : 'Plan updated.',
@@ -479,42 +507,52 @@ export async function applyDueSubscriptionChanges(db: Db, tenantId: ObjectIdType
 
   const interval = ((subDoc.pendingBillingInterval || subDoc.billingInterval || 'monthly') as BillingInterval)
   const bounds = nextPeriodBounds(now, interval)
+
+  // Trial ended without Super Admin mark-paid — expire (never auto-activate).
+  if (subDoc.status === 'trialing') {
+    const expireUpdate: Record<string, unknown> = {
+      status: 'expired',
+      pendingPlanId: null,
+      pendingBillingInterval: null,
+      pendingChangeEffectiveAt: null,
+      pendingChangeKind: null,
+      updatedAt: now
+    }
+
+    if (subDoc.pendingPlanId) {
+      expireUpdate.planId = subDoc.pendingPlanId
+      expireUpdate.billingInterval = interval
+      await db.collection('tenants').updateOne(
+        { _id: tenantId },
+        { $set: { subscriptionPlanId: subDoc.pendingPlanId, updatedAt: now } }
+      )
+    }
+
+    await db.collection('tenantSubscriptions').updateOne({ _id: subDoc._id }, { $set: expireUpdate })
+
+    return null
+  }
+
+  // Paid period ended — roll forward as past_due until Super Admin marks paid.
   const update: Record<string, unknown> = {
     currentPeriodStart: bounds.start,
     currentPeriodEnd: bounds.end,
     updatedAt: now,
-    lastPaymentStatus: 'none',
-    // Payment provider renewal hook — no charge until connected
+    status: 'past_due',
+    lastPaymentStatus: 'pending',
     pendingPlanId: null,
     pendingBillingInterval: null,
     pendingChangeEffectiveAt: null,
-    pendingChangeKind: null
+    pendingChangeKind: null,
+    billingInterval: interval
   }
 
   if (subDoc.pendingPlanId) {
     update.planId = subDoc.pendingPlanId
-    update.billingInterval = interval
     await db.collection('tenants').updateOne(
       { _id: tenantId },
       { $set: { subscriptionPlanId: subDoc.pendingPlanId, updatedAt: now } }
     )
-  } else if (subDoc.status === 'trialing') {
-    // Trial ended without conversion path — expire (also handled elsewhere)
-    await db.collection('tenantSubscriptions').updateOne(
-      { _id: subDoc._id },
-      { $set: { status: 'expired', updatedAt: now } }
-    )
-
-    return null
-  } else {
-    // Soft renew same plan until payments enforce collection
-    update.billingInterval = subDoc.billingInterval || 'monthly'
-  }
-
-  if (subDoc.status === 'trialing' && subDoc.pendingPlanId) {
-    update.status = 'active'
-    update.trialStartsAt = null
-    update.trialEndsAt = null
   }
 
   // Adopt latest catalog entitlements at period end (catalog reductions take effect here).
@@ -637,6 +675,7 @@ export async function recordManualPayment(params: {
   actorUserId: ObjectIdType
   method: ManualPaymentMethod
   note?: string | null
+  skipReferralCredit?: boolean
 }): Promise<ChangePlanResult> {
   const { db, tenantId, actorUserId } = params
 
@@ -671,6 +710,23 @@ export async function recordManualPayment(params: {
   const { createSubscriptionInvoice } = await import('@features/billing/services/invoices.server')
   const { finalizeSuccessfulPayment } = await import('@features/billing/services/payments.server')
 
+  let billingContactEmail: string | null = null
+
+  if (sub.billingContactUserId) {
+    const contactUser = await db.collection('users').findOne(
+      { _id: sub.billingContactUserId },
+      { projection: { email: 1 } }
+    )
+
+    billingContactEmail =
+      typeof contactUser?.email === 'string' && contactUser.email.trim() ? contactUser.email.trim() : null
+  }
+
+  const gstBillingEmail =
+    typeof (tenant as any)?.billingEmail === 'string' && (tenant as any).billingEmail.trim()
+      ? String((tenant as any).billingEmail).trim()
+      : null
+
   const invoice = await createSubscriptionInvoice({
     db,
     tenantId,
@@ -681,7 +737,8 @@ export async function recordManualPayment(params: {
     periodEnd: bounds.end,
     provider: 'manual',
     discountSnapshot: (sub as any).discountSnapshot || null,
-    billingContactEmail: (tenant as any)?.billingEmail || null,
+    // Buyer snapshot prefers GST billing email; contact email is fallback for the party record.
+    billingContactEmail: gstBillingEmail || billingContactEmail,
     status: 'open'
   })
 
@@ -715,6 +772,23 @@ export async function recordManualPayment(params: {
     skipPeriodRoll: true
   })
 
+  try {
+    const { createReferralCreditFromPayment } = await import('@features/referrals/services/referrals.server')
+    const amountRupees = Number(invoice.totalPaise || 0) / 100
+
+    await createReferralCreditFromPayment({
+      db,
+      referredTenantId: String(tenantId),
+      actorUserId: String(actorUserId),
+      subscriptionAmountRupees: amountRupees,
+      sourceInvoiceId: String(invoice._id),
+      sourcePaymentNote: note,
+      skip: Boolean(params.skipReferralCredit)
+    })
+  } catch (e) {
+    console.error('[subscriptions] referral credit failed', e)
+  }
+
   const updated = await db.collection('tenantSubscriptions').findOne({ _id: sub._id })
 
   return {
@@ -722,6 +796,6 @@ export async function recordManualPayment(params: {
     mode: 'immediate',
     subscription: serializeTenantSubscription(updated as any),
     prorationNote: null,
-    message: `Marked as paid (${params.method.replace('_', ' ')}). Invoice ${invoice.invoiceNumber} issued. Period until ${bounds.end.toISOString().slice(0, 10)}.`
+    message: `Marked as paid (${params.method.replace('_', ' ')}). Trial cleared if any. Invoice ${invoice.invoiceNumber} issued. Paid period until ${bounds.end.toISOString().slice(0, 10)}.`
   }
 }

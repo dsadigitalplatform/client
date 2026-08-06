@@ -141,7 +141,9 @@ export async function updateTenantSubscriptionBilling(params: {
 
   const update: Record<string, unknown> = { updatedAt: now }
 
-  if (renewalMode === 'auto' || renewalMode === 'manual') update.renewalMode = renewalMode
+  // Online autopay is disabled for now — owners stay on manual renewal until Super Admin marks paid.
+  if (renewalMode === 'manual') update.renewalMode = 'manual'
+  if (renewalMode === 'auto') update.renewalMode = 'manual'
   if (billingInterval === 'monthly' || billingInterval === 'yearly') update.billingInterval = billingInterval
 
   if (billingContactUserId) {

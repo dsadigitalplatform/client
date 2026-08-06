@@ -85,6 +85,7 @@ export function SuperAdminTenantsManager() {
   const [payMethod, setPayMethod] = useState<ManualPaymentMethod>('cash')
   const [payNote, setPayNote] = useState('')
   const [payOpen, setPayOpen] = useState(false)
+  const [skipReferralCredit, setSkipReferralCredit] = useState(false)
 
   const loadTenants = useCallback(async () => {
     setLoading(true)
@@ -399,7 +400,15 @@ export function SuperAdminTenantsManager() {
 
                 <Typography variant='subtitle2'>Payments & cancel</Typography>
                 <Box className='flex flex-wrap gap-1'>
-                  <Button variant='outlined' disabled={busy} onClick={() => setPayOpen(true)}>
+                  <Button
+                    variant='outlined'
+                    disabled={busy}
+                    onClick={() => {
+                      setSkipReferralCredit(false)
+                      setPayNote('')
+                      setPayOpen(true)
+                    }}
+                  >
                     Mark as paid
                   </Button>
                   {detail.subscription?.cancelAtPeriodEnd ? (
@@ -434,8 +443,9 @@ export function SuperAdminTenantsManager() {
         <DialogTitle>Mark as paid</DialogTitle>
         <DialogContent className='flex flex-col gap-3 pt-2'>
           <Typography variant='body2' color='text.secondary'>
-            Records an offline payment, issues a GST tax invoice (emailed to the billing contact), and extends the
-            billing period from the later of now or the current period end.
+            Records an offline payment, issues a GST tax invoice (emailed to the billing contact, with GST billing email
+            CC&apos;d when set), ends any remaining trial, and activates the paid subscription period from the later of
+            now or the current period end.
           </Typography>
           <FormControl fullWidth>
             <InputLabel>Method</InputLabel>
@@ -459,6 +469,12 @@ export function SuperAdminTenantsManager() {
             multiline
             minRows={2}
           />
+          <FormControlLabel
+            control={
+              <Checkbox checked={skipReferralCredit} onChange={e => setSkipReferralCredit(e.target.checked)} />
+            }
+            label='Do not credit referral commission for this payment'
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPayOpen(false)} disabled={busy}>
@@ -468,7 +484,12 @@ export function SuperAdminTenantsManager() {
             variant='contained'
             disabled={busy}
             onClick={() =>
-              void postAction({ action: 'mark_paid', method: payMethod, note: payNote || null })
+              void postAction({
+                action: 'mark_paid',
+                method: payMethod,
+                note: payNote || null,
+                skipReferralCredit
+              })
             }
           >
             Confirm payment

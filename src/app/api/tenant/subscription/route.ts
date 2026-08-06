@@ -228,6 +228,8 @@ export async function GET() {
       entitlements,
       priceLabel: formatPlanMoney(priced.priceMonthly, priced.currency),
       isDefault: Boolean((p as any).isDefault),
+      trialDays: typeof (p as any).trialDays === 'number' ? (p as any).trialDays : null,
+      trialEnabled: (p as any).trialEnabled !== false,
       changeKind
     }
   })
@@ -304,11 +306,21 @@ export async function PATCH(req: Request) {
     billingContactUserId = nomineeId
   }
 
+  if (typeof body?.renewalMode === 'string' && body.renewalMode === 'auto') {
+    return NextResponse.json(
+      {
+        error: 'autopay_disabled',
+        message: 'Autopay is temporarily unavailable. Renewal stays manual until Super Admin marks payment received.'
+      },
+      { status: 403 }
+    )
+  }
+
   const updated = await updateTenantSubscriptionBilling({
     db,
     tenantId,
     actorUserId,
-    renewalMode: body?.renewalMode,
+    renewalMode: body?.renewalMode === 'manual' ? 'manual' : undefined,
     billingInterval: body?.billingInterval,
     billingContactUserId
   })

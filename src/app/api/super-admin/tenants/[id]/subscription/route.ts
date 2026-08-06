@@ -244,7 +244,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       tenantId,
       actorUserId,
       method,
-      note: typeof body?.note === 'string' ? body.note : null
+      note: typeof body?.note === 'string' ? body.note : null,
+      skipReferralCredit: Boolean(body?.skipReferralCredit)
     })
 
     if (!result.ok) {

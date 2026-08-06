@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -20,14 +20,25 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import Paper from '@mui/material/Paper'
+import Autocomplete from '@mui/material/Autocomplete'
 
 import { SubscriptionPlansPicker } from '@features/subscription-plans/components/SubscriptionPlansPicker'
+import { searchReferralUsers } from '@features/referrals/services/referralService'
 import primaryColorConfig from '@configs/primaryColorConfig'
 
 type TenantType = 'sole_trader' | 'company'
 
-export const CreateTenantForm = () => {
+type UserOption = { id: string; name: string; email: string }
+
+type Props = {
+  isSuperAdmin?: boolean
+}
+
+export const CreateTenantForm = ({ isSuperAdmin }: Props) => {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const refToken = searchParams.get('ref') || ''
+
   const [name, setName] = useState<string>('')
   const [type, setType] = useState<TenantType>('sole_trader')
   const [primaryColor, setPrimaryColor] = useState<string>(primaryColorConfig[0].main)
@@ -38,7 +49,29 @@ export const CreateTenantForm = () => {
   const [step, setStep] = useState<number>(0)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  const [userQuery, setUserQuery] = useState('')
+  const [userOptions, setUserOptions] = useState<UserOption[]>([])
+  const [referredBy, setReferredBy] = useState<UserOption | null>(null)
+
   const steps = useMemo(() => ['Select plan', 'Organisation details'], [])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+
+    const t = setTimeout(() => {
+      if (userQuery.length < 2) {
+        setUserOptions([])
+
+        return
+      }
+
+      void searchReferralUsers(userQuery)
+        .then(r => setUserOptions(r.users))
+        .catch(() => setUserOptions([]))
+    }, 250)
+
+    return () => clearTimeout(t)
+  }, [userQuery, isSuperAdmin])
 
   const handleSubmit = async () => {
     setError(null)
@@ -59,7 +92,9 @@ export const CreateTenantForm = () => {
           name: name.trim(),
           type,
           subscriptionPlanId: selectedPlanId || undefined,
-          primaryColor
+          primaryColor,
+          referralToken: refToken || undefined,
+          referredByUserId: referredBy?.id || undefined
         })
       })
 
@@ -109,6 +144,9 @@ export const CreateTenantForm = () => {
   return (
     <Box className='flex flex-col gap-5'>
       {successMsg ? <Alert severity='success'>{successMsg}</Alert> : null}
+      {refToken ? (
+        <Alert severity='info'>This organisation will be linked to your referral invite after creation.</Alert>
+      ) : null}
 
       <Paper
         variant='outlined'
@@ -209,6 +247,24 @@ export const CreateTenantForm = () => {
                 <MenuItem value='company'>Company</MenuItem>
               </Select>
             </FormControl>
+
+            {isSuperAdmin ? (
+              <Autocomplete
+                options={userOptions}
+                getOptionLabel={o => `${o.name} (${o.email})`}
+                value={referredBy}
+                onChange={(_, v) => setReferredBy(v)}
+                onInputChange={(_, v) => setUserQuery(v)}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label='Referred by (optional)'
+                    placeholder='Search user name or email'
+                    helperText='Link this organisation to a referrer for Rewards credit.'
+                  />
+                )}
+              />
+            ) : null}
 
             <Box>
               <Typography variant='subtitle2' color='text.secondary'>

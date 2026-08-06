@@ -1,6 +1,8 @@
 export { SubscriptionPlansManager } from './components/SubscriptionPlansManager'
 export type { SubscriptionPlan, TenantSubscriptionSummary } from './subscription-plans.types'
 export { SubscriptionPlansPicker } from './components/SubscriptionPlansPicker'
+export { SubscriptionPlanCard } from './components/SubscriptionPlanCard'
+export type { SubscriptionPlanCardPlan } from './components/SubscriptionPlanCard'
 export { PlanEntitlementsEditor } from './components/PlanEntitlementsEditor'
 export {
   SUPPORTED_CURRENCIES,

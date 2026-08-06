@@ -196,7 +196,7 @@ export function TenantBillingProfileCard() {
               value={billingEmail}
               onChange={e => setBillingEmail(e.target.value)}
               disabled={!canEdit}
-              helperText='Invoice delivery address'
+              helperText='CC’d on invoice emails (billing contact receives the primary copy)'
             />
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>

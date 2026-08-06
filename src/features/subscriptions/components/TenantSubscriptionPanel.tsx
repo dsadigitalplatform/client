@@ -21,6 +21,7 @@ import LinearProgress from '@mui/material/LinearProgress'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 
 import {
@@ -29,15 +30,14 @@ import {
   isUnlimited,
   type PlanEntitlements
 } from '@features/subscription-plans/featureCatalog'
-import { formatPlanMoney } from '@features/subscription-plans/currencies'
-import type { RenewalMode, TenantSubscriptionView } from '@features/subscriptions/subscriptions.types'
+import { SubscriptionPlanCard } from '@features/subscription-plans/components/SubscriptionPlanCard'
+import type { TenantSubscriptionView } from '@features/subscriptions/subscriptions.types'
 import {
   getSubscriptionStatusMessage,
   toSubscriptionStatusSummary
 } from '@features/subscriptions/subscriptionStatusMessage'
 import { TenantBillingProfileCard } from '@features/billing/components/TenantBillingProfileCard'
 import { TenantInvoicesPanel } from '@features/billing/components/TenantInvoicesPanel'
-import { openBillingCheckout } from '@features/billing/openBillingCheckout'
 
 function usagePct(used: number, limit: number) {
   if (isUnlimited(limit) || limit <= 0) return 0
@@ -91,11 +91,11 @@ export function TenantSubscriptionPanel() {
     confirmLabel: string
     confirmColor: 'warning' | 'error'
   }>(null)
-  const [renewalMode, setRenewalMode] = useState<RenewalMode>('manual')
   const [billingContactUserId, setBillingContactUserId] = useState('')
   const [admins, setAdmins] = useState<Array<{ userId: string; name: string; role: string }>>([])
-  const [paying, setPaying] = useState(false)
-  const [invoiceRefreshKey, setInvoiceRefreshKey] = useState(0)
+  const [invoiceRefreshKey] = useState(0)
+  const [notifyNote, setNotifyNote] = useState('')
+  const [notifying, setNotifying] = useState(false)
 
   const load = async (opts?: { preserveMessages?: boolean }) => {
     setLoading(true)
@@ -107,7 +107,6 @@ export function TenantSubscriptionPanel() {
 
       if (!res.ok) throw new Error(json?.message || json?.error || 'Failed to load subscription')
       setData(json as TenantSubscriptionView)
-      setRenewalMode(json?.subscription?.renewalMode || 'manual')
       setBillingContactUserId(json?.subscription?.billingContactUserId || '')
       setAdmins(
         (json?.eligibleBillingContacts || []).map((c: any) => ({
@@ -127,53 +126,6 @@ export function TenantSubscriptionPanel() {
     load()
   }, [])
 
-  // After Stripe redirect back to this page
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const checkout = params.get('checkout')
-
-    if (checkout !== 'success' && checkout !== 'cancelled') return
-
-    const invoiceId = params.get('invoiceId')
-    const cleanUrl = window.location.pathname
-
-    window.history.replaceState({}, '', cleanUrl)
-
-    if (checkout === 'cancelled') {
-      setError('Checkout was cancelled. No payment was taken.')
-
-      return
-    }
-
-    ;(async () => {
-      setPaying(true)
-      setError(null)
-
-      try {
-        if (invoiceId) {
-          const res = await fetch('/api/billing/checkout/confirm', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ provider: 'stripe', invoiceId })
-          })
-          const json = await res.json()
-
-          if (!res.ok) throw new Error(json?.message || json?.error || 'Could not confirm payment')
-        }
-
-        setInfo('Payment successful. Your GST invoice has been emailed.')
-        setInvoiceRefreshKey(k => k + 1)
-        await load({ preserveMessages: true })
-      } catch (e: any) {
-        setError(e?.message || 'Payment confirmation failed — if charged, refresh in a moment.')
-        await load({ preserveMessages: true })
-      } finally {
-        setPaying(false)
-      }
-    })()
-  }, [])
-
   const save = async () => {
     setSaving(true)
     setError(null)
@@ -183,7 +135,7 @@ export function TenantSubscriptionPanel() {
       const res = await fetch('/api/tenant/subscription', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ renewalMode, billingContactUserId: billingContactUserId || undefined })
+        body: JSON.stringify({ renewalMode: 'manual', billingContactUserId: billingContactUserId || undefined })
       })
       const json = await res.json()
 
@@ -285,58 +237,26 @@ export function TenantSubscriptionPanel() {
     })
   }
 
-  const payNow = async () => {
-    setPaying(true)
+  const notifySuperAdmin = async () => {
+    setNotifying(true)
     setError(null)
     setInfo(null)
 
     try {
-      const res = await fetch('/api/billing/checkout', { method: 'POST' })
-      const json = await res.json()
+      const res = await fetch('/api/tenant/subscription/request-activation', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ note: notifyNote.trim() || undefined })
+      })
+      const json = await res.json().catch(() => ({}))
 
-      if (!res.ok) throw new Error(json?.message || json?.error || 'Could not start checkout')
-      await openBillingCheckout(json)
-      // Stripe redirects away; Razorpay returns here after modal
-      if (json?.provider === 'razorpay') {
-        setInfo('Payment successful. Your GST invoice has been emailed.')
-        setInvoiceRefreshKey(k => k + 1)
-        await load({ preserveMessages: true })
-      }
+      if (!res.ok) throw new Error(json?.message || json?.error || 'Could not notify Super Admin')
+      setInfo('Super Admin has been notified with your company, plan, and contact details.')
+      setNotifyNote('')
     } catch (e: any) {
-      const msg = e?.message || 'Payment failed'
-
-      if (msg !== 'Checkout cancelled') setError(msg)
+      setError(e?.message || 'Could not notify Super Admin')
     } finally {
-      setPaying(false)
-    }
-  }
-
-  const enableAutopay = async () => {
-    setPaying(true)
-    setError(null)
-    setInfo(null)
-
-    try {
-      const res = await fetch('/api/billing/autopay', { method: 'POST' })
-      const json = await res.json()
-
-      if (!res.ok) throw new Error(json?.message || json?.error || 'Could not enable autopay')
-
-      if (json.provider === 'stripe' && json.checkoutUrl) {
-        window.location.assign(json.checkoutUrl)
-
-        return
-      }
-
-      setInfo(
-        `Autopay subscription created (${json.externalSubscriptionId || json.razorpaySubscriptionId || 'ok'}).`
-      )
-      setRenewalMode('auto')
-      await load({ preserveMessages: true })
-    } catch (e: any) {
-      setError(e?.message || 'Autopay setup failed')
-    } finally {
-      setPaying(false)
+      setNotifying(false)
     }
   }
 
@@ -374,8 +294,8 @@ export function TenantSubscriptionPanel() {
           </Typography>
         ) : null}
         <Typography variant='body2' color='text.secondary' sx={{ mt: statusMessage ? 0.5 : 0 }}>
-          Manage plan, usage, renewals, and billing contact. Upgrades apply immediately; downgrades and cancels take
-          effect at period end. No automatic refunds.
+          Manage plan, usage, renewals, and billing contact. Upgrades start a fresh trial on the higher plan;
+          downgrades (when not in trial) and cancels take effect at period end. No automatic refunds.
         </Typography>
       </Box>
 
@@ -563,148 +483,170 @@ export function TenantSubscriptionPanel() {
       </Card>
 
       {data.canChangePlan ? (
-        <Card>
-          <CardContent className='flex flex-col gap-3'>
-            <Box>
-              <Typography variant='h6'>{sub ? 'Change plan' : 'Choose a plan'}</Typography>
-              <Typography variant='body2' color='text.secondary'>
+        <Box className='flex flex-col gap-3'>
+            <Box sx={{ maxWidth: 640 }}>
+              <Typography variant='h5' sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+                {sub ? 'Change plan' : 'Choose a plan'}
+              </Typography>
+              <Typography variant='body2' color='text.secondary' sx={{ mt: 1, lineHeight: 1.6 }}>
                 {!sub
-                  ? 'This organisation has no live subscription yet. Pick a plan to start, then Pay now to activate paid access.'
+                  ? 'Pick a plan to start your trial. Paid access is activated only after Super Admin confirms payment.'
                   : access.inTrial
                     ? copy?.trialSwitch
-                    : 'Upgrades take effect immediately. Downgrades are scheduled for the end of your billing period.'}
+                    : 'Upgrades apply immediately: remaining days on the current plan expire and a fresh trial starts on the higher plan. Downgrades are scheduled for period end.'}
               </Typography>
             </Box>
 
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
-                gap: 2
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                gap: { xs: 2.5, md: 3 },
+                alignItems: 'stretch',
+                mt: 1
               }}
             >
               {(data.availablePlans || []).map(p => {
                 const isCurrent = Boolean(sub) && p.changeKind === 'same'
                 const kindLabel = changeKindLabel(p.changeKind)
                 const pendingThis = Boolean(sub?.pendingPlanId === p._id)
+                const trialBlocked =
+                  (access.inTrial || sub?.status === 'trialing') && p.changeKind === 'downgrade'
+                const busyThis = changingPlanId === p._id
+
+                let actionLabel = 'Choose this plan'
+                let actionVariant: 'contained' | 'outlined' = 'outlined'
+                let actionIcon = <i className='ri-arrow-right-line' />
+
+                if (busyThis) {
+                  actionLabel = 'Updating…'
+                } else if (!sub) {
+                  actionLabel = 'Select plan'
+                  actionVariant = 'contained'
+                } else if (isCurrent) {
+                  actionLabel = 'Current plan'
+                  actionIcon = <i className='ri-check-line' />
+                  actionVariant = 'contained'
+                } else if (pendingThis) {
+                  actionLabel = 'Downgrade scheduled'
+                } else if (p.changeKind === 'upgrade') {
+                  actionLabel = 'Upgrade & start trial'
+                  actionVariant = 'contained'
+                } else if (p.changeKind === 'downgrade') {
+                  actionLabel = 'Schedule downgrade'
+                } else {
+                  actionLabel = 'Switch plan'
+                }
 
                 return (
-                  <Box
+                  <SubscriptionPlanCard
                     key={p._id}
-                    sx={{
-                      border: 1,
-                      borderColor: isCurrent ? 'primary.main' : 'divider',
-                      borderRadius: 2,
-                      p: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 1.25,
-                      bgcolor: isCurrent ? 'action.hover' : 'background.paper'
+                    plan={{
+                      _id: p._id,
+                      name: p.name,
+                      description: p.description,
+                      priceMonthly: p.priceMonthly,
+                      priceYearly: p.priceYearly ?? null,
+                      currency: p.currency,
+                      entitlements: p.entitlements,
+                      trialDays: p.trialDays,
+                      trialEnabled: p.trialEnabled,
+                      isDefault: p.isDefault
                     }}
-                  >
-                    <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap>
-                      <Typography variant='subtitle1' fontWeight={700}>
-                        {p.name}
-                      </Typography>
-                      {isCurrent ? <Chip size='small' color='primary' label='Current' /> : null}
-                      {pendingThis ? (
-                        <Chip
-                          size='small'
-                          color='warning'
-                          label={`Downgrade · ${formatDate(sub?.pendingChangeEffectiveAt || sub?.currentPeriodEnd)}`}
-                        />
-                      ) : null}
-                      {sub && !isCurrent && kindLabel ? (
-                        <Chip
-                          size='small'
-                          variant='outlined'
-                          color={p.changeKind === 'upgrade' ? 'success' : p.changeKind === 'downgrade' ? 'warning' : 'default'}
-                          label={kindLabel}
-                        />
-                      ) : null}
-                    </Stack>
-                    <Typography variant='body2' color='text.secondary'>
-                      {p.description}
-                    </Typography>
-                    <Typography variant='h6'>
-                      {formatPlanMoney(p.priceMonthly, p.currency)}
-                      <Typography component='span' variant='caption' color='text.secondary'>
-                        {' '}
-                        / month
-                      </Typography>
-                    </Typography>
-                    {typeof p.priceYearly === 'number' ? (
-                      <Typography variant='caption' color='text.secondary'>
-                        or {formatPlanMoney(p.priceYearly, p.currency)} / year
-                      </Typography>
-                    ) : null}
-                    <Typography variant='caption' color='text.secondary'>
-                      Seats {isUnlimited(p.entitlements.limits.maxUsers) ? '∞' : p.entitlements.limits.maxUsers} · Customers{' '}
-                      {isUnlimited(p.entitlements.limits.maxCustomers) ? '∞' : p.entitlements.limits.maxCustomers} · Leads{' '}
-                      {isUnlimited(p.entitlements.limits.maxLeads) ? '∞' : p.entitlements.limits.maxLeads}
-                    </Typography>
-                    <Box sx={{ mt: 'auto', pt: 1 }}>
-                      <Button
-                        fullWidth
-                        variant={p.changeKind === 'upgrade' || !sub ? 'contained' : 'outlined'}
-                        disabled={actionBusy || isCurrent || pendingThis}
-                        onClick={() => {
-                          if (sub && p.changeKind === 'downgrade') {
-                            openDowngradeConfirm({
-                              _id: p._id,
-                              name: p.name,
-                              entitlements: p.entitlements
-                            })
+                    highlighted={isCurrent}
+                    recommended={Boolean(p.isDefault) && !isCurrent}
+                    badges={
+                      <>
+                        {isCurrent ? <Chip size='small' color='primary' label='Current' sx={{ height: 26 }} /> : null}
+                        {pendingThis ? (
+                          <Chip
+                            size='small'
+                            color='warning'
+                            label={`Downgrade · ${formatDate(sub?.pendingChangeEffectiveAt || sub?.currentPeriodEnd)}`}
+                            sx={{ height: 26 }}
+                          />
+                        ) : null}
+                        {sub && !isCurrent && !pendingThis && kindLabel ? (
+                          <Chip
+                            size='small'
+                            variant='outlined'
+                            color={
+                              p.changeKind === 'upgrade'
+                                ? 'success'
+                                : p.changeKind === 'downgrade'
+                                  ? 'warning'
+                                  : 'default'
+                            }
+                            label={kindLabel}
+                            sx={{ height: 26 }}
+                          />
+                        ) : null}
+                      </>
+                    }
+                    primaryAction={
+                      trialBlocked
+                        ? undefined
+                        : {
+                            label: actionLabel,
+                            variant: actionVariant,
+                            disabled: actionBusy || isCurrent || pendingThis,
+                            startIcon: actionIcon,
+                            onClick: () => {
+                              if (sub && p.changeKind === 'downgrade') {
+                                openDowngradeConfirm({
+                                  _id: p._id,
+                                  name: p.name,
+                                  entitlements: p.entitlements
+                                })
 
-                            return
-                          }
+                                return
+                              }
 
-                          setChangingPlanId(p._id)
-                          void postChange({ action: 'change_plan', planId: p._id })
-                        }}
-                      >
-                        {changingPlanId === p._id
-                          ? 'Updating…'
-                          : !sub
-                            ? 'Start on this plan'
-                            : isCurrent
-                              ? 'Current plan'
-                              : pendingThis
-                                ? 'Downgrade scheduled'
-                                : p.changeKind === 'upgrade'
-                                  ? 'Upgrade now'
-                                  : p.changeKind === 'downgrade'
-                                    ? 'Schedule downgrade'
-                                    : 'Switch plan'}
-                      </Button>
-                      {pendingThis && data.canChangePlan ? (
-                        <Button
-                          fullWidth
-                          color='warning'
-                          variant='text'
-                          size='small'
-                          disabled={actionBusy}
-                          sx={{ mt: 0.5 }}
-                          onClick={() =>
-                            setConfirmAction({
-                              type: 'clear_pending',
-                              title: 'Cancel scheduled downgrade?',
-                              description: (
-                                <>
-                                  You will stay on <strong>{data.plan?.name || 'your current plan'}</strong>. The
-                                  scheduled switch to <strong>{p.name}</strong> will be removed.
-                                </>
-                              ),
-                              confirmLabel: 'Cancel downgrade',
-                              confirmColor: 'warning'
-                            })
+                              setChangingPlanId(p._id)
+                              void postChange({ action: 'change_plan', planId: p._id })
+                            }
                           }
-                        >
-                          Cancel this downgrade
-                        </Button>
-                      ) : null}
-                    </Box>
-                  </Box>
+                    }
+                    footer={
+                      <>
+                        {trialBlocked ? (
+                          <Typography
+                            variant='caption'
+                            color='text.secondary'
+                            sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}
+                          >
+                            Downgrade not available during trial
+                          </Typography>
+                        ) : null}
+                        {pendingThis && data.canChangePlan ? (
+                          <Button
+                            fullWidth
+                            color='warning'
+                            variant='text'
+                            size='small'
+                            disabled={actionBusy}
+                            sx={{ mt: 0.5 }}
+                            onClick={() =>
+                              setConfirmAction({
+                                type: 'clear_pending',
+                                title: 'Cancel scheduled downgrade?',
+                                description: (
+                                  <>
+                                    You will stay on <strong>{data.plan?.name || 'your current plan'}</strong>. The
+                                    scheduled switch to <strong>{p.name}</strong> will be removed.
+                                  </>
+                                ),
+                                confirmLabel: 'Cancel downgrade',
+                                confirmColor: 'warning'
+                              })
+                            }
+                          >
+                            Cancel this downgrade
+                          </Button>
+                        ) : null}
+                      </>
+                    }
+                  />
                 )
               })}
             </Box>
@@ -751,8 +693,7 @@ export function TenantSubscriptionPanel() {
                 </Box>
               </>
             ) : null}
-          </CardContent>
-        </Card>
+          </Box>
       ) : (
         <Alert severity='info'>
           Only the organisation <strong>Owner</strong> (or a Super Admin) can upgrade or change the plan. Open{' '}
@@ -763,34 +704,45 @@ export function TenantSubscriptionPanel() {
       {data.canManageBilling && sub ? (
         <Card>
           <CardContent className='flex flex-col gap-3'>
-            <Typography variant='h6'>Pay & renew</Typography>
+            <Typography variant='h6'>Payment & activation</Typography>
+            <Alert severity='info'>
+              <AlertTitle>Online Pay now &amp; autopay are paused</AlertTitle>
+              {access.inTrial || sub.status === 'trialing'
+                ? 'You can use your selected plan during the trial. Super Admin will mark payment received to activate the paid subscription.'
+                : sub.status === 'past_due' || sub.status === 'expired'
+                  ? 'This organisation needs Super Admin to mark payment received before paid access continues.'
+                  : 'Renewals are confirmed by Super Admin (Mark as paid). Online checkout will return later.'}
+            </Alert>
             <Typography variant='body2' color='text.secondary'>
-              Pay online securely via Stripe. A GST tax invoice is emailed on successful payment.
+              Please contact the Super Admin for payment and activation details. Use Notify to email them your company,
+              plan, and requester details.
             </Typography>
-            <Stack direction='row' spacing={1.5} flexWrap='wrap' useFlexGap>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
+              <TextField
+                size='small'
+                fullWidth
+                label='Optional note'
+                placeholder='Preferred payment method, reference, or question…'
+                value={notifyNote}
+                onChange={e => setNotifyNote(e.target.value)}
+                disabled={notifying}
+                inputProps={{ maxLength: 1000 }}
+              />
               <Button
                 variant='contained'
                 color='primary'
-                disabled={paying || actionBusy}
-                startIcon={<i className='ri-secure-payment-line' />}
-                onClick={() => void payNow()}
+                disabled={notifying || actionBusy}
+                startIcon={<i className='ri-mail-send-line' />}
+                onClick={() => void notifySuperAdmin()}
+                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
               >
-                {paying ? 'Opening checkout…' : 'Pay now'}
+                {notifying ? 'Sending…' : 'Notify Super Admin'}
               </Button>
-              {renewalMode !== 'auto' || !sub.externalSubscriptionId ? (
-                <Button variant='outlined' disabled={paying || actionBusy} onClick={() => void enableAutopay()}>
-                  Enable autopay
-                </Button>
-              ) : (
-                <Chip
-                  size='small'
-                  color='success'
-                  label={`Autopay · ${sub.externalSubscriptionStatus || 'active'}`}
-                />
-              )}
             </Stack>
             {sub.lastPaymentStatus === 'failed' ? (
-              <Alert severity='warning'>Last payment failed. Try Pay now again or contact support.</Alert>
+              <Alert severity='warning'>
+                Last recorded payment failed. Ask Super Admin to verify and mark payment received.
+              </Alert>
             ) : null}
           </CardContent>
         </Card>
@@ -805,20 +757,18 @@ export function TenantSubscriptionPanel() {
           <CardContent className='flex flex-col gap-3'>
             <Typography variant='h6'>Billing preferences</Typography>
             <Typography variant='body2' color='text.secondary'>
-              Owner can buy/renew, or nominate an Admin as billing contact. Manual renewal sends reminders before the
-              period ends. Auto-renew uses Stripe Subscriptions when autopay is enabled.
+              Renewal is manual for now. Reminders go out before the period ends. When Super Admin activates or renews,
+              the invoice is emailed to the billing contact below, and the GST billing email (if set) is CC&apos;d.
             </Typography>
 
             <FormControl fullWidth>
               <InputLabel>Renewal mode</InputLabel>
               <Select
                 label='Renewal mode'
-                value={renewalMode}
-                onChange={e => setRenewalMode(e.target.value as RenewalMode)}
-                disabled={!data.canNominateBillingContact && !data.canManageBilling}
+                value='manual'
+                disabled
               >
                 <MenuItem value='manual'>Manual payment (with reminders)</MenuItem>
-                <MenuItem value='auto'>Auto-renewal (Stripe autopay)</MenuItem>
               </Select>
             </FormControl>
 

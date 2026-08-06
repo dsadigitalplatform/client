@@ -1,12 +1,13 @@
 /**
  * Locked subscription change policy for DSA.
  *
- * - Upgrades (higher price / expanded entitlements): immediate
- * - Downgrades (lower price / reduced entitlements): end of current period
+ * - Upgrades / downgrades: classified by subscription amount (price) only
+ * - Upgrades: immediate; starts a fresh trial on the higher plan (usage limits are not checked)
+ * - Downgrades: end of current period (not available during trial; usage may warn/block when applying)
  * - Cancel: end of current period (no automatic refunds)
  * - Annual: no mid-year refund; access until period end
- * - Trials: plan switches apply immediately with no charge
- * - Payments: prorated upgrade charges land when a provider is connected
+ * - Trials: upgrades restart the higher plan's trial; downgrades disabled; paid activation requires Super Admin mark-paid
+ * - Payments: online Pay now / autopay paused; Super Admin records offline payment to activate
  *
  * Super Admin catalog edits follow the same hybrid timing — see
  * `@features/subscription-plans/planCatalogEditPolicy`.
@@ -43,17 +44,23 @@ export const SUBSCRIPTION_CHANGE_POLICY = {
 
 export const SUBSCRIPTION_CHANGE_COPY = {
   upgrade:
-    'Takes effect immediately. Use Pay now if a balance is due for the rest of this billing period.',
+    'Takes effect immediately. Remaining days on the current plan expire and a fresh trial starts on the higher plan.',
   downgrade:
     'Takes effect at the end of your current billing period. You’ll keep your current plan until then. No refund is issued for the unused time.',
   cancel:
     'You’ll keep access until the end of your current billing period. Subscriptions are not refunded for unused time (including annual plans).',
   cancelAnnual:
     'You’ll keep access until the end of your annual period. Annual plans are not refunded for unused months.',
-  trialSwitch: 'Upgrades during trial take effect immediately. Downgrades are scheduled for the end of the trial period.',
+  trialSwitch:
+    'Upgrade during trial to move to a higher plan. Your current trial ends and a new trial starts on that plan. Downgrades are not available during trial.',
+  trialUpgrade:
+    'Upgraded. Your previous trial ended and a new trial has started on the higher plan.',
+  paidUpgradeToTrial:
+    'Upgraded. Remaining paid days on the previous plan expired and a fresh trial has started on the higher plan. Super Admin can mark payment received when you are ready.',
+  trialNoDowngrade: 'Downgrades are not available during trial. Choose a higher plan to upgrade, or wait until after activation.',
   usageBlocked: 'Reduce usage below the target plan limits before scheduling this downgrade.',
   paymentsPending:
-    'Plan changes apply per policy. Renew or pay outstanding amounts with Pay now (Stripe); a GST invoice is emailed on payment.'
+    'Choosing a plan does not activate paid billing. Use the trial, then ask Super Admin to mark payment received to start the paid period.'
 }
 
 export function priceForInterval(plan: PricedPlanRef, interval: BillingInterval): number {
@@ -94,8 +101,9 @@ export function entitlementsShrink(from: PlanEntitlements, to: PlanEntitlements)
 
 /**
  * Classify a plan change for the active billing interval.
- * Same plan id → same. Higher price / expanded entitlements → upgrade.
- * Lower price / reduced entitlements → downgrade. Else lateral.
+ * Same plan id → same. Higher subscription amount → upgrade.
+ * Lower subscription amount → downgrade. Equal amount → lateral.
+ * Entitlements are not used for upgrade/downgrade classification.
  */
 export function classifyPlanChange(params: {
   currentPlanId: string
@@ -121,9 +129,6 @@ export function classifyPlanChange(params: {
 
   if (targetPrice > currentPrice) return 'upgrade'
   if (targetPrice < currentPrice) return 'downgrade'
-
-  if (entitlementsExpand(current.entitlements, target.entitlements)) return 'upgrade'
-  if (entitlementsShrink(current.entitlements, target.entitlements)) return 'downgrade'
 
   return 'lateral'
 }
@@ -197,6 +202,6 @@ export function estimateUpgradeProration(params: {
     daysRemaining,
     periodDays,
     paymentRequired: false,
-    note: `Estimated prorated difference ≈ ${theoretical.toFixed(2)} ${params.currency || 'INR'} for ${daysRemaining} remaining day(s). Pay via Pay now when due.`
+    note: `Estimated prorated difference ≈ ${theoretical.toFixed(2)} ${params.currency || 'INR'} for ${daysRemaining} remaining day(s). Paid period starts after Super Admin confirms payment.`
   }
 }

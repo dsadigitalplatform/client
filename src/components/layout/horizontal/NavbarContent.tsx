@@ -23,6 +23,7 @@ import Logo from '@components/layout/shared/Logo'
 import ModeDropdown from '@components/layout/shared/ModeDropdown'
 import UserDropdown from '@components/layout/shared/UserDropdown'
 import SubscriptionPlanChip from '@components/layout/shared/SubscriptionPlanChip'
+import SubscriptionRenewalReminder from '@components/layout/shared/SubscriptionRenewalReminder'
 import useHorizontalNav from '@menu/hooks/useHorizontalNav'
 import { horizontalLayoutClasses } from '@layouts/utils/layoutClasses'
 import { getCustomers } from '@features/customers/services/customersService'
@@ -288,6 +289,12 @@ const NavbarContent = ({
                 <i className='ri-bar-chart-box-line' />
               </IconButton>
             </Tooltip>
+          ) : null}
+          {tenantName ? (
+            <SubscriptionRenewalReminder
+              summary={sessionTenant?.subscriptionSummary}
+              canManage={canManageSubscription}
+            />
           ) : null}
           <div className='hidden sm:flex items-center gap-2'>
             {tenantName ? (
