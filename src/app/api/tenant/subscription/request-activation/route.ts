@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
   const isOwner = role === 'OWNER' || isSuperAdmin
   const isBillingContact =
-    Boolean(sub?.billingContactUserId) && String(sub.billingContactUserId) === String(actorUserId)
+    Boolean(sub?.billingContactUserId) && String(sub?.billingContactUserId) === String(actorUserId)
 
   if (!isOwner && !isBillingContact) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
