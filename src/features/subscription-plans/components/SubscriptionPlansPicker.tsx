@@ -91,7 +91,8 @@ export const SubscriptionPlansPicker = ({ selectedPlanId, onSelect }: Props) => 
           Choose a plan for this organisation
         </Typography>
         <Typography variant='body2' color='text.secondary' sx={{ mt: 1, lineHeight: 1.6 }}>
-          Pick what fits today. Limits and modules apply immediately; you can upgrade later when billing is connected.
+          Pick what fits today. Seats are a standing total; customers and leads reset every month. You can upgrade
+          later when billing is connected.
         </Typography>
       </Box>
 

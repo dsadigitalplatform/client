@@ -20,5 +20,8 @@ export {
   UNLIMITED,
   defaultPlanEntitlements,
   normalizePlanEntitlements,
-  isUnlimited
+  isUnlimited,
+  isMonthlyLimit,
+  limitResetCaption
 } from './featureCatalog'
+export type { LimitResetPolicy } from './featureCatalog'

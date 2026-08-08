@@ -4,6 +4,7 @@ import type { Db } from 'mongodb'
 import { ObjectId } from 'mongodb'
 
 import {
+  LIMIT_FEATURES,
   TRIAL_DAYS,
   defaultPlanEntitlements,
   isUnlimited,
@@ -84,17 +85,37 @@ export function serializeTenantSubscription(doc: Record<string, any>): TenantSub
   }
 }
 
-export async function countTenantUsage(db: Db, tenantId: ObjectId): Promise<UsageSnapshot> {
+/** Calendar month used for customer and lead quotas. Seats are not windowed. */
+export function calendarMonthWindow(now = new Date()): { start: Date; end: Date } {
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0)
+
+  return { start, end }
+}
+
+export async function countTenantUsage(db: Db, tenantId: ObjectId, now = new Date()): Promise<UsageSnapshot> {
+  const { start, end } = calendarMonthWindow(now)
   const [users, customers, leads] = await Promise.all([
     db.collection('memberships').countDocuments({
       tenantId,
       status: { $in: ['active', 'invited'] }
     }),
-    db.collection('customers').countDocuments({ tenantId }),
-    db.collection('loanCases').countDocuments({ tenantId })
+    db.collection('customers').countDocuments({
+      tenantId,
+      createdAt: { $gte: start, $lt: end }
+    }),
+    db.collection('loanCases').countDocuments({
+      tenantId,
+      createdAt: { $gte: start, $lt: end }
+    })
   ])
 
-  return { users, customers, leads }
+  return {
+    users,
+    customers,
+    leads,
+    monthlyWindow: { start: start.toISOString(), end: end.toISOString() }
+  }
 }
 
 export async function getCurrentTenantSubscriptionDoc(db: Db, tenantId: ObjectId) {
@@ -271,9 +292,17 @@ export async function assertWithinLimit(
         : resolved.usage.leads
 
   if (used >= limit) {
+    const feature = LIMIT_FEATURES.find(f => f.key === limitKey)
+    const monthly = feature?.reset === 'monthly'
+    const noun =
+      limitKey === 'maxUsers' ? 'seats' : limitKey === 'maxCustomers' ? 'customers' : 'leads'
+    const message = monthly
+      ? `This month's ${noun} limit reached (${used}/${limit}). Count resets at the start of next month.`
+      : `Plan limit reached for ${noun} (${used}/${limit}).`
+
     return {
       error: 'limit_reached',
-      message: `Plan limit reached for ${limitKey.replace('max', '').toLowerCase()} (${used}/${limit}).`,
+      message,
       limit,
       used,
       feature: limitKey

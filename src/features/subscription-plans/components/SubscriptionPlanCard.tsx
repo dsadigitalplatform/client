@@ -19,6 +19,7 @@ import {
   MODULE_FEATURES,
   TRIAL_DAYS,
   isUnlimited,
+  limitResetCaption,
   type LimitFeatureKey,
   type ModuleFeatureKey,
   type PlanEntitlements
@@ -182,6 +183,9 @@ export function SubscriptionPlanCard({
         >
           Usage limits
         </Typography>
+        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.75, lineHeight: 1.45 }}>
+          Seats are a standing total. Customers and leads reset every month.
+        </Typography>
         <Box
           sx={{
             mt: 1.75,
@@ -235,6 +239,13 @@ export function SubscriptionPlanCard({
                     sx={{ display: 'block', mt: 0.35, lineHeight: 1.2, fontWeight: 500 }}
                   >
                     {f.label.replace('Team seats', 'Seats')}
+                  </Typography>
+                  <Typography
+                    variant='caption'
+                    color='text.secondary'
+                    sx={{ display: 'block', mt: 0.2, lineHeight: 1.2, fontSize: '0.65rem', fontWeight: 600 }}
+                  >
+                    {limitResetCaption(f.key)}
                   </Typography>
                 </Box>
               </Box>

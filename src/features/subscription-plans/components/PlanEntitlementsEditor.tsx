@@ -46,13 +46,13 @@ export function PlanEntitlementsEditor({ value, onChange }: Props) {
           Usage limits
         </Typography>
         <Typography variant='body2' color='text.secondary' sx={{ mb: 1.5 }}>
-          Use -1 for unlimited.
+          Use -1 for unlimited. Seats are a standing total. Customers and leads reset at the start of each month.
         </Typography>
         <Box className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
           {LIMIT_FEATURES.map(f => (
             <TextField
               key={f.key}
-              label={f.label}
+              label={`${f.label} (${f.reset === 'monthly' ? 'per month' : 'total'})`}
               type='number'
               helperText={f.description}
               value={value.limits[f.key]}

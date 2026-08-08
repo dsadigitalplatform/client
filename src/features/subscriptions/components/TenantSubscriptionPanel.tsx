@@ -27,6 +27,7 @@ import Typography from '@mui/material/Typography'
 import {
   LIMIT_FEATURES,
   MODULE_FEATURES,
+  isMonthlyLimit,
   isUnlimited,
   type PlanEntitlements
 } from '@features/subscription-plans/featureCatalog'
@@ -56,9 +57,9 @@ function formatDate(iso: string | null | undefined) {
 
 function usageLimitLabel(key: string) {
   if (key === 'maxUsers') return 'Team seats'
-  if (key === 'maxCustomers') return 'Customers'
+  if (key === 'maxCustomers') return 'Customers this month'
 
-  return 'Leads'
+  return 'Leads this month'
 }
 
 function changeKindLabel(kind: string | null | undefined) {
@@ -167,9 +168,14 @@ export function TenantSubscriptionPanel() {
           ? json.usageBlocks
               .map((b: any) => {
                 const label =
-                  b.key === 'maxUsers' ? 'Team seats' : b.key === 'maxCustomers' ? 'Customers' : 'Leads'
+                  b.key === 'maxUsers'
+                    ? 'Team seats'
+                    : b.key === 'maxCustomers'
+                      ? 'Customers this month'
+                      : 'Leads this month'
+                const limitLabel = isMonthlyLimit(b.key) ? `${b.limit}/month` : b.limit
 
-                return `${label}: using ${b.used}, plan allows ${b.limit}`
+                return `${label}: using ${b.used}, plan allows ${limitLabel}`
               })
               .join('; ')
           : ''
@@ -431,19 +437,25 @@ export function TenantSubscriptionPanel() {
           <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
             Usage
           </Typography>
+          <Typography variant='body2' color='text.secondary'>
+            Seats are a standing total. Customers and leads reset every month
+            {usage.monthlyWindow?.end ? ` (next reset ${formatDate(usage.monthlyWindow.end)})` : ''}.
+          </Typography>
           <Box className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
             {LIMIT_FEATURES.map(f => {
               const limit = entitlements.limits[f.key]
               const used =
                 f.key === 'maxUsers' ? usage.users : f.key === 'maxCustomers' ? usage.customers : usage.leads
+              const monthly = isMonthlyLimit(f.key)
 
               return (
                 <Box key={f.key}>
                   <Typography variant='caption' color='text.secondary'>
                     {f.label}
+                    {monthly ? ' this month' : ' (total)'}
                   </Typography>
                   <Typography variant='body1'>
-                    {used} / {isUnlimited(limit) ? '∞' : limit}
+                    {used} / {isUnlimited(limit) ? '∞' : monthly ? `${limit}/mo` : limit}
                   </Typography>
                   <LinearProgress
                     variant='determinate'
@@ -822,7 +834,7 @@ export function TenantSubscriptionPanel() {
                 <Box component='ul' sx={{ m: 0, mt: 1, pl: 2.5 }}>
                   {downgradeConfirm.usageWarnings.map(w => (
                     <li key={w.key}>
-                      {w.label}: using {w.used}, plan allows {w.limit}
+                      {w.label}: using {w.used}, plan allows {isMonthlyLimit(w.key) ? `${w.limit}/month` : w.limit}
                     </li>
                   ))}
                 </Box>

@@ -99,8 +99,15 @@ export type DiscountCode = {
 
 export type UsageSnapshot = {
   users: number
+  /** Customers created in the current calendar month (still stored). */
   customers: number
+  /** Leads created in the current calendar month (still stored). */
   leads: number
+  /** Calendar-month window used for customers and leads. */
+  monthlyWindow: {
+    start: string
+    end: string
+  }
 }
 
 export type ResolvedEntitlements = {

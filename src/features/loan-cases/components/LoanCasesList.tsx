@@ -474,7 +474,7 @@ const LoanCasesList = () => {
               startIcon={<i className='ri-add-line' />}
               fullWidth={isMobile}
               disabled
-              title='Lead limit reached — upgrade your plan to create more'
+              title="This month's lead limit reached — upgrade or wait until next month"
             >
               Create Lead
             </Button>

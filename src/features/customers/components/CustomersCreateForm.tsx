@@ -668,10 +668,10 @@ const CustomersCreateForm = ({
         {createCustomerLocked ? (
           <Box sx={{ mb: 2 }}>
             <SubscriptionGateAlert
-              title='Customer limit reached'
-              message='Please upgrade your subscription to create more customers'
+              title="This month's customer limit reached"
+              message='Upgrade your plan to add more this month, or wait until the count resets next month.'
               planName={customersPlanName}
-              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used` : null}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used this month` : null}
             />
           </Box>
         ) : null}
@@ -1175,10 +1175,10 @@ const CustomersCreateForm = ({
         {createCustomerLocked ? (
           <Box sx={{ mb: 2 }}>
             <SubscriptionGateAlert
-              title='Customer limit reached'
-              message='Please upgrade your subscription to create more customers'
+              title="This month's customer limit reached"
+              message='Upgrade your plan to add more this month, or wait until the count resets next month.'
               planName={customersPlanName}
-              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used` : null}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used this month` : null}
             />
           </Box>
         ) : null}

@@ -37,7 +37,15 @@ import ListItemText from '@mui/material/ListItemText'
 
 import type { SubscriptionPlan } from '../subscription-plans.types'
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, formatPlanMoney, normalizeCurrency } from '../currencies'
-import { TRIAL_DAYS, defaultPlanEntitlements, normalizePlanEntitlements, type PlanEntitlements } from '../featureCatalog'
+import {
+  TRIAL_DAYS,
+  UNLIMITED,
+  defaultPlanEntitlements,
+  isMonthlyLimit,
+  normalizePlanEntitlements,
+  type LimitFeatureKey,
+  type PlanEntitlements
+} from '../featureCatalog'
 import { subscriptionPlansService } from '../services/subscriptionPlansService'
 import { PlanEntitlementsEditor } from './PlanEntitlementsEditor'
 
@@ -352,8 +360,14 @@ export const SubscriptionPlansManager = () => {
     const modulesOn = Object.entries(e.modules)
       .filter(([, on]) => on)
       .map(([k]) => k)
+    const fmt = (key: LimitFeatureKey) => {
+      const n = e.limits[key]
+      const value = n === UNLIMITED ? '∞' : String(n)
 
-    return `Seats ${e.limits.maxUsers} · Customers ${e.limits.maxCustomers} · Leads ${e.limits.maxLeads}${
+      return isMonthlyLimit(key) ? `${value}/mo` : value
+    }
+
+    return `Seats ${fmt('maxUsers')} · Customers ${fmt('maxCustomers')} · Leads ${fmt('maxLeads')}${
       modulesOn.length ? ` · ${modulesOn.length} modules` : ''
     }`
   }
@@ -377,7 +391,7 @@ export const SubscriptionPlansManager = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
           <Typography variant='h5'>All Plans</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Pricing, trial days, usage limits, and modules
+            Pricing, trial days, usage limits (seats total · customers & leads per month), and modules
           </Typography>
         </Box>
         <Button

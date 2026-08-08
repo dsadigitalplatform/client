@@ -228,7 +228,14 @@ const NavbarContent = ({
           </Tooltip>
         </Box>
         <Box sx={{ display: { xs: searchOpen ? 'none' : 'flex', sm: 'flex' }, alignItems: 'center', gap: 2 }}>
-          <Tooltip title={createCustomerLocked ? 'Customer limit reached — upgrade your plan' : 'Add customer'} arrow>
+          <Tooltip
+            title={
+              createCustomerLocked
+                ? "This month's customer limit reached — upgrade or wait until next month"
+                : 'Add customer'
+            }
+            arrow
+          >
             <span>
               <IconButton
                 component={createCustomerLocked ? 'button' : Link}
@@ -248,7 +255,14 @@ const NavbarContent = ({
               </IconButton>
             </span>
           </Tooltip>
-          <Tooltip title={createLeadLocked ? 'Lead limit reached — upgrade your plan' : 'Create lead'} arrow>
+          <Tooltip
+            title={
+              createLeadLocked
+                ? "This month's lead limit reached — upgrade or wait until next month"
+                : 'Create lead'
+            }
+            arrow
+          >
             <span>
               <IconButton
                 component={createLeadLocked ? 'button' : Link}

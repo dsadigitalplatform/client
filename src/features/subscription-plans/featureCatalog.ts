@@ -8,6 +8,7 @@
  *   propagation (expansions immediate; reductions held via entitlementsSnapshot
  *   until period end — see planCatalogEditPolicy)
  * - Limits are numeric quotas (-1 = unlimited); modules are on/off (+ coming_soon)
+ * - Seats are a standing total; customers and leads reset each calendar month
  *
  * Expand by adding entries here — UI, APIs, and enforcement stay in sync.
  */
@@ -17,6 +18,9 @@ export const TRIAL_DAYS = 14
 export const UNLIMITED = -1
 
 export type FeatureStatus = 'available' | 'coming_soon'
+
+/** Standing limits never reset; monthly limits reset at the start of each calendar month. */
+export type LimitResetPolicy = 'never' | 'monthly'
 
 export type LimitFeatureKey = 'maxUsers' | 'maxCustomers' | 'maxLeads'
 export type ModuleFeatureKey = 'reports' | 'progressiveDisbursement' | 'associateCommission'
@@ -32,6 +36,7 @@ export type LimitFeatureDef = {
   unit: string
   defaultValue: number
   min: number
+  reset: LimitResetPolicy
 }
 
 export type ModuleFeatureDef = {
@@ -50,31 +55,34 @@ export const LIMIT_FEATURES: LimitFeatureDef[] = [
     key: 'maxUsers',
     kind: 'limit',
     label: 'Team seats',
-    description: 'Active and invited members allowed in this organisation.',
+    description: 'Active and invited members allowed in this organisation. Standing total — does not reset.',
     status: 'available',
     unit: 'users',
     defaultValue: 3,
-    min: 1
+    min: 1,
+    reset: 'never'
   },
   {
     key: 'maxCustomers',
     kind: 'limit',
     label: 'Customers',
-    description: 'Maximum customer records that can be stored.',
+    description: 'New customer records that can be created each calendar month. Count resets on the 1st.',
     status: 'available',
     unit: 'customers',
     defaultValue: 50,
-    min: 0
+    min: 0,
+    reset: 'monthly'
   },
   {
     key: 'maxLeads',
     kind: 'limit',
     label: 'Leads',
-    description: 'Maximum loan leads/cases that can be created.',
+    description: 'New loan leads/cases that can be created each calendar month. Count resets on the 1st.',
     status: 'available',
     unit: 'leads',
     defaultValue: 100,
-    min: 0
+    min: 0,
+    reset: 'monthly'
   }
 ]
 
@@ -152,6 +160,14 @@ export function normalizePlanEntitlements(raw: unknown, fallbackMaxUsers?: numbe
 
 export function isUnlimited(limit: number): boolean {
   return limit === UNLIMITED
+}
+
+export function isMonthlyLimit(key: LimitFeatureKey | string): boolean {
+  return LIMIT_FEATURES.find(f => f.key === key)?.reset === 'monthly'
+}
+
+export function limitResetCaption(key: LimitFeatureKey | string): string {
+  return isMonthlyLimit(key) ? '/ month' : 'total'
 }
 
 export function getFeatureDef(key: FeatureKey): FeatureDef | undefined {

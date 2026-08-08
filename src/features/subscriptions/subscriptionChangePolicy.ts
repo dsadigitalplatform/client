@@ -58,7 +58,8 @@ export const SUBSCRIPTION_CHANGE_COPY = {
   paidUpgradeToTrial:
     'Upgraded. Remaining paid days on the previous plan expired and a fresh trial has started on the higher plan. Super Admin can mark payment received when you are ready.',
   trialNoDowngrade: 'Downgrades are not available during trial. Choose a higher plan to upgrade, or wait until after activation.',
-  usageBlocked: 'Reduce usage below the target plan limits before scheduling this downgrade.',
+  usageBlocked:
+    'Reduce usage below the target plan limits before scheduling this downgrade. Customer and lead counts are for the current month; seats are a standing total.',
   paymentsPending:
     'Choosing a plan does not activate paid billing. Use the trial, then ask Super Admin to mark payment received to start the paid period.'
 }

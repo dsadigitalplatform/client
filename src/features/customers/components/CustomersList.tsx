@@ -119,7 +119,11 @@ const CustomersList = () => {
                   setOpenAdd(true)
                 }}
                 disabled={createCustomerLocked}
-                title={createCustomerLocked ? 'Customer limit reached — upgrade your plan to create more' : undefined}
+                title={
+                  createCustomerLocked
+                    ? "This month's customer limit reached — upgrade or wait until next month"
+                    : undefined
+                }
               >
                 Add
               </Button>
