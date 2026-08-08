@@ -1,12 +1,13 @@
 /** Groups hidden from the DB maintenance screen (e.g. Platform for demo tenant). */
 export const DB_MAINTENANCE_UI_HIDDEN_GROUPS = ['Platform'] as const
 
-/** Platform collections — not deletable via DB maintenance (demo tenant only). */
+/** Platform collections — not deletable via collection clear / row delete. */
 export const DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS = [
   'users',
   'authAccounts',
   'subscriptionPlans',
-  'tenants'
+  'tenants',
+  'referralProgramSettings'
 ] as const
 
 export function isDbMaintenanceCollectionDeletable(collection: string): boolean {
@@ -25,6 +26,7 @@ export type DbMaintenanceCollectionInfo = {
 export const DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS = [
   'customers',
   'associates',
+  'associateTypes',
   'advocates',
   'banks',
   'corporates',
@@ -61,11 +63,13 @@ export type DbMaintenanceTenantInfo = {
   name: string
   status?: string
   type?: string
+  isDemo?: boolean
 }
 
 export type DbMaintenanceTenantPurgeResult = {
   tenantId: string
   tenantName: string | null
+  deletedTenant?: boolean
   deletedByCollection: Record<string, number>
   deletedUsers: number
   keptUsers: {

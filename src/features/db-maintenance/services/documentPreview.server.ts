@@ -67,15 +67,26 @@ async function loadNameMaps(db: any, collection: string, docs: any[]): Promise<N
   const stageIds = new Set<string>()
   const loanTypeIds = new Set<string>()
 
-  const needsCustomers = ['appointments', 'loanCases'].includes(collection)
-  const needsLeads = ['appointments', 'loanDisbursements', 'loanDisbursementTrackers', 'auditLogs'].includes(collection)
-  const needsUsers = ['memberships', 'loanCases', 'appointments'].includes(collection)
+  const needsCustomers = ['appointments', 'loanCases', 'reminders'].includes(collection)
+  const needsLeads = ['appointments', 'loanDisbursements', 'loanDisbursementTrackers', 'auditLogs', 'reminders'].includes(collection)
+  const needsUsers = [
+    'memberships',
+    'loanCases',
+    'appointments',
+    'reminders',
+    'referralInvites',
+    'referralCredits',
+    'referralWithdrawals'
+  ].includes(collection)
   const needsStages = collection === 'loanCases'
   const needsLoanTypes = collection === 'loanCases'
 
   docs.forEach(doc => {
     if (needsCustomers) customerIds.add(toIdString(doc.customerId))
-    if (needsLeads) leadIds.add(toIdString(doc.leadId))
+    if (needsLeads) {
+      leadIds.add(toIdString(doc.leadId))
+      leadIds.add(toIdString(doc.caseId))
+    }
     if (collection === 'auditLogs') {
       const meta = doc.metadata || {}
 
@@ -88,6 +99,8 @@ async function loadNameMaps(db: any, collection: string, docs: any[]): Promise<N
       userIds.add(toIdString(doc.assignedAgentId))
       userIds.add(toIdString(doc.actorUserId))
       userIds.add(toIdString(doc.createdByUserId))
+      userIds.add(toIdString(doc.referrerUserId))
+      userIds.add(toIdString(doc.resolvedByUserId))
     }
     if (needsStages) stageIds.add(toIdString(doc.stageId))
     if (needsLoanTypes) loanTypeIds.add(toIdString(doc.loanTypeId))
@@ -248,6 +261,90 @@ function getProjectionForCollection(collection: string): Record<string, 1> {
       return { ...common, name: 1, slug: 1, status: 1, price: 1 }
     case 'loanTypeDocuments':
       return { ...common, loanTypeId: 1, documentId: 1, status: 1 }
+    case 'reminders':
+      return {
+        ...common,
+        title: 1,
+        description: 1,
+        status: 1,
+        source: 1,
+        reminderDateTime: 1,
+        userId: 1,
+        customerId: 1,
+        caseId: 1,
+        appointmentId: 1,
+        caseRef: 1
+      }
+    case 'codeGenerationConfigs':
+      return {
+        ...common,
+        entityType: 1,
+        isEnabled: 1,
+        template: 1,
+        prefix: 1,
+        sequencePadLength: 1
+      }
+    case 'codeSequences':
+      return {
+        ...common,
+        entityType: 1,
+        scopeKey: 1,
+        nextValue: 1
+      }
+    case 'associateTypes':
+      return {
+        ...common,
+        name: 1,
+        description: 1,
+        isActive: 1
+      }
+    case 'referralInvites':
+      return {
+        ...common,
+        referrerUserId: 1,
+        referrerTenantId: 1,
+        inviteeName: 1,
+        inviteeEmail: 1,
+        inviteeMobile: 1,
+        status: 1,
+        referredTenantId: 1,
+        commissionCancelled: 1,
+        commissionPercentOverride: 1
+      }
+    case 'referralCredits':
+      return {
+        ...common,
+        referrerUserId: 1,
+        referredTenantId: 1,
+        subscriptionAmount: 1,
+        commissionPercent: 1,
+        commissionAmount: 1,
+        status: 1,
+        sourceInvoiceId: 1,
+        withdrawalId: 1,
+        createdByUserId: 1
+      }
+    case 'referralWithdrawals':
+      return {
+        ...common,
+        referrerUserId: 1,
+        amount: 1,
+        status: 1,
+        note: 1,
+        requestedAt: 1,
+        resolvedAt: 1,
+        resolvedByUserId: 1,
+        payoutDetails: 1,
+        creditIds: 1
+      }
+    case 'referralProgramSettings':
+      return {
+        ...common,
+        headline: 1,
+        commissionPercent: 1,
+        ctaLabel: 1,
+        updatedByUserId: 1
+      }
     default:
       return {
         ...common,
@@ -370,6 +467,83 @@ function buildPreview(collection: string, doc: any, maps: NameMaps): DbMaintenan
     case 'loanTypeDocuments': {
       title = compactJoin(['Mapping', doc.status])
       details.push(`Loan type: ${shortId(doc.loanTypeId)}`, `Document: ${shortId(doc.documentId)}`)
+      break
+    }
+    case 'reminders': {
+      const customer = maps.customers.get(toIdString(doc.customerId))
+      const user = maps.users.get(toIdString(doc.userId))
+
+      title = compactJoin([doc.title, doc.status])
+      if (!title) title = doc.source ? String(doc.source).replace(/_/g, ' ') : `Reminder ${shortId(id)}`
+      if (doc.source) details.push(`Source: ${String(doc.source).replace(/_/g, ' ')}`)
+      if (customer) details.push(`Customer: ${customer}`)
+      if (doc.caseRef) details.push(`Case: ${String(doc.caseRef)}`)
+      else if (doc.caseId) details.push(`Case: ${shortId(doc.caseId)}`)
+      const when = formatDate(doc.reminderDateTime)
+
+      if (when) details.push(`Due: ${when}`)
+      if (user) details.push(`Owner: ${user}`)
+      break
+    }
+    case 'codeGenerationConfigs': {
+      title = compactJoin([doc.entityType, doc.isEnabled === false ? 'disabled' : 'enabled'])
+      if (doc.prefix) details.push(`Prefix: ${String(doc.prefix)}`)
+      if (doc.template) details.push(`Template: ${String(doc.template)}`)
+      if (doc.sequencePadLength != null) details.push(`Pad: ${String(doc.sequencePadLength)}`)
+      break
+    }
+    case 'codeSequences': {
+      title = compactJoin([doc.entityType, doc.scopeKey])
+      if (doc.nextValue != null) details.push(`Next value: ${String(doc.nextValue)}`)
+      break
+    }
+    case 'associateTypes': {
+      title = compactJoin([doc.name, doc.isActive === false ? 'inactive' : null])
+      if (doc.description) details.push(String(doc.description))
+      break
+    }
+    case 'referralInvites': {
+      const referrer = maps.users.get(toIdString(doc.referrerUserId))
+
+      title = compactJoin([doc.inviteeName, doc.inviteeEmail, doc.status])
+      if (!title) title = `Invite ${shortId(id)}`
+      if (referrer) details.push(`Referrer: ${referrer}`)
+      if (doc.inviteeMobile) details.push(`Mobile: ${String(doc.inviteeMobile)}`)
+      details.push(`Referrer tenant: ${shortId(doc.referrerTenantId)}`)
+      if (doc.referredTenantId) details.push(`Referred tenant: ${shortId(doc.referredTenantId)}`)
+      if (doc.commissionCancelled) details.push('Commission cancelled')
+      break
+    }
+    case 'referralCredits': {
+      const referrer = maps.users.get(toIdString(doc.referrerUserId))
+
+      title = compactJoin([formatInr(doc.commissionAmount), doc.status], ' — ')
+      if (!title) title = `Credit ${shortId(id)}`
+      if (referrer) details.push(`Referrer: ${referrer}`)
+      if (doc.commissionPercent != null) details.push(`Rate: ${String(doc.commissionPercent)}%`)
+      if (doc.subscriptionAmount != null) details.push(`Subscription: ${formatInr(doc.subscriptionAmount)}`)
+      details.push(`Referred tenant: ${shortId(doc.referredTenantId)}`)
+      break
+    }
+    case 'referralWithdrawals': {
+      const referrer = maps.users.get(toIdString(doc.referrerUserId))
+
+      title = compactJoin([formatInr(doc.amount), doc.status], ' — ')
+      if (!title) title = `Withdrawal ${shortId(id)}`
+      if (referrer) details.push(`Referrer: ${referrer}`)
+      const method = doc.payoutDetails?.method
+
+      if (method) details.push(`Payout: ${String(method)}`)
+      const when = formatDate(doc.requestedAt)
+
+      if (when) details.push(`Requested: ${when}`)
+      if (Array.isArray(doc.creditIds)) details.push(`Credits: ${doc.creditIds.length}`)
+      break
+    }
+    case 'referralProgramSettings': {
+      title = compactJoin([doc.headline, doc.commissionPercent != null ? `${doc.commissionPercent}%` : null])
+      if (!title) title = 'Referral program settings'
+      if (doc.ctaLabel) details.push(`CTA: ${String(doc.ctaLabel)}`)
       break
     }
     default: {

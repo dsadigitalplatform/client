@@ -14,9 +14,10 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const tenantId = typeof body?.tenantId === 'string' ? body.tenantId : ''
+  const deleteTenant = Boolean(body?.deleteTenant)
 
   try {
-    const result = await purgeTenantData(tenantId)
+    const result = await purgeTenantData(tenantId, { deleteTenant })
 
     return NextResponse.json({ result })
   } catch (e: any) {

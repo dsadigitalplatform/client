@@ -24,19 +24,29 @@ export async function GET(request: Request, ctx: { params: Promise<{ collection:
   }
 
   const url = new URL(request.url)
+  const tenantId = (url.searchParams.get('tenantId') || '').trim()
   const limitParam = url.searchParams.get('limit')
   const cursor = url.searchParams.get('cursor')
   const createdById = (url.searchParams.get('createdById') || '').trim()
   const limit = limitParam ? Number(limitParam) : undefined
 
-  const result = await listDbMaintenanceDocuments({
-    collection,
-    limit,
-    cursor,
-    createdById: createdById.length > 0 ? createdById : null
-  })
+  if (!tenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
 
-  return NextResponse.json(result)
+  try {
+    const result = await listDbMaintenanceDocuments({
+      collection,
+      tenantId,
+      limit,
+      cursor,
+      createdById: createdById.length > 0 ? createdById : null
+    })
+
+    return NextResponse.json(result)
+  } catch (e: any) {
+    const status = typeof e?.status === 'number' ? e.status : 400
+
+    return NextResponse.json({ error: e?.message || 'failed' }, { status })
+  }
 }
 
 export async function POST(request: Request, ctx: { params: Promise<{ collection: string }> }) {
@@ -52,12 +62,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ collection
   }
 
   const body = await request.json().catch(() => ({}))
+  const tenantId = typeof body?.tenantId === 'string' ? body.tenantId.trim() : ''
   const ids = Array.isArray(body?.ids) ? body.ids.map((v: any) => String(v)) : []
   const createdByIdRaw = body?.createdById
   const createdById = createdByIdRaw == null ? null : String(createdByIdRaw).trim()
 
+  if (!tenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+
   try {
-    const result = await deleteDbMaintenanceDocuments({ collection, ids, createdById })
+    const result = await deleteDbMaintenanceDocuments({ collection, tenantId, ids, createdById })
 
     return NextResponse.json(result)
   } catch (e: any) {
