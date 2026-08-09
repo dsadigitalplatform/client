@@ -62,7 +62,7 @@ export default function ReferralsAdminConsole() {
   const [linkInvite, setLinkInvite] = useState<ReferralInvite | null>(null)
   const [tenants, setTenants] = useState<TenantOption[]>([])
   const [createdOrg, setCreatedOrg] = useState<TenantOption | null>(null)
-  const [referrerOrg, setReferrerOrg] = useState<TenantOption | null>(null)
+  const [referrerQuery, setReferrerQuery] = useState('')
   const [referrerUsers, setReferrerUsers] = useState<UserOption[]>([])
   const [inviteeUsers, setInviteeUsers] = useState<UserOption[]>([])
   const [selectedReferrer, setSelectedReferrer] = useState<UserOption | null>(null)
@@ -107,30 +107,35 @@ export default function ReferralsAdminConsole() {
   }, [])
 
   useEffect(() => {
-    if (!referrerOrg?.id) {
+    const q = referrerQuery.trim()
+
+    if (q.length < 2) {
       setReferrerUsers([])
+      setUsersLoading(false)
 
       return
     }
 
     let cancelled = false
-
-    setUsersLoading(true)
-    void loadOrgUsers(referrerOrg.id)
-      .then(users => {
-        if (!cancelled) setReferrerUsers(users)
-      })
-      .catch(() => {
-        if (!cancelled) setReferrerUsers([])
-      })
-      .finally(() => {
-        if (!cancelled) setUsersLoading(false)
-      })
+    const timer = window.setTimeout(() => {
+      setUsersLoading(true)
+      void searchReferralUsers(q)
+        .then(res => {
+          if (!cancelled) setReferrerUsers(res.users)
+        })
+        .catch(() => {
+          if (!cancelled) setReferrerUsers([])
+        })
+        .finally(() => {
+          if (!cancelled) setUsersLoading(false)
+        })
+    }, 250)
 
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
-  }, [referrerOrg?.id, loadOrgUsers])
+  }, [referrerQuery])
 
   useEffect(() => {
     if (!createdOrg?.id) {
@@ -161,7 +166,7 @@ export default function ReferralsAdminConsole() {
         ? { id: invite.referredTenantId, name: invite.referredTenantName || 'Organisation' }
         : null
     )
-    setReferrerOrg(null)
+    setReferrerQuery('')
     setSelectedReferrer(
       invite
         ? { id: invite.referrerUserId, name: invite.referrerName || '', email: invite.referrerEmail || '' }
@@ -205,7 +210,13 @@ export default function ReferralsAdminConsole() {
       setLinkOpen(false)
       await load()
     } catch (e: any) {
-      setError(e?.message === 'tenant_already_attributed' ? 'This organisation is already linked' : 'Link failed')
+      setError(
+        e?.message === 'tenant_already_attributed'
+          ? 'This organisation is already linked'
+          : e?.message === 'referrer_not_found'
+            ? 'Referrer user was not found'
+            : 'Link failed'
+      )
     } finally {
       setBusy(false)
     }
@@ -474,8 +485,9 @@ export default function ReferralsAdminConsole() {
         <DialogTitle>{linkInvite ? 'Link invite to organisation' : 'Link organisation to referrer'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <Typography variant='body2' color='text.secondary'>
-            Works with or without a prior invite. Pick the created organisation, then choose the referrer from their
-            organisation&apos;s members. Future paid subscriptions will credit that referrer.
+            Works with or without a prior invite. Pick the created organisation, then search for the referrer by name
+            or email — they do not need to belong to an organisation. Future paid subscriptions will credit that
+            referrer.
           </Typography>
 
           <Autocomplete
@@ -512,45 +524,33 @@ export default function ReferralsAdminConsole() {
           />
 
           <Autocomplete
-            options={tenants}
-            getOptionLabel={o => o.name}
-            value={referrerOrg}
-            onChange={(_, v) => {
-              setReferrerOrg(v)
-              setSelectedReferrer(null)
-            }}
-            renderInput={params => (
-              <TextField
-                {...params}
-                label="Referrer's organisation"
-                helperText='Organisation of the team member who referred'
-              />
-            )}
-          />
-
-          <Autocomplete
             options={
               selectedReferrer && !referrerUsers.some(u => u.id === selectedReferrer.id)
                 ? [selectedReferrer, ...referrerUsers]
                 : referrerUsers
             }
+            filterOptions={opts => opts}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
             getOptionLabel={o => `${o.name || 'User'}${o.email ? ` (${o.email})` : ''}${o.role ? ` · ${o.role}` : ''}`}
             value={selectedReferrer}
             onChange={(_, v) => setSelectedReferrer(v)}
-            disabled={!referrerOrg}
+            onInputChange={(_, value, reason) => {
+              if (reason !== 'reset') setReferrerQuery(value)
+            }}
             loading={usersLoading}
             noOptionsText={
               usersLoading
-                ? 'Loading users…'
-                : referrerOrg
-                  ? 'No users in this organisation'
-                  : "Select referrer's organisation first"
+                ? 'Searching…'
+                : referrerQuery.trim().length < 2
+                  ? 'Type at least 2 characters to search registered users'
+                  : 'No matching users'
             }
             renderInput={params => (
               <TextField
                 {...params}
                 label='Referrer user'
-                helperText='Members of the selected referrer organisation'
+                placeholder='Search name or email'
+                helperText='Any registered user — organisation membership is optional'
               />
             )}
           />

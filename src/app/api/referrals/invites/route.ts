@@ -16,13 +16,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const store = await cookies()
-  const tenantId = store.get('CURRENT_TENANT_ID')?.value || ''
-
-  if (!tenantId || !ObjectId.isValid(tenantId)) {
-    return NextResponse.json({ error: 'no_tenant' }, { status: 400 })
-  }
-
   let body: any
 
   try {
@@ -32,15 +25,9 @@ export async function POST(req: Request) {
   }
 
   const db = await getDb()
-  const membership = await db.collection('memberships').findOne({
-    userId: new ObjectId(userId),
-    tenantId: new ObjectId(tenantId),
-    status: 'active'
-  })
-
-  if (!membership && !(session as any)?.isSuperAdmin) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
+  const store = await cookies()
+  const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
+  const referrerTenantId = cookieTenantId && ObjectId.isValid(cookieTenantId) ? cookieTenantId : null
 
   const user = await db.collection('users').findOne(
     { _id: new ObjectId(userId) },
@@ -51,7 +38,7 @@ export async function POST(req: Request) {
     const invite = await createReferralInvite({
       db,
       referrerUserId: userId,
-      referrerTenantId: tenantId,
+      referrerTenantId,
       inviteeEmail: String(body?.inviteeEmail || ''),
       inviteeMobile: String(body?.inviteeMobile || ''),
       inviteeName: typeof body?.inviteeName === 'string' ? body.inviteeName : null,

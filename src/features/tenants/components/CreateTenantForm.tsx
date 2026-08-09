@@ -260,7 +260,7 @@ export const CreateTenantForm = ({ isSuperAdmin }: Props) => {
                     {...params}
                     label='Referred by (optional)'
                     placeholder='Search user name or email'
-                    helperText='Link this organisation to a referrer for Rewards credit.'
+                    helperText='Search any registered user by name or email. They do not need to belong to an organisation.'
                   />
                 )}
               />

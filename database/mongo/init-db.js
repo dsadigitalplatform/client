@@ -1167,7 +1167,6 @@ const referralInvitesValidator = {
     bsonType: 'object',
     required: [
       'referrerUserId',
-      'referrerTenantId',
       'inviteeEmail',
       'inviteeMobile',
       'token',
@@ -1178,7 +1177,7 @@ const referralInvitesValidator = {
     ],
     properties: {
       referrerUserId: { bsonType: 'objectId' },
-      referrerTenantId: { bsonType: 'objectId' },
+      referrerTenantId: { bsonType: ['objectId', 'null'] },
       inviteeName: { bsonType: ['string', 'null'] },
       inviteeEmail: { bsonType: 'string' },
       inviteeMobile: { bsonType: 'string' },

@@ -27,6 +27,58 @@ import {
 
 const SETTINGS_ID = 'default'
 
+let inviteSchemaReady = false
+
+/** Relax referrerTenantId so registered users without an org can create/link invites. */
+async function ensureReferralInvitesAllowNullTenant(db: Db) {
+  if (inviteSchemaReady) return
+
+  try {
+    await db.command({
+      collMod: 'referralInvites',
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: [
+            'referrerUserId',
+            'inviteeEmail',
+            'inviteeMobile',
+            'token',
+            'status',
+            'commissionCancelled',
+            'createdAt',
+            'updatedAt'
+          ],
+          properties: {
+            referrerUserId: { bsonType: 'objectId' },
+            referrerTenantId: { bsonType: ['objectId', 'null'] },
+            inviteeName: { bsonType: ['string', 'null'] },
+            inviteeEmail: { bsonType: 'string' },
+            inviteeMobile: { bsonType: 'string' },
+            token: { bsonType: 'string' },
+            status: { enum: ['invited', 'onboarded', 'subscribed', 'paid', 'cancelled'] },
+            referredTenantId: { bsonType: ['objectId', 'null'] },
+            onboardedAt: { bsonType: ['date', 'null'] },
+            subscribedAt: { bsonType: ['date', 'null'] },
+            lastCreditedAt: { bsonType: ['date', 'null'] },
+            commissionPercentOverride: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
+            commissionCancelled: { bsonType: 'bool' },
+            createdAt: { bsonType: 'date' },
+            updatedAt: { bsonType: 'date' }
+          },
+          additionalProperties: true
+        }
+      },
+      validationLevel: 'moderate',
+      validationAction: 'error'
+    })
+  } catch (e) {
+    console.warn('[referrals] could not update referralInvites validator', e)
+  }
+
+  inviteSchemaReady = true
+}
+
 function toIso(d: unknown): string | null {
   if (d instanceof Date && Number.isFinite(d.getTime())) return d.toISOString()
   if (typeof d === 'string' && d) return d
@@ -56,7 +108,7 @@ export function serializeInvite(doc: any, extras?: Partial<ReferralInvite>): Ref
   return {
     id: String(doc._id),
     referrerUserId: String(doc.referrerUserId),
-    referrerTenantId: String(doc.referrerTenantId),
+    referrerTenantId: doc.referrerTenantId ? String(doc.referrerTenantId) : null,
     inviteeName: doc.inviteeName ? String(doc.inviteeName) : null,
     inviteeEmail: String(doc.inviteeEmail || '').toLowerCase(),
     inviteeMobile: String(doc.inviteeMobile || ''),
@@ -190,7 +242,7 @@ function newToken() {
 export async function createReferralInvite(params: {
   db: Db
   referrerUserId: string
-  referrerTenantId: string
+  referrerTenantId?: string | null
   inviteeEmail: string
   inviteeMobile: string
   inviteeName?: string | null
@@ -214,11 +266,13 @@ export async function createReferralInvite(params: {
     throw err
   }
 
+  await ensureReferralInvitesAllowNullTenant(params.db)
+
   const now = new Date()
   const token = newToken()
   const doc = {
     referrerUserId: oid(params.referrerUserId),
-    referrerTenantId: oid(params.referrerTenantId),
+    referrerTenantId: params.referrerTenantId ? oid(params.referrerTenantId) : null,
     inviteeName: params.inviteeName?.trim() || null,
     inviteeEmail: email,
     inviteeMobile: mobile,
@@ -475,6 +529,15 @@ export async function linkReferralAttribution(params: {
   const referrerUserId = oid(params.referrerUserId)
   const now = new Date()
 
+  const referrer = await db.collection('users').findOne({ _id: referrerUserId }, { projection: { _id: 1 } })
+
+  if (!referrer) {
+    const err: any = new Error('referrer_not_found')
+
+    err.status = 404
+    throw err
+  }
+
   const existing = await db.collection('referralInvites').findOne({
     referredTenantId: tenantId,
     status: { $ne: 'cancelled' }
@@ -557,19 +620,14 @@ export async function linkReferralAttribution(params: {
     return serializeInvite((res as any)?.value ?? res)
   }
 
-  // Manual attribution without prior invite
+  // Manual attribution without prior invite — referrer does not need an organisation
+  await ensureReferralInvitesAllowNullTenant(db)
+
   const membership = await db.collection('memberships').findOne({
     userId: referrerUserId,
     status: 'active'
   })
   const referrerTenantId = membership?.tenantId || (params.actorTenantId ? oid(params.actorTenantId) : null)
-
-  if (!referrerTenantId) {
-    const err: any = new Error('referrer_no_tenant')
-
-    err.status = 400
-    throw err
-  }
 
   const insert = await db.collection('referralInvites').insertOne({
     referrerUserId,

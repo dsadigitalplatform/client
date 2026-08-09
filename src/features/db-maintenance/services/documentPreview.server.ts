@@ -509,7 +509,7 @@ function buildPreview(collection: string, doc: any, maps: NameMaps): DbMaintenan
       if (!title) title = `Invite ${shortId(id)}`
       if (referrer) details.push(`Referrer: ${referrer}`)
       if (doc.inviteeMobile) details.push(`Mobile: ${String(doc.inviteeMobile)}`)
-      details.push(`Referrer tenant: ${shortId(doc.referrerTenantId)}`)
+      if (doc.referrerTenantId) details.push(`Referrer tenant: ${shortId(doc.referrerTenantId)}`)
       if (doc.referredTenantId) details.push(`Referred tenant: ${shortId(doc.referredTenantId)}`)
       if (doc.commissionCancelled) details.push('Commission cancelled')
       break

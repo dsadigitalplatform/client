@@ -793,21 +793,64 @@ const DashboardHome = () => {
                 onPeriodChange={hasTenant ? setDashboardPeriod : undefined}
                 periodDisabled={myLeadsLoading}
             />
-            {showWelcomeCta && (
+            {!checking && !hasMembership && (
                 <Box className='mt-4 flex flex-col gap-2'>
-                    <Typography variant='h6'>Welcome!</Typography>
-                    <Typography color='text.secondary'>
-                        Start by creating your organization to unlock your workspace.
-                    </Typography>
-                    <Button
-                        variant='contained'
-                        size='large'
-                        component={Link}
-                        href='/create-tenant'
-                        startIcon={<i className='ri-building-2-line' />}
-                    >
-                        Create Organization
-                    </Button>
+                    {showWelcomeCta ? (
+                        <>
+                            <Typography variant='h6'>Welcome!</Typography>
+                            <Typography color='text.secondary'>
+                                Start by creating your organization to unlock your workspace. You can still invite DSAs
+                                from Refer &amp; Earn before joining an organisation.
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                <Button
+                                    variant='contained'
+                                    size='large'
+                                    component={Link}
+                                    href='/create-tenant'
+                                    startIcon={<i className='ri-building-2-line' />}
+                                >
+                                    Create Organization
+                                </Button>
+                                <Button
+                                    variant='outlined'
+                                    size='large'
+                                    component={Link}
+                                    href='/refer-and-earn'
+                                    startIcon={<i className='ri-gift-line' />}
+                                >
+                                    Refer &amp; Earn
+                                </Button>
+                            </Box>
+                        </>
+                    ) : (
+                        <>
+                            <Typography variant='h6'>Refer &amp; Earn is ready</Typography>
+                            <Typography color='text.secondary'>
+                                You don&apos;t need to join an organisation to invite DSAs and track rewards.
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                <Button
+                                    variant='contained'
+                                    size='large'
+                                    component={Link}
+                                    href='/refer-and-earn'
+                                    startIcon={<i className='ri-gift-line' />}
+                                >
+                                    Refer &amp; Earn
+                                </Button>
+                                <Button
+                                    variant='outlined'
+                                    size='large'
+                                    component={Link}
+                                    href='/rewards'
+                                    startIcon={<i className='ri-medal-line' />}
+                                >
+                                    Rewards
+                                </Button>
+                            </Box>
+                        </>
+                    )}
                 </Box>
             )}
             <Box

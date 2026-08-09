@@ -29,7 +29,7 @@ export type ReferralPayoutDetails = {
 export type ReferralInvite = {
   id: string
   referrerUserId: string
-  referrerTenantId: string
+  referrerTenantId: string | null
   inviteeName: string | null
   inviteeEmail: string
   inviteeMobile: string

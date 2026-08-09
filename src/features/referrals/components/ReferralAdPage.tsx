@@ -196,9 +196,7 @@ export default function ReferralAdPage() {
           ? 'Enter a valid email'
           : code === 'invalid_mobile'
             ? MOBILE_VALIDATION_MESSAGE
-            : code === 'no_tenant'
-              ? 'Select an organisation first'
-              : 'Failed to send invite'
+            : 'Failed to send invite'
       )
     } finally {
       setSubmitting(false)
@@ -526,7 +524,7 @@ export default function ReferralAdPage() {
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <Typography variant='body2' color='text.secondary'>
             We email the invitee a signup link and notify Super Admin with their contact details so they can help
-            onboard.
+            onboard. You can send invites even if you have not joined an organisation yet.
           </Typography>
           {error ? <Alert severity='error'>{error}</Alert> : null}
           <TextField label='Name (optional)' value={name} onChange={e => setName(e.target.value)} fullWidth />

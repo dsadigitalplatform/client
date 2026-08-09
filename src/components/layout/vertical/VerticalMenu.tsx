@@ -117,16 +117,12 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
               Reports
             </MenuItem>
           )}
-          {hasTenant && (
-            <MenuItem href='/refer-and-earn' icon={<i className='ri-gift-line' />}>
-              Refer &amp; Earn
-            </MenuItem>
-          )}
-          {hasTenant && (
-            <MenuItem href='/rewards' icon={<i className='ri-medal-line' />}>
-              Rewards
-            </MenuItem>
-          )}
+          <MenuItem href='/refer-and-earn' icon={<i className='ri-gift-line' />}>
+            Refer &amp; Earn
+          </MenuItem>
+          <MenuItem href='/rewards' icon={<i className='ri-medal-line' />}>
+            Rewards
+          </MenuItem>
         </SubMenu>
 
         {hasTenant && (

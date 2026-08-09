@@ -12,8 +12,8 @@ function requireSuperAdmin(session: any) {
 
 /**
  * List users for referral linking.
- * - ?tenantId=… → active members of that organisation (preferred)
- * - ?q=… → global name/email search (fallback)
+ * - ?tenantId=… → active members of that organisation
+ * - ?q=… → global name/email search (any registered user, no org required)
  */
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
