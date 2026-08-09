@@ -126,6 +126,7 @@ export type ResolvedEntitlements = {
 }
 
 export type TenantSubscriptionView = {
+  tenantName?: string | null
   subscription: TenantSubscription | null
   plan: (TenantSubscriptionSummary & { entitlements: PlanEntitlements }) | null
   entitlements: PlanEntitlements

@@ -147,6 +147,8 @@ export async function GET() {
 
   const isOwner = role === 'OWNER' || Boolean((session as any)?.isSuperAdmin)
   const isBillingContact = resolved.subscription?.billingContactUserId === session.userId
+  const tenantDoc = await db.collection('tenants').findOne({ _id: tenantId }, { projection: { name: 1 } })
+  const tenantName = typeof (tenantDoc as any)?.name === 'string' ? String((tenantDoc as any).name).trim() : ''
 
   let pendingPlan: any = null
 
@@ -235,6 +237,7 @@ export async function GET() {
   })
 
   return NextResponse.json({
+    tenantName: tenantName || null,
     subscription: resolved.subscription,
     plan,
     entitlements: planResolved.entitlements,

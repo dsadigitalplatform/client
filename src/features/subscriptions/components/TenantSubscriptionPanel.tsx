@@ -39,6 +39,8 @@ import {
 } from '@features/subscriptions/subscriptionStatusMessage'
 import { TenantBillingProfileCard } from '@features/billing/components/TenantBillingProfileCard'
 import { TenantInvoicesPanel } from '@features/billing/components/TenantInvoicesPanel'
+import { UpiPaymentInstructions } from '@features/billing/components/UpiPaymentInstructions'
+import { formatPlanMoney } from '@features/subscription-plans/currencies'
 
 function usagePct(used: number, limit: number) {
   if (isUnlimited(limit) || limit <= 0) return 0
@@ -276,6 +278,17 @@ export function TenantSubscriptionPanel() {
   const access = data.access
   const copy = data.changePolicy?.copy
   const periodEndLabel = formatDate(sub?.currentPeriodEnd)
+  const payAmountLabel = (() => {
+    if (!data.plan) return null
+
+    const yearly = sub?.billingInterval === 'yearly' && typeof data.plan.priceYearly === 'number'
+    const amount = yearly ? data.plan.priceYearly : data.plan.priceMonthly
+    const money = formatPlanMoney(amount, data.plan.currency)
+
+    if (money === '—') return null
+
+    return `${money} / ${yearly ? 'year' : 'month'}`
+  })()
   const statusMessage = getSubscriptionStatusMessage(
     toSubscriptionStatusSummary({
       status: sub?.status,
@@ -718,27 +731,35 @@ export function TenantSubscriptionPanel() {
           <CardContent className='flex flex-col gap-3'>
             <Typography variant='h6'>Payment & activation</Typography>
             <Alert severity='info'>
-              <AlertTitle>Online Pay now &amp; autopay are paused</AlertTitle>
+              <AlertTitle>Pay by UPI, then we activate</AlertTitle>
               {access.inTrial || sub.status === 'trialing'
-                ? 'You can use your selected plan during the trial. Super Admin will mark payment received to activate the paid subscription.'
+                ? 'Use your selected plan during the trial. Pay the amount below by UPI and notify Super Admin with the UTR to start the paid period.'
                 : sub.status === 'past_due' || sub.status === 'expired'
-                  ? 'This organisation needs Super Admin to mark payment received before paid access continues.'
-                  : 'Renewals are confirmed by Super Admin (Mark as paid). Online checkout will return later.'}
+                  ? 'Paid access continues after Super Admin verifies your UPI transfer and marks payment received.'
+                  : 'Renewals are confirmed by Super Admin after UPI payment is verified. Online checkout will return later.'}
             </Alert>
+
+            <UpiPaymentInstructions
+              amountLabel={payAmountLabel}
+              organisationName={data.tenantName || null}
+              planName={data.plan?.name || null}
+            />
+
             <Typography variant='body2' color='text.secondary'>
-              Please contact the Super Admin for payment and activation details. Use Notify to email them your company,
-              plan, and requester details.
+              Already paid? Paste the UPI UTR / reference below. We will email Super Admin your company, plan, and
+              requester details so they can mark payment received.
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
               <TextField
                 size='small'
                 fullWidth
-                label='Optional note'
-                placeholder='Preferred payment method, reference, or question…'
+                label='UPI UTR / payment note'
+                placeholder='e.g. UTR 123456789012 · paid via GPay'
                 value={notifyNote}
                 onChange={e => setNotifyNote(e.target.value)}
                 disabled={notifying}
                 inputProps={{ maxLength: 1000 }}
+                helperText='Include the UTR from your UPI app. Organisation name in the UPI remark also helps us match the credit.'
               />
               <Button
                 variant='contained'
@@ -746,7 +767,7 @@ export function TenantSubscriptionPanel() {
                 disabled={notifying || actionBusy}
                 startIcon={<i className='ri-mail-send-line' />}
                 onClick={() => void notifySuperAdmin()}
-                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                sx={{ whiteSpace: 'nowrap', flexShrink: 0, mt: { sm: 0.25 } }}
               >
                 {notifying ? 'Sending…' : 'Notify Super Admin'}
               </Button>

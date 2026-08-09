@@ -159,7 +159,7 @@ export async function POST(request: Request) {
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
       <h2>Payment &amp; activation request</h2>
-      <p>An organisation asked Super Admin to share payment details and activate their subscription.</p>
+      <p>An organisation asked Super Admin to verify a UPI payment and activate their subscription. They were shown the platform UPI QR / VPA on Payment &amp; activation.</p>
       <table style="border-collapse: collapse; width: 100%; max-width: 720px;">
         <tbody>
           ${row('Company', escapeHtml(companyName))}
@@ -185,6 +185,8 @@ export async function POST(request: Request) {
 
   const text = [
     'Payment & activation request',
+    '',
+    'Customer was shown the platform UPI QR / VPA. Verify the transfer and mark payment received.',
     '',
     `Company: ${companyName}`,
     `Legal name: ${legalName}`,

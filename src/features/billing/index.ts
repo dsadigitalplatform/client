@@ -27,5 +27,7 @@ export { getSellerBillingConfig, indianFiscalYear, sellerPartySnapshot } from '.
 
 export { TenantInvoicesPanel } from './components/TenantInvoicesPanel'
 export { TenantBillingProfileCard } from './components/TenantBillingProfileCard'
+export { UpiPaymentInstructions } from './components/UpiPaymentInstructions'
+export { getUpiPaymentConfig } from './upiPaymentConfig'
 export { openRazorpayCheckout } from './openRazorpayCheckout'
 export { openBillingCheckout } from './openBillingCheckout'
