@@ -5,6 +5,7 @@ type MailOptions = {
   subject: string
   html: string
   text?: string
+  cc?: string | string[]
 }
 
 function getEnv(name: string, optional = false): string | undefined {
@@ -38,6 +39,7 @@ export async function sendMail(options: MailOptions) {
   await transporter.sendMail({
     from,
     to: options.to,
+    cc: options.cc,
     subject: options.subject,
     html: options.html,
     text: options.text

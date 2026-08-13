@@ -7,7 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { DUPLICATE_CORPORATE_CODE_ERROR, findDuplicateCorporateCode, normalizeCorporateCode } from '../_helpers'
+import { DUPLICATE_CORPORATE_CODE_ERROR } from '../_helpers'
 
 function isNonEmptyString(v: unknown, min = 1) {
   return typeof v === 'string' && v.trim().length >= min
@@ -102,28 +102,23 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const { db, tenantIdObj, userId, role, isSuperAdmin } = context
   const body = await request.json().catch(() => ({}))
 
+  if (body.code != null) {
+    return NextResponse.json(
+      { error: 'validation_error', details: { code: 'Corporate code is auto-generated and cannot be changed' } },
+      { status: 400 }
+    )
+  }
+
   const patch: any = {}
 
-  if (body.code != null) patch.code = String(body.code).trim()
   if (body.name != null) patch.name = String(body.name).trim()
   if (typeof body?.isActive === 'boolean') patch.isActive = body.isActive
   patch.updatedAt = new Date()
 
   const errors: Record<string, string> = {}
 
-  if (patch.code != null && !isNonEmptyString(patch.code)) errors.code = 'Code is required'
   if (patch.name != null && !isNonEmptyString(patch.name, 2)) errors.name = 'Name must be at least 2 characters'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
-
-  if (patch.code != null) {
-    const duplicate = await findDuplicateCorporateCode(db, tenantIdObj, patch.code, new ObjectId(id))
-
-    if (duplicate) {
-      return NextResponse.json(DUPLICATE_CORPORATE_CODE_ERROR, { status: 409 })
-    }
-
-    patch.codeNormalized = normalizeCorporateCode(patch.code)
-  }
 
   try {
     const userScopedFilter =

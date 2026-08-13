@@ -78,6 +78,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const data = {
     id: String((row as any)._id),
+    code: (row as any).code ? String((row as any).code) : null,
     name: String((row as any).name || ''),
     description: (row as any).description ?? null,
     isActive: Boolean((row as any).isActive),
@@ -101,6 +102,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const { db, tenantIdObj, userId, role, isSuperAdmin } = context
   const body = await request.json().catch(() => ({}))
+
+  if (body.code != null) {
+    return NextResponse.json(
+      { error: 'validation_error', details: { code: 'Loan type code is auto-generated and cannot be changed' } },
+      { status: 400 }
+    )
+  }
 
   const patch: any = {}
 

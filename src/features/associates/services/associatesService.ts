@@ -9,6 +9,7 @@ export type CreateAssociateInput = {
   email?: string | null
   payout?: number | null
   pan?: string | null
+  remarks?: string | null
   isActive: boolean
 }
 
@@ -27,6 +28,26 @@ export async function getAssociates(params: GetAssociatesParams = {}) {
   const data = await res.json()
 
   return (data?.associates ?? []) as any
+}
+
+export async function previewAssociateCode(params: { associateName: string; companyName: string }) {
+  const res = await fetch('/api/associates/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview associate code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
 }
 
 export async function createAssociate(body: CreateAssociateInput) {

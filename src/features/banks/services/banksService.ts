@@ -1,7 +1,6 @@
 export type GetBanksParams = { q?: string }
 
 export type CreateBankInput = {
-  code: string
   name: string
   description?: string | null
 }
@@ -21,6 +20,26 @@ export async function getBanks(params: GetBanksParams = {}) {
   const data = await res.json()
 
   return (data?.banks ?? []) as any
+}
+
+export async function previewBankCode(name: string) {
+  const res = await fetch('/api/banks/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview bank code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
 }
 
 export async function createBank(body: CreateBankInput) {

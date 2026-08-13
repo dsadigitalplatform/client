@@ -8,6 +8,7 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
+import { generateAdvocateBusinessCode } from '@features/advocates/server/advocateCode.server'
 
 function isValidEmail(v: unknown) {
   return typeof v === 'string' && /^.+@.+\..+$/.test(v)
@@ -62,7 +63,8 @@ export async function GET(request: Request) {
       { name: { $regex: safe, $options: 'i' } },
       { email: { $regex: safe, $options: 'i' } },
       { mobile: { $regex: safe } },
-      { address: { $regex: safe, $options: 'i' } }
+      { address: { $regex: safe, $options: 'i' } },
+      { code: { $regex: safe, $options: 'i' } }
     ]
   }
 
@@ -70,6 +72,7 @@ export async function GET(request: Request) {
     .collection('advocates')
     .find(baseFilter, {
       projection: {
+        code: 1,
         name: 1,
         countryCode: 1,
         mobile: 1,
@@ -84,6 +87,7 @@ export async function GET(request: Request) {
 
   const advocates = rows.map(r => ({
     id: String((r as any)._id),
+    code: (r as any).code ? String((r as any).code) : null,
     name: String((r as any).name || ''),
     countryCode: isValidCountryCode((r as any).countryCode) ? String((r as any).countryCode) : '+91',
     mobile: String((r as any).mobile || ''),
@@ -148,11 +152,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
   }
 
+  const code = await generateAdvocateBusinessCode({
+    db,
+    tenantId: tenantIdObj,
+    name
+  })
+
   const now = new Date()
 
   const doc: any = {
     tenantId: tenantIdObj,
     name,
+    code,
     countryCode,
     mobile,
     email,
@@ -165,9 +176,18 @@ export async function POST(request: Request) {
   try {
     const res = await db.collection('advocates').insertOne(doc)
 
-    return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+    return NextResponse.json({ id: res.insertedId.toHexString(), code }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
+      const key = err?.keyPattern ? Object.keys(err.keyPattern)[0] : null
+
+      if (key === 'code') {
+        return NextResponse.json(
+          { error: 'duplicate_code', message: 'Generated advocate code already exists', details: { code: 'Code already in use' } },
+          { status: 409 }
+        )
+      }
+
       return NextResponse.json({ error: 'duplicate_record', message: 'Advocate with this mobile already exists' }, { status: 409 })
     }
 

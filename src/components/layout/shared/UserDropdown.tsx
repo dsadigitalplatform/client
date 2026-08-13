@@ -49,6 +49,7 @@ type UserInfo = {
 type TenantInfo = {
   tenantName?: string
   role?: 'OWNER' | 'ADMIN' | 'USER'
+  subscriptionPlanName?: string
 }
 
 type ImpersonationUser = {
@@ -129,29 +130,44 @@ const UserDropdown = ({
           const currentId: string | undefined = s?.currentTenantId
           const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
           const name: string | undefined = s?.tenantName
+          const subscriptionPlanName: string | undefined = s?.subscriptionPlan?.name
 
           if (currentId && (role || name)) {
-            setResolvedTenant({ tenantName: name, role })
+            setResolvedTenant({ tenantName: name, role, subscriptionPlanName })
 
             return
           }
 
           const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
           const t = await tRes.json().catch(() => ({}))
-          const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+          const items: Array<{
+            _id: string
+            name: string
+            role: 'OWNER' | 'ADMIN' | 'USER'
+            subscriptionPlan?: { name?: string } | null
+          }> = t?.tenants || []
 
           if (currentId) {
             const m = items.find(i => i._id === currentId)
 
             if (m) {
-              setResolvedTenant({ tenantName: m.name, role: m.role })
+              setResolvedTenant({
+                tenantName: m.name,
+                role: m.role,
+                subscriptionPlanName: m.subscriptionPlan?.name
+              })
 
               return
             }
           }
 
           if (items.length === 1) {
-            setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+            setResolvedTenant({
+              tenantName: items[0]?.name,
+              role: items[0]?.role,
+              subscriptionPlanName: items[0]?.subscriptionPlan?.name
+            })
           }
         } catch { }
       })()
@@ -297,7 +313,7 @@ const UserDropdown = ({
   }, [isDemoMode])
 
   useEffect(() => {
-    if (tenant?.tenantName || tenant?.role) {
+    if (tenant?.tenantName || tenant?.role || tenant?.subscriptionPlanName) {
       setResolvedTenant(tenant)
 
       return
@@ -310,29 +326,44 @@ const UserDropdown = ({
         const currentId: string | undefined = s?.currentTenantId
         const role: 'OWNER' | 'ADMIN' | 'USER' | undefined = s?.role
         const name: string | undefined = s?.tenantName
+        const subscriptionPlanName: string | undefined = s?.subscriptionPlan?.name
 
         if (currentId && (role || name)) {
-          setResolvedTenant({ tenantName: name, role })
+          setResolvedTenant({ tenantName: name, role, subscriptionPlanName })
 
           return
         }
 
         const tRes = await fetch('/api/tenants/by-user', { cache: 'no-store' })
         const t = await tRes.json().catch(() => ({}))
-        const items: Array<{ _id: string; name: string; role: 'OWNER' | 'ADMIN' | 'USER' }> = t?.tenants || []
+
+        const items: Array<{
+          _id: string
+          name: string
+          role: 'OWNER' | 'ADMIN' | 'USER'
+          subscriptionPlan?: { name?: string } | null
+        }> = t?.tenants || []
 
         if (currentId) {
           const m = items.find(i => i._id === currentId)
 
           if (m) {
-            setResolvedTenant({ tenantName: m.name, role: m.role })
+            setResolvedTenant({
+              tenantName: m.name,
+              role: m.role,
+              subscriptionPlanName: m.subscriptionPlan?.name
+            })
 
             return
           }
         }
 
         if (items.length === 1) {
-          setResolvedTenant({ tenantName: items[0]?.name, role: items[0]?.role })
+          setResolvedTenant({
+            tenantName: items[0]?.name,
+            role: items[0]?.role,
+            subscriptionPlanName: items[0]?.subscriptionPlan?.name
+          })
         }
       } catch {
         // ignore
@@ -341,7 +372,7 @@ const UserDropdown = ({
 
     resolve()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant?.tenantName, tenant?.role])
+  }, [tenant?.tenantName, tenant?.role, tenant?.subscriptionPlanName])
 
   const openSwitchDialog = () => {
     setOpen(false)
@@ -404,6 +435,9 @@ const UserDropdown = ({
                         <Typography color='text.primary'>{resolvedTenant?.tenantName ?? '—'}</Typography>
                         <Typography variant='caption' color='text.secondary'>
                           Role: {isSuperAdmin ? 'Super Admin' : roleLabel(resolvedTenant?.role)}
+                        </Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          Plan: {resolvedTenant?.subscriptionPlanName || 'No plan'}
                         </Typography>
                       </div>,
                       <Divider key='org-divider' className='mlb-1' />

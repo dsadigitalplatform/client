@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { generateLoanTypeBusinessCode } from '@features/loan-types/server/loanTypeCode.server'
 
 function isNonEmptyString(v: unknown, min = 2) {
   return typeof v === 'string' && v.trim().length >= min
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
   if (q && q.trim().length > 0) {
     const safe = q.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 
-    baseFilter.$or = [{ name: { $regex: safe, $options: 'i' } }]
+    baseFilter.$or = [{ name: { $regex: safe, $options: 'i' } }, { code: { $regex: safe, $options: 'i' } }]
   }
 
   const rows = await db
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
       },
       {
         $project: {
+          code: 1,
           name: 1,
           description: 1,
           isActive: 1,
@@ -107,6 +109,7 @@ export async function GET(request: Request) {
 
   const loanTypes = rows.map(r => ({
     id: String((r as any)._id),
+    code: (r as any).code ? String((r as any).code) : null,
     name: String((r as any).name || ''),
     description: (r as any).description ?? null,
     isActive: Boolean((r as any).isActive),
@@ -172,6 +175,12 @@ export async function POST(request: Request) {
   if (!isNonEmptyString(name)) errors.name = 'Name is required'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
+  const code = await generateLoanTypeBusinessCode({
+    db,
+    tenantId: tenantIdObj,
+    name
+  })
+
   const safeName = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
 
   const existing = await db
@@ -186,6 +195,7 @@ export async function POST(request: Request) {
 
   const doc: any = {
     tenantId: tenantIdObj,
+    code,
     name,
     description,
     isActive,
@@ -197,9 +207,18 @@ export async function POST(request: Request) {
   try {
     const res = await db.collection('loanTypes').insertOne(doc)
 
-    return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+    return NextResponse.json({ id: res.insertedId.toHexString(), code }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
+      const key = err?.keyPattern ? Object.keys(err.keyPattern)[0] : null
+
+      if (key === 'code') {
+        return NextResponse.json(
+          { error: 'duplicate_code', message: 'Generated loan type code already exists', details: { code: 'Code already in use' } },
+          { status: 409 }
+        )
+      }
+
       return NextResponse.json({ error: 'duplicate_name', message: 'Name already exists for this tenant' }, { status: 409 })
     }
 

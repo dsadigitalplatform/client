@@ -20,8 +20,8 @@ import LinearProgress from '@mui/material/LinearProgress'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createAdvocate } from '@features/advocates/services/advocatesService'
 import CountryCodeField from '@/components/CountryCodeField'
+import { createAdvocate, previewAdvocateCode } from '@features/advocates/services/advocatesService'
 import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
 import {
   isValidMobileDigits,
@@ -35,6 +35,7 @@ type Props = {
   showTitle?: boolean
   variant?: 'card' | 'plain'
   initialValues?: Partial<{
+    code: string | null
     name: string
     mobile: string
     countryCode: string
@@ -62,6 +63,7 @@ const AdvocatesCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const isEditMode = Boolean(initialValues)
 
   const [name, setName] = useState('')
   const [countryCode, setCountryCode] = useState('+91')
@@ -73,6 +75,9 @@ const AdvocatesCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
 
   useEffect(() => {
     if (!initialValues) {
@@ -92,6 +97,38 @@ const AdvocatesCreateForm = ({
     if (initialValues.address !== undefined) setAddress(initialValues.address || '')
   }, [initialValues])
 
+  useEffect(() => {
+    if (isEditMode) return
+
+    const trimmed = name.trim()
+
+    if (trimmed.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewAdvocateCode(trimmed)
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [isEditMode, name])
+
   const isValidMobile = isValidMobileDigits
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
 
@@ -100,6 +137,8 @@ const AdvocatesCreateForm = ({
     isValidCountryCode(countryCode) &&
     isValidMobile(mobile) &&
     isValidEmail(email)
+
+  const displayedCode = isEditMode ? initialValues?.code || '' : createdCode || codePreview || ''
 
   const handleMobile = (v: string) => {
     setMobile(normalizeMobileDigits(v))
@@ -135,7 +174,9 @@ const AdvocatesCreateForm = ({
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
-        await createAdvocate(payload)
+        const res = await createAdvocate(payload)
+
+        setCreatedCode(res?.code ? String(res.code) : null)
       }
 
       if (onSuccess) onSuccess()
@@ -148,11 +189,16 @@ const AdvocatesCreateForm = ({
         return
       }
 
-      setName('')
-      setCountryCode('+91')
-      setMobile('')
-      setEmail('')
-      setAddress('')
+      if (!initialValues) {
+        setName('')
+        setCountryCode('+91')
+        setMobile('')
+        setEmail('')
+        setAddress('')
+        setCreatedCode(null)
+        setCodePreview(null)
+      }
+
       setFieldErrors({})
       setError(null)
     } catch (e: any) {
@@ -171,13 +217,29 @@ const AdvocatesCreateForm = ({
           {error}
         </Alert>
       ) : null}
+      {!isEditMode && createdCode ? (
+        <Alert severity='success'>
+          Advocate created with code <strong>{createdCode}</strong>
+        </Alert>
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {!isEditMode ? (
+          <Alert severity='info' icon={false} sx={{ py: 1 }}>
+            {previewLoading
+              ? 'Generating code preview...'
+              : displayedCode
+                ? `Next code preview: ${displayedCode}`
+                : 'A unique advocate code will be generated from your code generation template.'}
+          </Alert>
+        ) : (
+          <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+        )}
         <TextField
           label='Name'
           value={name}
           onChange={e => setName(e.target.value)}
           error={Boolean(fieldErrors.name)}
-          helperText={fieldErrors.name}
+          helperText={fieldErrors.name || 'Used by {INITIALS} in code templates'}
           fullWidth
         />
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>

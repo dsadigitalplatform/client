@@ -151,7 +151,27 @@ const tenantsValidator = {
       createdBy: { bsonType: 'objectId' },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
-      subscriptionPlanId: { bsonType: 'objectId' }
+      subscriptionPlanId: { bsonType: 'objectId' },
+      /* Billing / GST buyer profile (used on tax invoices) */
+      legalName: { bsonType: ['string', 'null'] },
+      gstin: { bsonType: ['string', 'null'] },
+      pan: { bsonType: ['string', 'null'] },
+      billingEmail: { bsonType: ['string', 'null'] },
+      billingPhone: { bsonType: ['string', 'null'] },
+      billingAddress: {
+        bsonType: ['object', 'null'],
+        properties: {
+          line1: { bsonType: 'string' },
+          line2: { bsonType: ['string', 'null'] },
+          city: { bsonType: 'string' },
+          state: { bsonType: 'string' },
+          stateCode: { bsonType: 'string' },
+          pincode: { bsonType: 'string' },
+          country: { bsonType: 'string' }
+        },
+        additionalProperties: true
+      },
+      placeOfSupplyStateCode: { bsonType: ['string', 'null'] }
     },
     additionalProperties: true
   }
@@ -259,6 +279,21 @@ const subscriptionPlansValidator = {
       currency: { bsonType: 'string' },
       maxUsers: { bsonType: 'int' },
       features: { bsonType: 'object' },
+      entitlements: {
+        bsonType: 'object',
+        properties: {
+          limits: { bsonType: 'object' },
+          modules: { bsonType: 'object' }
+        }
+      },
+      trialDays: { bsonType: 'int' },
+      trialEnabled: { bsonType: 'bool' },
+      entitlementsVersion: { bsonType: 'int' },
+      /* Canonical amounts in paise (preferred); priceMonthly/Yearly kept for display/compat */
+      priceMonthlyPaise: { bsonType: ['long', 'int', 'double', 'null'] },
+      priceYearlyPaise: { bsonType: ['long', 'int', 'double', 'null'] },
+      razorpayPlanIdMonthly: { bsonType: ['string', 'null'] },
+      razorpayPlanIdYearly: { bsonType: ['string', 'null'] },
       isActive: { bsonType: 'bool' },
       isDefault: { bsonType: 'bool' },
       createdAt: { bsonType: 'date' },
@@ -271,6 +306,299 @@ const subscriptionPlansValidator = {
 ensureCollection('subscriptionPlans', subscriptionPlansValidator)
 ensureIndex('subscriptionPlans', { name: 1 }, { unique: true, name: 'uniq_subscriptionplan_name' })
 ensureIndex('subscriptionPlans', { slug: 1 }, { unique: true, name: 'uniq_subscriptionplan_slug' })
+
+/* =========================
+   tenantSubscriptions
+   Live billing state per organisation (trial / active / renewals).
+   Payment provider fields are placeholders until payments ship.
+   ========================= */
+const tenantSubscriptionsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'planId',
+      'status',
+      'billingInterval',
+      'renewalMode',
+      'currentPeriodStart',
+      'currentPeriodEnd',
+      'billingContactUserId',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      planId: { bsonType: 'objectId' },
+      status: { enum: ['trialing', 'active', 'past_due', 'canceled', 'expired', 'incomplete'] },
+      billingInterval: { enum: ['monthly', 'yearly'] },
+      renewalMode: { enum: ['auto', 'manual'] },
+      trialStartsAt: { bsonType: ['date', 'null'] },
+      trialEndsAt: { bsonType: ['date', 'null'] },
+      currentPeriodStart: { bsonType: 'date' },
+      currentPeriodEnd: { bsonType: 'date' },
+      cancelAtPeriodEnd: { bsonType: 'bool' },
+      canceledAt: { bsonType: ['date', 'null'] },
+      pendingPlanId: { bsonType: ['objectId', 'null'] },
+      pendingBillingInterval: { bsonType: ['string', 'null'] },
+      pendingChangeEffectiveAt: { bsonType: ['date', 'null'] },
+      pendingChangeKind: { bsonType: ['string', 'null'] },
+      entitlementsSnapshot: { bsonType: ['object', 'null'] },
+      entitlementsVersion: { bsonType: ['int', 'null'] },
+      billingContactUserId: { bsonType: 'objectId' },
+      billingContactNominatedBy: { bsonType: ['objectId', 'null'] },
+      discountCodeId: { bsonType: ['objectId', 'null'] },
+      discountSnapshot: { bsonType: ['object', 'null'] },
+      paymentProvider: { bsonType: ['string', 'null'] },
+      externalCustomerId: { bsonType: ['string', 'null'] },
+      externalSubscriptionId: { bsonType: ['string', 'null'] },
+      externalPlanId: { bsonType: ['string', 'null'] },
+      externalSubscriptionStatus: { bsonType: ['string', 'null'] },
+      defaultPaymentMethodLabel: { bsonType: ['string', 'null'] },
+      lastPaymentStatus: { enum: ['none', 'pending', 'succeeded', 'failed'] },
+      lastPaymentMethod: { bsonType: ['string', 'null'] },
+      lastPaymentNote: { bsonType: ['string', 'null'] },
+      lastPaymentAt: { bsonType: ['date', 'null'] },
+      lastPaymentRecordedBy: { bsonType: ['objectId', 'null'] },
+      reminderDaysBeforeDue: { bsonType: 'array' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('tenantSubscriptions', tenantSubscriptionsValidator)
+ensureIndex('tenantSubscriptions', { tenantId: 1, status: 1 }, { name: 'idx_tenantSubscriptions_tenant_status' })
+ensureIndex('tenantSubscriptions', { planId: 1 }, { name: 'idx_tenantSubscriptions_plan' })
+ensureIndex('tenantSubscriptions', { currentPeriodEnd: 1 }, { name: 'idx_tenantSubscriptions_period_end' })
+ensureIndex('tenantSubscriptions', { externalSubscriptionId: 1 }, { name: 'idx_tenantSubscriptions_ext_sub', sparse: true })
+
+/* =========================
+   billingCustomers
+   Provider customer mapping (Razorpay cust_… per tenant).
+   ========================= */
+const billingCustomersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'provider', 'createdAt', 'updatedAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      provider: { enum: ['stripe', 'razorpay', 'manual'] },
+      externalCustomerId: { bsonType: ['string', 'null'] },
+      email: { bsonType: ['string', 'null'] },
+      contact: { bsonType: ['string', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('billingCustomers', billingCustomersValidator)
+ensureIndex('billingCustomers', { tenantId: 1 }, { unique: true, name: 'uniq_billingCustomers_tenant' })
+ensureIndex(
+  'billingCustomers',
+  { provider: 1, externalCustomerId: 1 },
+  { name: 'idx_billingCustomers_provider_ext', sparse: true }
+)
+
+/* =========================
+   invoiceCounters
+   Atomic fiscal-year invoice number sequences.
+   ========================= */
+const invoiceCountersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['fiscalYear', 'prefix', 'seq'],
+    properties: {
+      fiscalYear: { bsonType: 'string' },
+      prefix: { bsonType: 'string' },
+      seq: { bsonType: ['int', 'long', 'double'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('invoiceCounters', invoiceCountersValidator)
+ensureIndex('invoiceCounters', { fiscalYear: 1, prefix: 1 }, { unique: true, name: 'uniq_invoiceCounters_fy_prefix' })
+
+/* =========================
+   invoices
+   GST tax invoices (immutable once paid/void).
+   ========================= */
+const invoicesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'tenantId',
+      'invoiceNumber',
+      'fiscalYear',
+      'status',
+      'currency',
+      'subtotalPaise',
+      'taxablePaise',
+      'totalPaise',
+      'taxType',
+      'sellerSnapshot',
+      'buyerSnapshot',
+      'lineItems',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      subscriptionId: { bsonType: ['objectId', 'null'] },
+      invoiceNumber: { bsonType: 'string' },
+      fiscalYear: { bsonType: 'string' },
+      status: { enum: ['draft', 'open', 'paid', 'void', 'uncollectible'] },
+      currency: { bsonType: 'string' },
+      subtotalPaise: { bsonType: ['long', 'int', 'double'] },
+      discountPaise: { bsonType: ['long', 'int', 'double'] },
+      taxablePaise: { bsonType: ['long', 'int', 'double'] },
+      cgstPaise: { bsonType: ['long', 'int', 'double'] },
+      sgstPaise: { bsonType: ['long', 'int', 'double'] },
+      igstPaise: { bsonType: ['long', 'int', 'double'] },
+      totalPaise: { bsonType: ['long', 'int', 'double'] },
+      taxRateBps: { bsonType: ['int', 'long', 'double'] },
+      taxType: { enum: ['intra', 'inter'] },
+      sellerSnapshot: { bsonType: 'object' },
+      buyerSnapshot: { bsonType: 'object' },
+      lineItems: { bsonType: 'array' },
+      discountSnapshot: { bsonType: ['object', 'null'] },
+      issuedAt: { bsonType: ['date', 'null'] },
+      dueAt: { bsonType: ['date', 'null'] },
+      paidAt: { bsonType: ['date', 'null'] },
+      voidedAt: { bsonType: ['date', 'null'] },
+      pdfUrl: { bsonType: ['string', 'null'] },
+      pdfStorageKey: { bsonType: ['string', 'null'] },
+      emailStatus: { enum: ['pending', 'sent', 'failed', 'skipped'] },
+      emailSentAt: { bsonType: ['date', 'null'] },
+      emailError: { bsonType: ['string', 'null'] },
+      provider: { enum: ['stripe', 'razorpay', 'manual'] },
+      externalPaymentId: { bsonType: ['string', 'null'] },
+      externalOrderId: { bsonType: ['string', 'null'] },
+      irn: { bsonType: ['string', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('invoices', invoicesValidator)
+ensureIndex('invoices', { invoiceNumber: 1 }, { unique: true, name: 'uniq_invoices_number' })
+ensureIndex('invoices', { tenantId: 1, issuedAt: -1 }, { name: 'idx_invoices_tenant_issued' })
+ensureIndex('invoices', { tenantId: 1, status: 1 }, { name: 'idx_invoices_tenant_status' })
+ensureIndex('invoices', { externalPaymentId: 1 }, { name: 'idx_invoices_ext_payment', sparse: true })
+
+/* =========================
+   payments
+   Money movement ledger (Razorpay + manual).
+   ========================= */
+const paymentsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'provider', 'amountPaise', 'currency', 'status', 'createdAt', 'updatedAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      subscriptionId: { bsonType: ['objectId', 'null'] },
+      invoiceId: { bsonType: ['objectId', 'null'] },
+      provider: { enum: ['stripe', 'razorpay', 'manual'] },
+      externalPaymentId: { bsonType: ['string', 'null'] },
+      externalOrderId: { bsonType: ['string', 'null'] },
+      externalInvoiceId: { bsonType: ['string', 'null'] },
+      amountPaise: { bsonType: ['long', 'int', 'double'] },
+      currency: { bsonType: 'string' },
+      status: {
+        enum: ['created', 'authorized', 'captured', 'failed', 'refunded', 'partial_refund']
+      },
+      method: { bsonType: ['string', 'null'] },
+      failureCode: { bsonType: ['string', 'null'] },
+      failureMessage: { bsonType: ['string', 'null'] },
+      recordedBy: { bsonType: ['objectId', 'null'] },
+      note: { bsonType: ['string', 'null'] },
+      rawProviderPayload: { bsonType: ['object', 'null'] },
+      paidAt: { bsonType: ['date', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('payments', paymentsValidator)
+ensureIndex(
+  'payments',
+  { externalPaymentId: 1 },
+  { unique: true, sparse: true, name: 'uniq_payments_ext_payment' }
+)
+ensureIndex('payments', { invoiceId: 1 }, { name: 'idx_payments_invoice' })
+ensureIndex('payments', { tenantId: 1, createdAt: -1 }, { name: 'idx_payments_tenant_created' })
+ensureIndex('payments', { externalOrderId: 1 }, { name: 'idx_payments_ext_order', sparse: true })
+
+/* =========================
+   webhookEvents
+   Idempotent provider webhook intake.
+   ========================= */
+const webhookEventsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['provider', 'eventId', 'eventType', 'status', 'createdAt'],
+    properties: {
+      provider: { enum: ['stripe', 'razorpay'] },
+      eventId: { bsonType: 'string' },
+      eventType: { bsonType: 'string' },
+      payload: { bsonType: 'object' },
+      status: { enum: ['received', 'processed', 'ignored', 'failed'] },
+      errorMessage: { bsonType: ['string', 'null'] },
+      processedAt: { bsonType: ['date', 'null'] },
+      createdAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('webhookEvents', webhookEventsValidator)
+ensureIndex('webhookEvents', { eventId: 1 }, { unique: true, name: 'uniq_webhookEvents_eventId' })
+ensureIndex('webhookEvents', { provider: 1, createdAt: -1 }, { name: 'idx_webhookEvents_provider_created' })
+
+/* =========================
+   discountCodes
+   Super-admin promo codes: global, plan-scoped, or tenant-scoped.
+   ========================= */
+const discountCodesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['code', 'name', 'type', 'value', 'scope', 'validFrom', 'validTo', 'isActive', 'createdBy', 'createdAt', 'updatedAt'],
+    properties: {
+      code: { bsonType: 'string' },
+      name: { bsonType: 'string' },
+      description: { bsonType: 'string' },
+      type: { enum: ['percent', 'fixed'] },
+      value: { bsonType: ['double', 'int'] },
+      currency: { bsonType: ['string', 'null'] },
+      scope: { enum: ['global', 'plan', 'tenant'] },
+      planIds: { bsonType: 'array' },
+      tenantIds: { bsonType: 'array' },
+      validFrom: { bsonType: 'date' },
+      validTo: { bsonType: 'date' },
+      maxRedemptions: { bsonType: ['int', 'null'] },
+      redemptionCount: { bsonType: 'int' },
+      duration: { enum: ['once', 'repeating', 'forever'] },
+      durationMonths: { bsonType: ['int', 'null'] },
+      isActive: { bsonType: 'bool' },
+      createdBy: { bsonType: 'objectId' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('discountCodes', discountCodesValidator)
+ensureIndex('discountCodes', { code: 1 }, { unique: true, name: 'uniq_discount_code' })
+ensureIndex('discountCodes', { isActive: 1, validTo: 1 }, { name: 'idx_discount_active_validity' })
 
 const customersValidator = {
   $jsonSchema: {
@@ -306,6 +634,7 @@ const customersValidator = {
       monthlyIncome: { bsonType: ['number', 'null'], minimum: 0 },
       cibilScore: { bsonType: ['int', 'null'], minimum: 300, maximum: 900 },
       source: { enum: ['WALK_IN', 'REFERRAL', 'ONLINE', 'SOCIAL_MEDIA', 'OTHER'] },
+      code: { bsonType: 'string', minLength: 3 },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: ['date', 'null'] }
@@ -318,6 +647,11 @@ ensureCollection('customers', customersValidator)
 dropUniqueIndexesOnFields('customers', ['fullName'])
 ensureIndex('customers', { tenantId: 1 }, { name: 'idx_tenantId' })
 ensureIndex('customers', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_mobile' })
+ensureIndex(
+  'customers',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_tenant_customer_code' }
+)
 
 const associatesValidator = {
   $jsonSchema: {
@@ -334,6 +668,7 @@ const associatesValidator = {
       payout: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
       code: { bsonType: 'string', minLength: 3 },
       pan: { bsonType: ['string', 'null'], pattern: '^[A-Z]{5}[0-9]{4}[A-Z]{1}$' },
+      remarks: { bsonType: ['string', 'null'], maxLength: 500 },
       isActive: { bsonType: 'bool' },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
@@ -360,6 +695,7 @@ const advocatesValidator = {
       mobile: { bsonType: 'string', pattern: '^[0-9]{8,10}$' },
       email: { bsonType: ['string', 'null'], pattern: '^.+@.+\\..+$' },
       address: { bsonType: ['string', 'null'] },
+      code: { bsonType: 'string', minLength: 3 },
       createdBy: { bsonType: ['objectId', 'null'] },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: ['date', 'null'] }
@@ -371,6 +707,11 @@ const advocatesValidator = {
 ensureCollection('advocates', advocatesValidator)
 ensureIndex('advocates', { tenantId: 1 }, { name: 'idx_advocates_tenantId' })
 ensureIndex('advocates', { tenantId: 1, mobile: 1 }, { unique: true, name: 'uniq_tenant_advocate_mobile' })
+ensureIndex(
+  'advocates',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_tenant_advocate_code' }
+)
 
 const banksValidator = {
   $jsonSchema: {
@@ -542,9 +883,14 @@ const loanCasesValidator = {
       loanTypeId: { bsonType: 'objectId' },
       stageId: { bsonType: 'objectId' },
       bankName: { bsonType: ['string', 'null'] },
+      bankId: { bsonType: ['objectId', 'null'] },
+      bankCode: { bsonType: ['string', 'null'], maxLength: 32 },
+      code: { bsonType: ['string', 'null'], maxLength: 64 },
+      codePrevious: { bsonType: ['string', 'null'], maxLength: 64 },
+      codeUpdatedAt: { bsonType: ['date', 'null'] },
       requestedAmount: { bsonType: ['number', 'null'], minimum: 0 },
       approvedAmount: { bsonType: ['number', 'null'], minimum: 0 },
-      eligibleAmount: { bsonType: ['number', 'null'], minimum: 0 },
+      loanAccount: { bsonType: ['string', 'null'], maxLength: 20 },
       interestRate: { bsonType: ['number', 'null'], minimum: 0 },
       tenureMonths: { bsonType: ['number', 'null'], minimum: 0, multipleOf: 1 },
       emi: { bsonType: ['number', 'null'], minimum: 0 },
@@ -601,6 +947,71 @@ ensureIndex('loanCases', { tenantId: 1, loanTypeId: 1 }, { name: 'idx_loanCases_
 ensureIndex('loanCases', { tenantId: 1, stageId: 1 }, { name: 'idx_loanCases_tenantId_stageId' })
 ensureIndex('loanCases', { tenantId: 1, createdBy: 1 }, { name: 'idx_loanCases_tenantId_createdBy' })
 ensureIndex('loanCases', { tenantId: 1, assignedAgentId: 1 }, { name: 'idx_loanCases_tenantId_assignedAgentId' })
+ensureIndex(
+  'loanCases',
+  { tenantId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'uniq_loanCases_tenantId_code' }
+)
+
+/* =========================
+   codeGenerationConfigs
+   Tenant-scoped business code templates per entity type.
+   ========================= */
+const codeGenerationConfigsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'entityType', 'isEnabled', 'template', 'prefix', 'sequencePadLength', 'updatedAt'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      entityType: {
+        enum: ['LEAD', 'CUSTOMER', 'BANK', 'ASSOCIATE', 'CORPORATE', 'LOAN_TYPE', 'ADVOCATE']
+      },
+      isEnabled: { bsonType: 'bool' },
+      template: { bsonType: 'string', maxLength: 80 },
+      prefix: { bsonType: 'string', minLength: 1, maxLength: 8 },
+      sequencePadLength: { bsonType: 'number', minimum: 1, maximum: 8 },
+      updatedBy: { bsonType: ['objectId', 'null'] },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('codeGenerationConfigs', codeGenerationConfigsValidator)
+ensureIndex(
+  'codeGenerationConfigs',
+  { tenantId: 1, entityType: 1 },
+  { unique: true, name: 'uniq_codeGenerationConfigs_tenant_entity' }
+)
+
+/* =========================
+   codeSequences
+   Atomic counters for business code SEQ tokens.
+   ========================= */
+const codeSequencesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['tenantId', 'entityType', 'scopeKey', 'nextValue'],
+    properties: {
+      tenantId: { bsonType: 'objectId' },
+      entityType: {
+        enum: ['LEAD', 'CUSTOMER', 'BANK', 'ASSOCIATE', 'CORPORATE', 'LOAN_TYPE', 'ADVOCATE']
+      },
+      scopeKey: { bsonType: 'string' },
+      nextValue: { bsonType: 'number', minimum: 0 },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('codeSequences', codeSequencesValidator)
+ensureIndex(
+  'codeSequences',
+  { tenantId: 1, entityType: 1, scopeKey: 1 },
+  { unique: true, name: 'uniq_codeSequences_tenant_entity_scope' }
+)
 
 /* =========================
    appointments
@@ -723,6 +1134,160 @@ ensureIndex('loanDisbursements', { tenantId: 1 }, { name: 'idx_loanDisbursements
 ensureIndex('loanDisbursements', { trackerId: 1, disbursedDate: -1 }, { name: 'idx_loanDisbursements_tracker_date' })
 ensureIndex('loanDisbursements', { leadId: 1 }, { name: 'idx_loanDisbursements_leadId' })
 
+/* =========================
+   Referral program
+   Platform-wide refer-a-DSA credits, invites, and withdrawals.
+   ========================= */
+const referralProgramSettingsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['_id', 'commissionPercent', 'headline', 'subheadline', 'benefits', 'termsHtml', 'ctaLabel', 'updatedAt'],
+    properties: {
+      _id: { bsonType: 'string' },
+      commissionPercent: { bsonType: 'number', minimum: 0, maximum: 100 },
+      headline: { bsonType: 'string' },
+      subheadline: { bsonType: 'string' },
+      benefits: {
+        bsonType: 'array',
+        items: { bsonType: 'string' }
+      },
+      termsHtml: { bsonType: 'string' },
+      ctaLabel: { bsonType: 'string' },
+      updatedAt: { bsonType: 'date' },
+      updatedByUserId: { bsonType: ['objectId', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralProgramSettings', referralProgramSettingsValidator)
+
+const referralInvitesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'referrerUserId',
+      'inviteeEmail',
+      'inviteeMobile',
+      'token',
+      'status',
+      'commissionCancelled',
+      'createdAt',
+      'updatedAt'
+    ],
+    properties: {
+      referrerUserId: { bsonType: 'objectId' },
+      referrerTenantId: { bsonType: ['objectId', 'null'] },
+      inviteeName: { bsonType: ['string', 'null'] },
+      inviteeEmail: { bsonType: 'string' },
+      inviteeMobile: { bsonType: 'string' },
+      token: { bsonType: 'string' },
+      status: { enum: ['invited', 'onboarded', 'subscribed', 'paid', 'cancelled'] },
+      referredTenantId: { bsonType: ['objectId', 'null'] },
+      onboardedAt: { bsonType: ['date', 'null'] },
+      subscribedAt: { bsonType: ['date', 'null'] },
+      lastCreditedAt: { bsonType: ['date', 'null'] },
+      commissionPercentOverride: { bsonType: ['number', 'null'], minimum: 0, maximum: 100 },
+      commissionCancelled: { bsonType: 'bool' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralInvites', referralInvitesValidator)
+ensureIndex('referralInvites', { token: 1 }, { unique: true, name: 'uniq_referralInvites_token' })
+ensureIndex('referralInvites', { referrerUserId: 1, status: 1 }, { name: 'idx_referralInvites_referrer_status' })
+ensureIndex(
+  'referralInvites',
+  { referredTenantId: 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: 'uniq_referralInvites_referredTenantId',
+    partialFilterExpression: { referredTenantId: { $type: 'objectId' } }
+  }
+)
+ensureIndex('referralInvites', { inviteeEmail: 1 }, { name: 'idx_referralInvites_email' })
+ensureIndex('referralInvites', { inviteeMobile: 1 }, { name: 'idx_referralInvites_mobile' })
+ensureIndex('referralInvites', { createdAt: -1 }, { name: 'idx_referralInvites_createdAt' })
+
+const referralCreditsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'referralInviteId',
+      'referrerUserId',
+      'referredTenantId',
+      'subscriptionAmount',
+      'commissionPercent',
+      'commissionAmount',
+      'status',
+      'createdAt',
+      'createdByUserId'
+    ],
+    properties: {
+      referralInviteId: { bsonType: 'objectId' },
+      referrerUserId: { bsonType: 'objectId' },
+      referredTenantId: { bsonType: 'objectId' },
+      sourceInvoiceId: { bsonType: ['objectId', 'null'] },
+      sourcePaymentNote: { bsonType: ['string', 'null'] },
+      subscriptionAmount: { bsonType: 'number', minimum: 0 },
+      commissionPercent: { bsonType: 'number', minimum: 0, maximum: 100 },
+      commissionAmount: { bsonType: 'number', minimum: 0 },
+      status: { enum: ['available', 'locked', 'withdrawn', 'void'] },
+      withdrawalId: { bsonType: ['objectId', 'null'] },
+      createdAt: { bsonType: 'date' },
+      createdByUserId: { bsonType: 'objectId' }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralCredits', referralCreditsValidator)
+ensureIndex('referralCredits', { referrerUserId: 1, status: 1 }, { name: 'idx_referralCredits_referrer_status' })
+ensureIndex('referralCredits', { referralInviteId: 1 }, { name: 'idx_referralCredits_invite' })
+ensureIndex('referralCredits', { referredTenantId: 1, createdAt: -1 }, { name: 'idx_referralCredits_tenant' })
+ensureIndex('referralCredits', { withdrawalId: 1 }, { name: 'idx_referralCredits_withdrawal' })
+
+const referralWithdrawalsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['referrerUserId', 'creditIds', 'amount', 'payoutDetails', 'status', 'requestedAt'],
+    properties: {
+      referrerUserId: { bsonType: 'objectId' },
+      creditIds: {
+        bsonType: 'array',
+        items: { bsonType: 'objectId' }
+      },
+      amount: { bsonType: 'number', minimum: 0 },
+      payoutDetails: {
+        bsonType: 'object',
+        required: ['method'],
+        properties: {
+          method: { enum: ['upi', 'bank'] },
+          upiId: { bsonType: ['string', 'null'] },
+          accountName: { bsonType: ['string', 'null'] },
+          accountNumber: { bsonType: ['string', 'null'] },
+          ifsc: { bsonType: ['string', 'null'] }
+        },
+        additionalProperties: true
+      },
+      status: { enum: ['requested', 'paid', 'rejected'] },
+      note: { bsonType: ['string', 'null'] },
+      requestedAt: { bsonType: 'date' },
+      resolvedAt: { bsonType: ['date', 'null'] },
+      resolvedByUserId: { bsonType: ['objectId', 'null'] }
+    },
+    additionalProperties: true
+  }
+}
+
+ensureCollection('referralWithdrawals', referralWithdrawalsValidator)
+ensureIndex('referralWithdrawals', { referrerUserId: 1, status: 1 }, { name: 'idx_referralWithdrawals_referrer_status' })
+ensureIndex('referralWithdrawals', { status: 1, requestedAt: -1 }, { name: 'idx_referralWithdrawals_status' })
+
 print('Database initialization complete.')
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -735,7 +1300,7 @@ if (typeof module !== 'undefined' && module.exports) {
       description: { type: String, required: true, trim: true },
       priceMonthly: { type: Number, required: true, min: 0 },
       priceYearly: { type: Number, min: 0 },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: 'INR' },
       maxUsers: { type: Number, required: true, min: 1 },
       features: { type: Map, of: Boolean, default: {} },
       isActive: { type: Boolean, default: true },

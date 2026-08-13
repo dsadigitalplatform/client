@@ -31,6 +31,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
 import AppointmentDetailsDialog from '@features/appointments/components/AppointmentDetailsDialog'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { listAppointments, listAppointmentsByLead } from '@features/appointments/services/appointments'
 import type { AppointmentStatus } from '@features/appointments/appointments.types'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
@@ -103,21 +104,27 @@ function formatTodayInputValue() {
     return `${y}-${m}-${day}`
 }
 
-function formatLeadGroupHeading(leadTitle: string | null | undefined, customerName: string | null | undefined) {
+function formatLeadGroupHeading(
+    leadTitle: string | null | undefined,
+    customerName: string | null | undefined,
+    leadCode?: string | null
+) {
+    const code = String(leadCode || '').trim()
     const title = String(leadTitle || '').trim()
     const customer = String(customerName || '').trim()
     const [loanTypeRaw, bankRaw] = title.split('•').map(v => v.trim())
     const loanType = loanTypeRaw || ''
     const bank = bankRaw || ''
 
-    if (loanType && customer && bank) return `${loanType} for ${customer} @ ${bank}`
-    if (loanType && customer) return `${loanType} for ${customer}`
-    if (customer && bank) return `Loan for ${customer} @ ${bank}`
-    if (loanType && bank) return `${loanType} @ ${bank}`
-    if (loanType) return loanType
-    if (customer) return `Loan for ${customer}`
+    let heading = 'Lead Appointments'
+    if (loanType && customer && bank) heading = `${loanType} for ${customer} @ ${bank}`
+    else if (loanType && customer) heading = `${loanType} for ${customer}`
+    else if (customer && bank) heading = `Loan for ${customer} @ ${bank}`
+    else if (loanType && bank) heading = `${loanType} @ ${bank}`
+    else if (loanType) heading = loanType
+    else if (customer) heading = `Loan for ${customer}`
 
-    return 'Lead Appointments'
+    return code ? `${code} · ${heading}` : heading
 }
 
 function getSortedDescendants(node: AppointmentTreeNode): AppointmentTreeNode[] {
@@ -340,7 +347,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
         const groups = Array.from(leadBuckets.entries()).map(([groupLeadId, groupItems]) => {
             const roots = buildTree(groupItems)
             const previewItem = roots[0]?.item || groupItems[0]
-            const leadLabel = formatLeadGroupHeading(previewItem?.leadTitle, previewItem?.customerName)
+            const leadLabel = formatLeadGroupHeading(previewItem?.leadTitle, previewItem?.customerName, previewItem?.leadCode)
 
             return {
                 leadId: groupLeadId,
@@ -558,7 +565,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                         const sc = statusChip(String(a?.status || 'PENDING'))
                         const isOverdue = isOverdueAppointment(a)
                         const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
-                        const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
+                        const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName, a?.leadCode)
                         const descendants = depth === 0 ? getSortedDescendants(node) : []
                         const hasChildren = depth === 0 && descendants.length > 0
                         const nodeCollapsed = hasChildren && isNodeCollapsed(String(a.id))
@@ -861,7 +868,7 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                     const sc = statusChip(String(a?.status || 'PENDING'))
                                     const isOverdue = isOverdueAppointment(a)
                                     const organizer = a?.organizerName || a?.organizerEmail || 'Unassigned'
-                                    const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName)
+                                    const caseTitle = formatLeadGroupHeading(a?.leadTitle, a?.customerName, a?.leadCode)
                                     const hasChildren = depth === 0 && getSortedDescendants(node).length > 0
                                     const nodeCollapsed = hasChildren && isNodeCollapsed(String(a.id))
 
@@ -1138,12 +1145,11 @@ export default function LeadAppointmentsDashboard({ leadId, embedded = false, re
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        <Typography variant='body2' sx={{ fontWeight: 800 }} noWrap title={a?.customerName || ''}>
-                                            {a?.customerName || 'Customer'}
-                                        </Typography>
-                                        <Typography variant='caption' color='text.secondary' noWrap title={a?.leadTitle || ''}>
-                                            {a?.leadTitle || ''}
-                                        </Typography>
+                                        <LeadIdentity
+                                            customerName={a?.customerName}
+                                            code={a?.leadCode}
+                                            subtitle={a?.leadTitle || undefined}
+                                        />
                                         <Typography variant='body2' sx={{ mt: 0.75 }}>
                                             {formatDateTime(a?.scheduledAt || null)}
                                         </Typography>

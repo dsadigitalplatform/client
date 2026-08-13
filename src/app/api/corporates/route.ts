@@ -7,7 +7,8 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { DUPLICATE_CORPORATE_CODE_ERROR, findDuplicateCorporateCode, normalizeCorporateCode } from './_helpers'
+import { DUPLICATE_CORPORATE_CODE_ERROR, normalizeCorporateCode } from './_helpers'
+import { generateCorporateBusinessCode } from '@features/corporates/server/corporateCode.server'
 
 function isNonEmptyString(v: unknown, min = 1) {
   return typeof v === 'string' && v.trim().length >= min
@@ -136,21 +137,19 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
 
-  const code = typeof body?.code === 'string' ? body.code.trim() : ''
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const isActive = typeof body?.isActive === 'boolean' ? body.isActive : true
 
   const errors: Record<string, string> = {}
 
-  if (!isNonEmptyString(code)) errors.code = 'Code is required'
   if (!isNonEmptyString(name, 2)) errors.name = 'Name must be at least 2 characters'
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
-  const duplicate = await findDuplicateCorporateCode(db, tenantIdObj, code)
-
-  if (duplicate) {
-    return NextResponse.json(DUPLICATE_CORPORATE_CODE_ERROR, { status: 409 })
-  }
+  const code = await generateCorporateBusinessCode({
+    db,
+    tenantId: tenantIdObj,
+    name
+  })
 
   const now = new Date()
 
@@ -168,7 +167,7 @@ export async function POST(request: Request) {
   try {
     const res = await db.collection('corporates').insertOne(doc)
 
-    return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+    return NextResponse.json({ id: res.insertedId.toHexString(), code }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 11000) {
       return NextResponse.json(DUPLICATE_CORPORATE_CODE_ERROR, { status: 409 })

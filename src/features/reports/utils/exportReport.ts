@@ -1,11 +1,13 @@
 import type { ReportExportMeta, ReportQueryResponse } from '../reports.types'
 import type { ReportChartImages } from './captureReportCharts'
 import {
-  buildFlatDetailCsvRows,
   buildFlatDetailHtml,
-  buildGroupedDetailCsvRows,
-  buildGroupedDetailHtml
+  buildFlatDetailSpreadsheetRows,
+  buildGroupedDetailHtml,
+  buildGroupedDetailSpreadsheetRows
 } from './groupedDetailExport'
+import { buildDisbursementSummaryExportRows, toSpreadsheetAmount } from './reportDisbursement'
+import { downloadSpreadsheet, type SpreadsheetCell } from './reportSpreadsheetExport'
 import { chartImagesToHtml } from './reportChartSvg'
 
 const formatINR = (amount: number | null | undefined) => {
@@ -22,10 +24,6 @@ const formatDate = (iso: string | null | undefined) => {
   if (Number.isNaN(d.getTime())) return iso
 
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function escapeCsvCell(value: string) {
-  return `"${String(value).replace(/"/g, '""')}"`
 }
 
 function escapeHtml(value: string | null | undefined) {
@@ -48,20 +46,21 @@ function buildHeaderRows(meta: ReportExportMeta) {
   ]
 }
 
-export function exportReportExcel(data: ReportQueryResponse, meta: ReportExportMeta) {
-  const rows: string[][] = [
+export async function exportReportExcel(data: ReportQueryResponse, meta: ReportExportMeta) {
+  const rows: SpreadsheetCell[][] = [
     ...buildHeaderRows(meta),
     ['Summary'],
     ['Total cases', String(data.summary.totalCases)],
-    ['Total amount', formatINR(data.summary.totalAmount)],
+    ['Total amount', toSpreadsheetAmount(data.summary.totalAmount)],
     ['Unique customers', String(data.summary.uniqueCustomers)],
+    ...buildDisbursementSummaryExportRows(data.summary, 'spreadsheet'),
     []
   ]
 
   if (data.breakdown.length > 0) {
     rows.push(['Breakdown', 'Cases', 'Amount'])
     data.breakdown.forEach(row => {
-      rows.push([row.label, String(row.count), formatINR(row.amount)])
+      rows.push([row.label, String(row.count), toSpreadsheetAmount(row.amount)])
     })
     rows.push([])
   }
@@ -69,7 +68,7 @@ export function exportReportExcel(data: ReportQueryResponse, meta: ReportExportM
   if (data.trend.length > 0) {
     rows.push(['Trend period', 'Cases', 'Amount'])
     data.trend.forEach(row => {
-      rows.push([row.label, String(row.count), formatINR(row.amount)])
+      rows.push([row.label, String(row.count), toSpreadsheetAmount(row.amount)])
     })
     rows.push([])
   }
@@ -77,41 +76,27 @@ export function exportReportExcel(data: ReportQueryResponse, meta: ReportExportM
   if (data.details.length > 0) {
     const detailRows =
       meta.detailFormat === 'flat'
-        ? buildFlatDetailCsvRows(data)
-        : buildGroupedDetailCsvRows(data, meta.groupBySecondary ?? null)
+        ? buildFlatDetailSpreadsheetRows(data)
+        : buildGroupedDetailSpreadsheetRows(data, meta.groupBySecondary ?? null)
 
     rows.push(...detailRows)
   }
 
-  const csv = `\uFEFF${rows.map(r => r.map(escapeCsvCell).join(',')).join('\n')}`
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
   const suffix = meta.detailFormat === 'flat' ? '-flat' : ''
 
-  a.href = url
-  a.download = `report${suffix}-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  await downloadSpreadsheet(rows, `report${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
-export function exportReportExcelFlat(data: ReportQueryResponse, meta: ReportExportMeta) {
-  exportReportExcel(data, { ...meta, detailFormat: 'flat' })
+export async function exportReportExcelFlat(data: ReportQueryResponse, meta: ReportExportMeta) {
+  await exportReportExcel(data, { ...meta, detailFormat: 'flat' })
 }
 
-export function exportReportExcelFlatOnly(data: ReportQueryResponse) {
+export async function exportReportExcelFlatOnly(data: ReportQueryResponse) {
   if (data.details.length === 0) return
 
-  const rows = buildFlatDetailCsvRows(data)
-  const csv = `\uFEFF${rows.map(r => r.map(escapeCsvCell).join(',')).join('\n')}`
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
+  const rows = buildFlatDetailSpreadsheetRows(data)
 
-  a.href = url
-  a.download = `report-details-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  await downloadSpreadsheet(rows, `report-details-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta, charts?: ReportChartImages, options?: { autoPrint?: boolean }) {
@@ -147,6 +132,9 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
       : ''
 
   const disclaimer = meta.disclaimer ?? (isHistorical ? 'Historical audit-based report.' : 'Current snapshot report.')
+  const disbursementSummaryHtml = buildDisbursementSummaryExportRows(data.summary, 'display')
+    .map(([label, value]) => `<div>${escapeHtml(String(label))}<strong>${escapeHtml(String(value || '—'))}</strong></div>`)
+    .join('')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -211,6 +199,7 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
     <div>Total cases<strong>${data.summary.totalCases}</strong></div>
     <div>Total amount<strong>${escapeHtml(formatINR(data.summary.totalAmount))}</strong></div>
     <div>Customers<strong>${data.summary.uniqueCustomers}</strong></div>
+    ${disbursementSummaryHtml}
   </div>
   ${chartsHtml}
   ${breakdownHtml}${trendHtml}${detailsHtml}

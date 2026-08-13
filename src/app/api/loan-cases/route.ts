@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { upsertCaseFollowUpReminder } from '@features/reminders/services/remindersServer'
 
+import { generateBusinessCode } from '@features/code-generation/server/codeGenerator.server'
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
 import {
   buildDisbursementTrackerLookupStage,
@@ -22,7 +23,8 @@ import {
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { findBankByName } from '@/app/api/banks/_helpers'
+import { assertModuleEnabled, assertWithinLimit } from '@features/subscriptions/services/entitlements.server'
+import { findBankByCode, findBankByName, resolveBankForLead } from '@/app/api/banks/_helpers'
 
 const AUDIT_ACTIONS = {
   leadCreated: 'LEAD_CREATED'
@@ -203,6 +205,7 @@ export async function GET(request: Request) {
   const assignedAgentId = url.searchParams.get('assignedAgentId') || ''
   const customerId = url.searchParams.get('customerId') || ''
   const loanTypeId = url.searchParams.get('loanTypeId') || ''
+  const bankCode = url.searchParams.get('bankCode') || ''
   const bankName = url.searchParams.get('bankName') || ''
   const showInactive = url.searchParams.get('showInactive') === 'true'
   const stagedDateFrom = url.searchParams.get('stagedDateFrom') || ''
@@ -296,28 +299,76 @@ export async function GET(request: Request) {
     ]
   }
 
-  if (bankName.trim()) {
-    const normalizedBankName = bankName.trim().toLowerCase()
+  if (bankCode.trim() || bankName.trim()) {
+    let resolvedFilterCode = bankCode.trim()
+    let resolvedFilterBankName = bankName.trim()
 
-    baseFilter.$and = [
-      ...(baseFilter.$and || []),
-      {
-        $expr: {
-          $eq: [
-            {
-              $toLower: {
-                $trim: {
-                  input: {
-                    $toString: { $ifNull: ['$bankName', ''] }
+    if (resolvedFilterCode && !resolvedFilterBankName) {
+      const bank = await findBankByCode(db, tenantIdObj, resolvedFilterCode)
+
+      if (bank) resolvedFilterBankName = bank.name
+    }
+
+    if (!resolvedFilterCode && resolvedFilterBankName) {
+      const bank = await findBankByName(db, tenantIdObj, resolvedFilterBankName)
+
+      resolvedFilterCode = bank?.code || ''
+    }
+
+    if (resolvedFilterCode) {
+      const safeCode = resolvedFilterCode.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+      const bank = await findBankByCode(db, tenantIdObj, resolvedFilterCode)
+      const orConditions: Record<string, unknown>[] = [
+        { bankCode: { $regex: `^${safeCode}$`, $options: 'i' } }
+      ]
+
+      if (bank) {
+        orConditions.push({ bankId: bank._id })
+      }
+
+      if (resolvedFilterBankName) {
+        orConditions.push({
+          $expr: {
+            $eq: [
+              {
+                $toLower: {
+                  $trim: {
+                    input: {
+                      $toString: { $ifNull: ['$bankName', ''] }
+                    }
                   }
                 }
-              }
-            },
-            normalizedBankName
-          ]
-        }
+              },
+              resolvedFilterBankName.toLowerCase()
+            ]
+          }
+        })
       }
-    ]
+
+      baseFilter.$and = [...(baseFilter.$and || []), { $or: orConditions }]
+    } else if (resolvedFilterBankName) {
+      const normalizedBankName = resolvedFilterBankName.toLowerCase()
+
+      baseFilter.$and = [
+        ...(baseFilter.$and || []),
+        {
+          $expr: {
+            $eq: [
+              {
+                $toLower: {
+                  $trim: {
+                    input: {
+                      $toString: { $ifNull: ['$bankName', ''] }
+                    }
+                  }
+                }
+              },
+              normalizedBankName
+            ]
+          }
+        }
+      ]
+    }
   }
 
   if (role !== 'ADMIN' && role !== 'OWNER') {
@@ -473,6 +524,45 @@ export async function GET(request: Request) {
       },
       { $unwind: { path: '$assignedAgent', preserveNullAndEmptyArrays: true } },
       {
+        $lookup: {
+          from: 'banks',
+          let: {
+            bankIdObj: { $convert: { input: '$bankId', to: 'objectId', onError: null, onNull: null } },
+            bankCodeNorm: {
+              $toLower: {
+                $trim: {
+                  input: {
+                    $toString: { $ifNull: ['$bankCode', ''] }
+                  }
+                }
+              }
+            }
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: ['$tenantId', [tenantIdObj, tenantIdHex]] },
+                    {
+                      $or: [
+                        { $eq: ['$_id', '$$bankIdObj'] },
+                        {
+                          $and: [{ $ne: ['$$bankCodeNorm', ''] }, { $eq: ['$codeNormalized', '$$bankCodeNorm'] }]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            { $project: { name: 1, code: 1 } }
+          ],
+          as: 'bank'
+        }
+      },
+      { $unwind: { path: '$bank', preserveNullAndEmptyArrays: true } },
+      {
         $addFields: {
           totalDocuments: { $size: { $ifNull: ['$documents', []] } },
           incompleteDocumentsCount: {
@@ -500,8 +590,10 @@ export async function GET(request: Request) {
           _id: 1,
           customerId: 1,
           loanTypeId: 1,
-          bankName: 1,
+          code: 1,
           requestedAmount: 1,
+          approvedAmount: 1,
+          loanAccount: 1,
           stageId: 1,
           assignedAgentId: 1,
           updatedAt: 1,
@@ -514,6 +606,15 @@ export async function GET(request: Request) {
           pendingDocumentsCount: 1,
           customerName: { $ifNull: ['$customer.fullName', '$customerName'] },
           loanTypeName: { $ifNull: ['$loanType.name', '$loanTypeName'] },
+          bankId: {
+            $cond: [
+              { $ifNull: ['$bankId', false] },
+              { $toString: '$bankId' },
+              { $cond: [{ $ifNull: ['$bank._id', false] }, { $toString: '$bank._id' }, null] }
+            ]
+          },
+          bankCode: { $ifNull: ['$bankCode', '$bank.code'] },
+          bankName: { $ifNull: ['$bank.name', '$bankName'] },
           stageName: { $ifNull: ['$stage.name', '$stageName'] },
           assignedAgentName: { $ifNull: ['$assignedAgent.name', '$assignedAgentName'] },
           assignedAgentEmail: { $ifNull: ['$assignedAgent.email', '$assignedAgentEmail'] },
@@ -541,8 +642,13 @@ export async function GET(request: Request) {
     customerName: String((r as any).customerName || ''),
     loanTypeId: String((r as any).loanTypeId || ''),
     loanTypeName: String((r as any).loanTypeName || ''),
+    bankId: (r as any).bankId ? String((r as any).bankId) : null,
+    bankCode: (r as any).bankCode ?? null,
     bankName: (r as any).bankName ?? null,
+    code: (r as any).code ?? null,
     requestedAmount: (r as any).requestedAmount ?? null,
+    approvedAmount: (r as any).approvedAmount ?? null,
+    loanAccount: (r as any).loanAccount ?? null,
     stageId: String((r as any).stageId || ''),
     stageName: String((r as any).stageName || ''),
     auditMatchedStageName: hasStagedDateFilter ? String((r as any).auditMatchedStageName || '') || null : null,
@@ -580,7 +686,35 @@ export async function POST(request: Request) {
 
   const { db, tenantIdObj, userId } = ctx
 
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const leadLimit = await assertWithinLimit(db, tenantIdObj, 'maxLeads', { bypass: bypassEntitlements })
+
+  if (leadLimit) {
+    return NextResponse.json(
+      {
+        error: leadLimit.error,
+        message: leadLimit.message,
+        limit: leadLimit.limit,
+        used: leadLimit.used
+      },
+      { status: 403 }
+    )
+  }
+
   const body = await request.json().catch(() => ({}))
+
+  if (body?.enableProgressivePayment === true) {
+    const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+      bypass: bypassEntitlements
+    })
+
+    if (progressiveGate) {
+      return NextResponse.json(
+        { error: progressiveGate.error, message: progressiveGate.message, feature: progressiveGate.feature },
+        { status: 403 }
+      )
+    }
+  }
   const customerId = String(body?.customerId || '')
   const loanTypeId = String(body?.loanTypeId || '')
   const stageId = String(body?.stageId || '')
@@ -596,10 +730,12 @@ export async function POST(request: Request) {
   const nextFollowUpDate = nextFollowUpDateRaw ? new Date(nextFollowUpDateRaw) : null
   const expectedActionDate = expectedActionDateRaw ? new Date(expectedActionDateRaw) : null
 
-  const bankName = body?.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
+  const bankIdRaw = body?.bankId == null || String(body.bankId).trim().length === 0 ? null : String(body.bankId).trim()
   const requestedAmount = body?.requestedAmount == null ? null : Number(body.requestedAmount)
   const approvedAmount = body?.approvedAmount == null ? null : Number(body.approvedAmount)
-  const eligibleAmount = body?.eligibleAmount == null ? null : Number(body.eligibleAmount)
+  const loanAccountRaw = body?.loanAccount
+  const loanAccount =
+    loanAccountRaw == null || String(loanAccountRaw).trim().length === 0 ? null : String(loanAccountRaw).trim()
   const interestRate = body?.interestRate == null ? null : Number(body.interestRate)
   const tenureMonths = body?.tenureMonths == null ? null : Number(body.tenureMonths)
   const emi = body?.emi == null ? null : Number(body.emi)
@@ -628,6 +764,7 @@ export async function POST(request: Request) {
     errors.interestRate = 'Interest rate must be numeric'
   if (tenureMonths != null && !(typeof tenureMonths === 'number' && Number.isFinite(tenureMonths) && tenureMonths >= 0))
     errors.tenureMonths = 'Tenure must be numeric'
+  if (loanAccount != null && loanAccount.length > 20) errors.loanAccount = 'Loan account must be at most 20 characters'
 
   if (nextFollowUpDateRaw != null && (!nextFollowUpDate || Number.isNaN(nextFollowUpDate.getTime()))) {
     errors.nextFollowUpDate = 'Invalid nextFollowUpDate'
@@ -649,7 +786,7 @@ export async function POST(request: Request) {
 
   const tenantLoanType = await db
     .collection('loanTypes')
-    .findOne({ _id: new ObjectId(loanTypeId), tenantId: tenantIdObj }, { projection: { _id: 1, name: 1 } })
+    .findOne({ _id: new ObjectId(loanTypeId), tenantId: tenantIdObj }, { projection: { _id: 1, name: 1, code: 1 } })
 
   if (!tenantLoanType) return NextResponse.json({ error: 'invalid_loanType' }, { status: 400 })
 
@@ -745,19 +882,42 @@ export async function POST(request: Request) {
   const documents = await buildChecklistForLoanType(db, tenantIdObj, new ObjectId(loanTypeId))
   const now = new Date()
 
-  let resolvedBankName: string | null = null
+  let resolvedBank: Awaited<ReturnType<typeof resolveBankForLead>> = null
 
-  if (bankName) {
-    const bank = await findBankByName(db, tenantIdObj, bankName)
+  if (bankIdRaw) {
+    resolvedBank = await resolveBankForLead(db, tenantIdObj, { bankId: bankIdRaw })
 
-    if (!bank) {
+    if (!resolvedBank) {
       return NextResponse.json(
-        { error: 'validation_error', details: { bankName: 'Select a bank from bank master' } },
+        { error: 'validation_error', details: { bankId: 'Select a bank from bank master' } },
         { status: 400 }
       )
     }
+  }
 
-    resolvedBankName = String((bank as { name?: string }).name || bankName)
+  let leadCode: string | null = null
+
+  try {
+    leadCode = await generateBusinessCode({
+      db,
+      tenantId: tenantIdObj,
+      entityType: 'LEAD',
+      context: {
+        customerName: String((tenantCustomer as any).fullName || ''),
+        loanTypeName: String((tenantLoanType as any).name || ''),
+        loanTypeCode: (tenantLoanType as any).code ? String((tenantLoanType as any).code) : null,
+        bankName: resolvedBank?.name ?? null,
+        bankCode: resolvedBank?.code ?? null,
+        date: new Date()
+      }
+    })
+  } catch (e: any) {
+    if (e?.message === 'code_generation_disabled') {
+      leadCode = null
+    } else {
+      console.error('lead_code_generation_failed', { err: e?.message || String(e) })
+      leadCode = null
+    }
   }
 
   const doc: any = {
@@ -765,10 +925,16 @@ export async function POST(request: Request) {
     customerId: new ObjectId(customerId),
     loanTypeId: new ObjectId(loanTypeId),
     stageId: new ObjectId(stageId),
-    bankName: resolvedBankName,
+    ...(resolvedBank
+      ? {
+          bankId: resolvedBank._id,
+          bankCode: resolvedBank.code
+        }
+      : {}),
+    code: leadCode,
     requestedAmount,
     approvedAmount,
-    eligibleAmount,
+    loanAccount,
     interestRate,
     tenureMonths,
     emi,
@@ -826,6 +992,7 @@ export async function POST(request: Request) {
     action: AUDIT_ACTIONS.leadCreated,
     metadata: {
       leadId: res.insertedId.toHexString(),
+      leadCode,
       customerId,
       customerName: String((tenantCustomer as any).fullName || ''),
       loanTypeId,
@@ -839,5 +1006,5 @@ export async function POST(request: Request) {
     }
   })
 
-  return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+  return NextResponse.json({ id: res.insertedId.toHexString(), code: leadCode }, { status: 201 })
 }

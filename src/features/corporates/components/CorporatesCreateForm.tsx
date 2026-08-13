@@ -22,7 +22,7 @@ import Switch from '@mui/material/Switch'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createCorporate } from '@features/corporates/services/corporatesService'
+import { createCorporate, previewCorporateCode } from '@features/corporates/services/corporatesService'
 
 type Props = {
   onSuccess?: () => void
@@ -55,6 +55,7 @@ const CorporatesCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const isEditMode = Boolean(initialValues)
 
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -64,6 +65,9 @@ const CorporatesCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
 
   useEffect(() => {
     if (!initialValues) {
@@ -81,14 +85,46 @@ const CorporatesCreateForm = ({
     if (initialValues.isActive != null) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
 
-  const canSubmit = code.trim().length >= 1 && name.trim().length >= 2
+  useEffect(() => {
+    if (isEditMode) return
+
+    const trimmed = name.trim()
+
+    if (trimmed.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewCorporateCode(trimmed)
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [isEditMode, name])
+
+  const canSubmit = name.trim().length >= 2
+  const displayedCode = isEditMode ? initialValues?.code || code || '' : createdCode || codePreview || ''
 
   const handleSubmit = async () => {
     setError(null)
 
     const validationErrors: Record<string, string> = {}
 
-    if (code.trim().length < 1) validationErrors.code = 'Code is required'
     if (name.trim().length < 2) validationErrors.name = 'Name must be at least 2 characters'
 
     if (Object.keys(validationErrors).length > 0) {
@@ -102,7 +138,6 @@ const CorporatesCreateForm = ({
 
     try {
       const payload = {
-        code: code.trim(),
         name: name.trim(),
         isActive
       }
@@ -110,7 +145,9 @@ const CorporatesCreateForm = ({
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
-        await createCorporate(payload)
+        const res = await createCorporate(payload)
+
+        setCreatedCode(res?.code ? String(res.code) : null)
       }
 
       if (onSuccess) onSuccess()
@@ -123,9 +160,13 @@ const CorporatesCreateForm = ({
         return
       }
 
-      setCode('')
-      setName('')
-      setIsActive(true)
+      if (!initialValues) {
+        setName('')
+        setIsActive(true)
+        setCreatedCode(null)
+        setCodePreview(null)
+      }
+
       setFieldErrors({})
       setError(null)
     } catch (e: any) {
@@ -144,28 +185,29 @@ const CorporatesCreateForm = ({
           {error}
         </Alert>
       ) : null}
+      {!isEditMode && createdCode ? (
+        <Alert severity='success'>
+          Corporate created with code <strong>{createdCode}</strong>
+        </Alert>
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <TextField
-          label='Code'
-          value={code}
-          onChange={e => setCode(e.target.value)}
-          error={Boolean(fieldErrors.code)}
-          helperText={fieldErrors.code || 'Must be unique within your organisation'}
-          fullWidth
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position='start'>
-                <i className='ri-hashtag' />
-              </InputAdornment>
-            )
-          }}
-        />
+        {!isEditMode ? (
+          <Alert severity='info' icon={false} sx={{ py: 1 }}>
+            {previewLoading
+              ? 'Generating code preview...'
+              : displayedCode
+                ? `Next code preview: ${displayedCode}`
+                : 'A unique corporate code will be generated from your code generation template.'}
+          </Alert>
+        ) : (
+          <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+        )}
         <TextField
           label='Name'
           value={name}
           onChange={e => setName(e.target.value)}
           error={Boolean(fieldErrors.name)}
-          helperText={fieldErrors.name}
+          helperText={fieldErrors.name || 'Used by {INITIALS} in code templates'}
           fullWidth
           InputProps={{
             startAdornment: (

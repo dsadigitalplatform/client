@@ -27,6 +27,7 @@ import navigationCustomStyles from '@core/styles/vertical/navigationCustomStyles
 type TenantInfo = {
   tenantName?: string
   role?: 'OWNER' | 'ADMIN' | 'USER'
+  subscriptionPlanName?: string
 }
 
 type Props = {
@@ -39,6 +40,7 @@ type Props = {
     showAdmin: boolean
     showSuperAdmin: boolean
     canInviteUser: boolean
+    canManageSubscription: boolean
   }
 }
 

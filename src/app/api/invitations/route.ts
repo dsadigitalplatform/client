@@ -63,6 +63,19 @@ export async function POST(req: Request) {
   } catch (err: any) {
     const status = typeof err?.status === 'number' ? err.status : 500
     const rawMessage = String(err?.message || '')
+    const code = typeof err?.code === 'string' ? err.code : ''
+
+    if (status === 403 && (code === 'limit_reached' || code === 'subscription_inactive')) {
+      return NextResponse.json(
+        {
+          error: code,
+          message: rawMessage || undefined,
+          limit: err?.limit,
+          used: err?.used
+        },
+        { status: 403 }
+      )
+    }
 
     const message =
       status === 403

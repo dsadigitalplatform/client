@@ -14,19 +14,40 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
-import Checkbox from '@mui/material/Checkbox'
-import FormControlLabel from '@mui/material/FormControlLabel'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
+import Divider from '@mui/material/Divider'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Switch from '@mui/material/Switch'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
+import Alert from '@mui/material/Alert'
+import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
+import ListItemText from '@mui/material/ListItemText'
+
 import type { SubscriptionPlan } from '../subscription-plans.types'
+import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, formatPlanMoney, normalizeCurrency } from '../currencies'
+import {
+  TRIAL_DAYS,
+  UNLIMITED,
+  defaultPlanEntitlements,
+  isMonthlyLimit,
+  normalizePlanEntitlements,
+  type LimitFeatureKey,
+  type PlanEntitlements
+} from '../featureCatalog'
 import { subscriptionPlansService } from '../services/subscriptionPlansService'
+import { PlanEntitlementsEditor } from './PlanEntitlementsEditor'
 
 type FormState = {
   id?: string
@@ -36,7 +57,11 @@ type FormState = {
   priceMonthly: string
   priceYearly?: string
   currency: string
-  maxUsers: string
+  trialEnabled: boolean
+  trialDays: string
+  isRecommended: boolean
+  isActive: boolean
+  entitlements: PlanEntitlements
 }
 
 export const SubscriptionPlansManager = () => {
@@ -45,10 +70,31 @@ export const SubscriptionPlansManager = () => {
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null)
-  const [featuresOpen, setFeaturesOpen] = useState(false)
-  const [featuresPlanId, setFeaturesPlanId] = useState<string | null>(null)
-  const [featuresMap, setFeaturesMap] = useState<Record<string, boolean>>({})
-  const [newFeature, setNewFeature] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [impactOpen, setImpactOpen] = useState(false)
+  const [impactMessages, setImpactMessages] = useState<string[]>([])
+  const [impactLoading, setImpactLoading] = useState(false)
+  const [pendingSave, setPendingSave] = useState<{
+    name: string
+    slug: string
+    description: string
+    priceMonthly: number
+    priceYearly?: number
+    currency: string
+    maxUsers: number
+    trialEnabled: boolean
+    trialDays: number
+    isDefault: boolean
+    isActive: boolean
+    entitlements: PlanEntitlements
+    features: Record<string, boolean>
+    id?: string
+  } | null>(null)
+
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const [form, setForm] = useState<FormState>({
     name: '',
@@ -56,31 +102,25 @@ export const SubscriptionPlansManager = () => {
     description: '',
     priceMonthly: '',
     priceYearly: '',
-    currency: 'USD',
-    maxUsers: ''
+    currency: DEFAULT_CURRENCY,
+    trialEnabled: true,
+    trialDays: String(TRIAL_DAYS),
+    isRecommended: false,
+    isActive: true,
+    entitlements: defaultPlanEntitlements()
   })
 
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-
-  const formatMoney = (currency: string, amount: number | null | undefined) => {
-    if (amount == null) return '-'
-
-    const locale = currency === 'INR' ? 'en-IN' : undefined
-
-    try {
-      return new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      }).format(amount)
-    } catch {
-      return `${currency} ${amount}`
-    }
-  }
-
   const isEdit = useMemo(() => Boolean(form.id), [form.id])
+
+  const slugify = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64)
 
   const load = async () => {
     setLoading(true)
@@ -103,24 +143,31 @@ export const SubscriptionPlansManager = () => {
   }
 
   useEffect(() => {
-    // initial load
     load()
   }, [])
 
   const openCreate = () => {
+    setFormError(null)
     setForm({
       name: '',
       slug: '',
       description: '',
       priceMonthly: '',
       priceYearly: '',
-      currency: 'USD',
-      maxUsers: ''
+      currency: DEFAULT_CURRENCY,
+      trialEnabled: true,
+      trialDays: String(TRIAL_DAYS),
+      isRecommended: false,
+      isActive: true,
+      entitlements: defaultPlanEntitlements()
     })
     setOpen(true)
   }
 
   const openEdit = (p: SubscriptionPlan) => {
+    const trialEnabled = p.trialEnabled !== false && (p.trialDays == null || p.trialDays > 0)
+
+    setFormError(null)
     setForm({
       id: p._id,
       name: p.name,
@@ -128,107 +175,210 @@ export const SubscriptionPlansManager = () => {
       description: p.description,
       priceMonthly: String(p.priceMonthly),
       priceYearly: p.priceYearly != null ? String(p.priceYearly) : '',
-      currency: p.currency,
-      maxUsers: String(p.maxUsers)
+      currency: normalizeCurrency(p.currency),
+      trialEnabled,
+      trialDays: String(trialEnabled ? p.trialDays || TRIAL_DAYS : TRIAL_DAYS),
+      isRecommended: Boolean(p.isDefault),
+      isActive: p.isActive !== false,
+      entitlements: normalizePlanEntitlements(p.entitlements || p, p.maxUsers)
     })
     setOpen(true)
   }
 
-  const closeDialog = () => setOpen(false)
-
-  const closeFeatures = () => {
-    setFeaturesOpen(false)
-    setFeaturesPlanId(null)
-    setFeaturesMap({})
-    setNewFeature('')
-  }
-
-  const openFeatures = async (p: SubscriptionPlan) => {
-    try {
-      setError(null)
-      const res = await subscriptionPlansService.getFeatures(p._id)
-
-      setFeaturesMap(res.features || {})
-      setFeaturesPlanId(p._id)
-      setFeaturesOpen(true)
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load features')
-    }
+  const closeDialog = () => {
+    if (saving) return
+    setOpen(false)
+    setFormError(null)
   }
 
   const handleChange = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm(prev => ({ ...prev, [field]: e.target.value }))
+    const value = e.target.value
+
+    setForm(prev => {
+      if (field === 'name' && !isEdit) {
+        const prevAuto = slugify(prev.name)
+        const shouldSyncSlug = !prev.slug || prev.slug === prevAuto
+
+        return {
+          ...prev,
+          name: value,
+          ...(shouldSyncSlug ? { slug: slugify(value) } : {})
+        }
+      }
+
+      return { ...prev, [field]: value }
+    })
+  }
+
+  const buildSaveInput = () => ({
+    name: form.name.trim(),
+    slug: (form.slug.trim() || slugify(form.name)).toLowerCase(),
+    description: form.description.trim(),
+    priceMonthly: Number(form.priceMonthly || 0),
+    priceYearly: form.priceYearly ? Number(form.priceYearly) : undefined,
+    currency: form.currency || DEFAULT_CURRENCY,
+    maxUsers: form.entitlements.limits.maxUsers,
+    trialEnabled: form.trialEnabled,
+    trialDays: form.trialEnabled ? Number(form.trialDays || TRIAL_DAYS) : 0,
+    isDefault: form.isActive ? form.isRecommended : false,
+    isActive: form.isActive,
+    entitlements: form.entitlements,
+    features: { ...form.entitlements.modules },
+    ...(form.id ? { id: form.id } : {})
+  })
+
+  const persistPlan = async (input: NonNullable<typeof pendingSave>) => {
+    if (input.id) {
+      await subscriptionPlansService.update({ id: input.id, ...input })
+    } else {
+      await subscriptionPlansService.create(input)
+    }
+
+    setOpen(false)
+    setImpactOpen(false)
+    setPendingSave(null)
+    setFormError(null)
+    setError(null)
+    await load()
   }
 
   const submit = async () => {
-    const input = {
-      name: form.name.trim(),
-      slug: form.slug.trim().toLowerCase(),
-      description: form.description.trim(),
-      priceMonthly: Number(form.priceMonthly || 0),
-      priceYearly: form.priceYearly ? Number(form.priceYearly) : undefined,
-      currency: form.currency || 'USD',
-      maxUsers: Number(form.maxUsers || 1)
+    const input = buildSaveInput()
+
+    if (!input.name || !input.slug || !input.description) {
+      setFormError('Name, slug, and description are required.')
+
+      return
     }
 
-    if (!input.name || !input.slug || !input.description || input.priceMonthly < 0 || input.maxUsers < 1) return
+    if (!Number.isFinite(input.priceMonthly) || input.priceMonthly < 0) {
+      setFormError('Monthly price must be zero or greater.')
+
+      return
+    }
+
+    setFormError(null)
+    setError(null)
 
     try {
       if (isEdit && form.id) {
-        await subscriptionPlansService.update({ id: form.id, ...input })
-      } else {
-        await subscriptionPlansService.create(input)
-      }
+        setImpactLoading(true)
+        setSaving(true)
+        const preview = await subscriptionPlansService.previewImpact({ id: form.id, ...input })
 
-      setOpen(false)
-      await load()
+        setPendingSave({ ...input, id: form.id })
+        setImpactMessages(preview.messages || [])
+        setOpen(false)
+        setImpactOpen(true)
+      } else {
+        setSaving(true)
+        await persistPlan(input)
+      }
     } catch (e: any) {
-      setError(e?.message || 'Failed to save plan')
+      const message = e?.message || 'Failed to save plan'
+
+      setFormError(message)
+      setError(message)
+      if (isEdit) setOpen(true)
+    } finally {
+      setImpactLoading(false)
+      setSaving(false)
     }
   }
 
-  const toggleFeature = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked
+  const confirmImpactSave = async () => {
+    if (!pendingSave || saving) return
 
-    setFeaturesMap(prev => ({ ...prev, [key]: checked }))
-  }
-
-  const addFeature = () => {
-    const k = newFeature.trim()
-
-    if (!k || featuresMap.hasOwnProperty(k)) return
-    setFeaturesMap(prev => ({ ...prev, [k]: true }))
-    setNewFeature('')
-  }
-
-  const saveFeatures = async () => {
-    if (!featuresPlanId) return
+    setSaving(true)
 
     try {
-      await subscriptionPlansService.updateFeatures(featuresPlanId, featuresMap)
-      closeFeatures()
-      await load()
+      await persistPlan(pendingSave)
     } catch (e: any) {
-      setError(e?.message || 'Failed to save features')
+      const message = e?.message || 'Failed to save plan'
+
+      setError(message)
+      setFormError(message)
+      setImpactOpen(false)
+      setOpen(true)
+    } finally {
+      setSaving(false)
     }
   }
 
   const confirmDelete = async () => {
-    if (!confirmId) return
+    if (!confirmId || deleting) return
+
+    setDeleting(true)
+    setDeleteError(null)
 
     try {
       await subscriptionPlansService.remove(confirmId)
       setConfirmId(null)
+      setError(null)
       await load()
     } catch (e: any) {
-      setConfirmId(null)
-      setError(e?.message || 'Failed to delete plan')
+      const message =
+        e?.message && e.message !== 'request_failed' && e.message !== 'plan_has_subscribers'
+          ? e.message
+          : 'This plan is in use by one or more organisations. Migrate or remove those organisations first, or deactivate the plan instead of deleting it.'
+
+      setDeleteError(message)
+    } finally {
+      setDeleting(false)
     }
+  }
+
+  const openDeleteConfirm = (id: string) => {
+    setDeleteError(null)
+    setConfirmId(id)
+  }
+
+  const togglePlanActive = async (p: SubscriptionPlan) => {
+    const nextActive = p.isActive === false
+    const label = nextActive ? 'reactivate' : 'deactivate'
+
+    setTogglingId(p._id)
+    setError(null)
+
+    try {
+      await subscriptionPlansService.update({
+        id: p._id,
+        isActive: nextActive,
+        // Inactive plans cannot stay recommended for new orgs
+        ...(nextActive ? {} : { isDefault: false })
+      })
+      await load()
+    } catch (e: any) {
+      setError(e?.message || `Failed to ${label} plan`)
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const entitlementsSummary = (p: SubscriptionPlan) => {
+    const e = normalizePlanEntitlements(p.entitlements || p, p.maxUsers)
+    const modulesOn = Object.entries(e.modules)
+      .filter(([, on]) => on)
+      .map(([k]) => k)
+    const fmt = (key: LimitFeatureKey) => {
+      const n = e.limits[key]
+      const value = n === UNLIMITED ? '∞' : String(n)
+
+      return isMonthlyLimit(key) ? `${value}/mo` : value
+    }
+
+    return `Seats ${fmt('maxUsers')} · Customers ${fmt('maxCustomers')} · Leads ${fmt('maxLeads')}${
+      modulesOn.length ? ` · ${modulesOn.length} modules` : ''
+    }`
   }
 
   return (
     <Box className='flex flex-col gap-4' sx={{ mx: { xs: -2, sm: 0 } }}>
-      {error && <Typography color='error'>{error}</Typography>}
+      {error ? (
+        <Alert severity='error' onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      ) : null}
       <Box
         sx={{
           display: 'flex',
@@ -241,7 +391,7 @@ export const SubscriptionPlansManager = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
           <Typography variant='h5'>All Plans</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Manage subscription plans and features
+            Pricing, trial days, usage limits (seats total · customers & leads per month), and modules
           </Typography>
         </Box>
         <Button
@@ -258,32 +408,18 @@ export const SubscriptionPlansManager = () => {
       {isMobile ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {loading ? (
-            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
-              <CardContent sx={{ p: 2 }}>
-                <Typography variant='body2' color='text.secondary'>
-                  Loading...
-                </Typography>
-              </CardContent>
-            </Card>
+            <Typography variant='body2' color='text.secondary'>
+              Loading...
+            </Typography>
           ) : plans.length === 0 ? (
-            <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
-              <CardContent sx={{ p: 2 }}>
-                <Typography variant='body2' color='text.secondary'>
-                  No plans yet.
-                </Typography>
-              </CardContent>
-            </Card>
+            <Typography variant='body2' color='text.secondary'>
+              No plans yet.
+            </Typography>
           ) : (
             plans.map(p => (
               <Card
                 key={p._id}
-                sx={{
-                  borderRadius: 3,
-                  boxShadow: 'none',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  backgroundColor: 'background.paper'
-                }}
+                sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}
               >
                 <CardContent sx={{ p: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
@@ -293,68 +429,66 @@ export const SubscriptionPlansManager = () => {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Typography variant='subtitle1' sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
-                              {p.name}
-                            </Typography>
-                            {p.isDefault ? (
-                              <Chip
-                                size='small'
-                                label='Default'
-                                variant='outlined'
-                                sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
-                              />
-                            ) : null}
-                            {!p.isActive ? <Chip size='small' label='Inactive' variant='outlined' /> : null}
-                          </Box>
+                          <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
+                            {p.name}
+                          </Typography>
+                          <Typography variant='body2' color='text.secondary'>
+                            {entitlementsSummary(p)}
+                          </Typography>
                         </Box>
                         <IconButton size='small' onClick={() => openEdit(p)} aria-label={`Edit ${p.name}`}>
                           <i className='ri-edit-2-line' />
                         </IconButton>
                       </Box>
-                      <Typography
-                        variant='body2'
-                        color='text.secondary'
-                        sx={{
-                          mt: 0.5,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {p.description}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.25, flexWrap: 'wrap' }}>
+                      <Box sx={{ display: 'flex', gap: 1, mt: 1.25, flexWrap: 'wrap' }}>
+                        <Chip
+                          size='small'
+                          color={p.isActive !== false ? 'success' : 'default'}
+                          label={p.isActive !== false ? 'Active' : 'Inactive'}
+                        />
+                        {p.isDefault ? (
+                          <Chip
+                            size='small'
+                            color='primary'
+                            label='Recommended'
+                            icon={<i className='ri-star-smile-line' style={{ fontSize: 14 }} />}
+                          />
+                        ) : null}
+                        <Chip size='small' variant='outlined' label={formatPlanMoney(p.priceMonthly, p.currency)} />
                         <Chip
                           size='small'
                           variant='outlined'
-                          label={`Monthly: ${formatMoney(p.currency, p.priceMonthly)}`}
-                          sx={{ boxShadow: 'none', backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.08)' }}
+                          color={p.trialEnabled !== false && (p.trialDays ?? TRIAL_DAYS) > 0 ? 'success' : 'default'}
+                          label={
+                            p.trialEnabled !== false && (p.trialDays ?? TRIAL_DAYS) > 0
+                              ? `Trial ${p.trialDays ?? TRIAL_DAYS}d`
+                              : 'Trial off'
+                          }
                         />
-                        <Chip
-                          size='small'
-                          variant='outlined'
-                          label={`Yearly: ${p.priceYearly != null ? formatMoney(p.currency, p.priceYearly) : '-'}`}
-                          sx={{ boxShadow: 'none' }}
-                        />
-                        <Chip size='small' variant='outlined' label={`Max users: ${p.maxUsers}`} sx={{ boxShadow: 'none' }} />
                       </Box>
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1.5 }}>
+                        <Button size='small' variant='outlined' onClick={() => openEdit(p)}>
+                          Edit
+                        </Button>
                         <Button
                           size='small'
                           variant='outlined'
-                          onClick={() => openFeatures(p)}
-                          startIcon={<i className='ri-toggle-line' />}
+                          color={p.isActive !== false ? 'warning' : 'success'}
+                          disabled={togglingId === p._id}
+                          onClick={() => void togglePlanActive(p)}
                         >
-                          Features
+                          {togglingId === p._id
+                            ? 'Updating…'
+                            : p.isActive !== false
+                              ? 'Deactivate'
+                              : 'Activate'}
                         </Button>
                         <Button
                           size='small'
                           variant='outlined'
                           color='error'
-                          onClick={() => setConfirmId(p._id)}
-                          startIcon={<i className='ri-delete-bin-6-line' />}
+                          onClick={() => openDeleteConfirm(p._id)}
+                          sx={{ gridColumn: '1 / -1' }}
                         >
                           Delete
                         </Button>
@@ -371,32 +505,56 @@ export const SubscriptionPlansManager = () => {
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>
-              <TableCell>Monthly</TableCell>
-              <TableCell>Yearly</TableCell>
-              <TableCell>Currency</TableCell>
-              <TableCell>Max Users</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Price</TableCell>
+              <TableCell>Trial</TableCell>
+              <TableCell>Recommended</TableCell>
+              <TableCell>Entitlements</TableCell>
               <TableCell align='right'>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {plans.map(p => (
-              <TableRow key={p._id}>
+              <TableRow key={p._id} sx={{ opacity: p.isActive === false ? 0.72 : 1 }}>
                 <TableCell>{p.name}</TableCell>
-                <TableCell>{p.priceMonthly}</TableCell>
-                <TableCell>{p.priceYearly ?? '-'}</TableCell>
-                <TableCell>{p.currency}</TableCell>
-                <TableCell>{p.maxUsers}</TableCell>
+                <TableCell>
+                  <Chip
+                    size='small'
+                    color={p.isActive !== false ? 'success' : 'default'}
+                    label={p.isActive !== false ? 'Active' : 'Inactive'}
+                  />
+                </TableCell>
+                <TableCell>{formatPlanMoney(p.priceMonthly, p.currency)}</TableCell>
+                <TableCell>
+                  {p.trialEnabled !== false && (p.trialDays ?? TRIAL_DAYS) > 0
+                    ? `${p.trialDays ?? TRIAL_DAYS}d`
+                    : 'Off'}
+                </TableCell>
+                <TableCell>
+                  {p.isDefault ? (
+                    <Chip size='small' color='primary' label='Yes' icon={<i className='ri-star-smile-line' />} />
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell>{entitlementsSummary(p)}</TableCell>
                 <TableCell align='right'>
                   <Button size='small' onClick={() => openEdit(p)} startIcon={<i className='ri-edit-2-line' />}>
                     Edit
                   </Button>
-                  <Button size='small' onClick={() => openFeatures(p)} startIcon={<i className='ri-toggle-line' />}>
-                    Features
+                  <Button
+                    size='small'
+                    color={p.isActive !== false ? 'warning' : 'success'}
+                    disabled={togglingId === p._id}
+                    onClick={() => void togglePlanActive(p)}
+                    startIcon={<i className={p.isActive !== false ? 'ri-pause-circle-line' : 'ri-play-circle-line'} />}
+                  >
+                    {togglingId === p._id ? '…' : p.isActive !== false ? 'Deactivate' : 'Activate'}
                   </Button>
                   <Button
                     color='error'
                     size='small'
-                    onClick={() => setConfirmId(p._id)}
+                    onClick={() => openDeleteConfirm(p._id)}
                     startIcon={<i className='ri-delete-bin-6-line' />}
                   >
                     Delete
@@ -406,7 +564,7 @@ export const SubscriptionPlansManager = () => {
             ))}
             {!loading && plans.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <Typography color='text.secondary'>No plans yet.</Typography>
                 </TableCell>
               </TableRow>
@@ -415,62 +573,225 @@ export const SubscriptionPlansManager = () => {
         </Table>
       )}
 
-      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='sm' fullScreen={isMobile}>
+      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='md' fullScreen={isMobile}>
         <DialogTitle>{isEdit ? 'Edit Plan' : 'Create Plan'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
-          <TextField label='Name' value={form.name} onChange={handleChange('name')} fullWidth />
-          <TextField label='Slug' value={form.slug} onChange={handleChange('slug')} fullWidth />
+          {formError ? (
+            <Alert severity='error' sx={{ mt: 1 }}>
+              {formError}
+            </Alert>
+          ) : null}
+          <TextField label='Name' value={form.name} onChange={handleChange('name')} fullWidth autoFocus={!isEdit} />
+          <TextField
+            label='Slug'
+            value={form.slug}
+            onChange={handleChange('slug')}
+            fullWidth
+            helperText='URL-safe id. Auto-filled from the name; you can edit it.'
+          />
           <TextField label='Description' value={form.description} onChange={handleChange('description')} fullWidth />
-          <Box className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
-            <TextField label='Monthly Price' type='number' value={form.priceMonthly} onChange={handleChange('priceMonthly')} fullWidth />
-            <TextField label='Yearly Price' type='number' value={form.priceYearly} onChange={handleChange('priceYearly')} fullWidth />
-            <TextField label='Currency' value={form.currency} onChange={handleChange('currency')} fullWidth />
-          </Box>
-          <TextField label='Max Users' type='number' value={form.maxUsers} onChange={handleChange('maxUsers')} fullWidth />
-        </DialogContent>
-        <DialogActions>
-          <Button variant='text' onClick={closeDialog}>Cancel</Button>
-          <Button variant='contained' onClick={submit}>{isEdit ? 'Update' : 'Create'}</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={featuresOpen} onClose={closeFeatures} fullWidth maxWidth='sm' fullScreen={isMobile}>
-        <DialogTitle>Configure Features</DialogTitle>
-        <DialogContent className='flex flex-col gap-3'>
-          <Box className='flex flex-col gap-2'>
-            {Object.keys(featuresMap).length === 0 && <Typography color='text.secondary'>No features yet.</Typography>}
-            {Object.keys(featuresMap).sort().map(k => (
-              <FormControlLabel
-                key={k}
-                control={<Checkbox checked={Boolean(featuresMap[k])} onChange={toggleFeature(k)} />}
-                label={k}
-              />
-            ))}
-          </Box>
-          <Box className='flex flex-col sm:flex-row sm:items-center gap-2'>
+          <Box className='grid grid-cols-1 sm:grid-cols-4 gap-3'>
             <TextField
-              label='New Feature Key'
-              value={newFeature}
-              onChange={e => setNewFeature(e.target.value)}
+              label='Monthly Price'
+              type='number'
+              value={form.priceMonthly}
+              onChange={handleChange('priceMonthly')}
               fullWidth
             />
-            <Button variant='outlined' onClick={addFeature}>Add</Button>
+            <TextField
+              label='Yearly Price'
+              type='number'
+              value={form.priceYearly}
+              onChange={handleChange('priceYearly')}
+              fullWidth
+            />
+            <FormControl fullWidth>
+              <InputLabel id='plan-currency-label'>Currency</InputLabel>
+              <Select
+                labelId='plan-currency-label'
+                label='Currency'
+                value={form.currency}
+                onChange={e => setForm(prev => ({ ...prev, currency: String(e.target.value) }))}
+              >
+                {SUPPORTED_CURRENCIES.map(c => (
+                  <MenuItem key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Box className='flex flex-col gap-1 justify-center'>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.trialEnabled}
+                    onChange={e => setForm(prev => ({ ...prev, trialEnabled: e.target.checked }))}
+                  />
+                }
+                label='Trial period'
+              />
+              {form.trialEnabled ? (
+                <TextField
+                  label='Trial days'
+                  type='number'
+                  size='small'
+                  value={form.trialDays}
+                  onChange={handleChange('trialDays')}
+                  helperText='Default 14'
+                  fullWidth
+                />
+              ) : (
+                <Typography variant='caption' color='text.secondary'>
+                  New organisations skip the free trial
+                </Typography>
+              )}
+            </Box>
           </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form.isActive}
+                onChange={e => {
+                  const next = e.target.checked
+
+                  setForm(prev => ({
+                    ...prev,
+                    isActive: next,
+                    ...(next ? {} : { isRecommended: false })
+                  }))
+                }}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                  Available for new organisations
+                </Typography>
+                <Typography variant='caption' color='text.secondary'>
+                  When off, this plan is hidden from the create-organisation picker and cannot be selected for new
+                  subscriptions. Existing organisations on the plan keep their access.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: 'flex-start', ml: 0, mt: 0.5 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form.isRecommended}
+                disabled={!form.isActive}
+                onChange={e => setForm(prev => ({ ...prev, isRecommended: e.target.checked }))}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                  Mark as recommended
+                </Typography>
+                <Typography variant='caption' color='text.secondary'>
+                  Highlighted on the create-organisation plan picker. Only one plan can be recommended.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: 'flex-start', ml: 0, mt: 0.5 }}
+          />
+          <Divider />
+          <PlanEntitlementsEditor
+            value={form.entitlements}
+            onChange={entitlements => setForm(prev => ({ ...prev, entitlements }))}
+          />
         </DialogContent>
         <DialogActions>
-          <Button variant='text' onClick={closeFeatures}>Cancel</Button>
-          <Button variant='contained' onClick={saveFeatures}>Save</Button>
+          <Button variant='text' onClick={closeDialog} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant='contained' onClick={submit} disabled={impactLoading || saving}>
+            {saving ? 'Saving…' : isEdit ? 'Update' : 'Create'}
+          </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(confirmId)} onClose={() => setConfirmId(null)} fullScreen={isMobile}>
-        <DialogTitle>Delete Plan</DialogTitle>
-        <DialogContent>
-          <Typography>Are you sure you want to delete this plan?</Typography>
+      <Dialog
+        open={impactOpen}
+        onClose={() => {
+          if (saving) return
+          setImpactOpen(false)
+          setPendingSave(null)
+          setOpen(true)
+        }}
+        fullScreen={isMobile}
+        maxWidth='sm'
+        fullWidth
+      >
+        <DialogTitle>Confirm plan changes</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Alert severity='warning'>
+            Catalog edits affect organisations already on this plan. Review the timing below before saving.
+          </Alert>
+          <List dense disablePadding>
+            {impactMessages.map(msg => (
+              <ListItem key={msg} disableGutters sx={{ alignItems: 'flex-start' }}>
+                <ListItemText primary={msg} primaryTypographyProps={{ variant: 'body2' }} />
+              </ListItem>
+            ))}
+          </List>
         </DialogContent>
         <DialogActions>
-          <Button variant='text' onClick={() => setConfirmId(null)}>Cancel</Button>
-          <Button color='error' variant='contained' onClick={confirmDelete}>Delete</Button>
+          <Button
+            variant='text'
+            disabled={saving}
+            onClick={() => {
+              setImpactOpen(false)
+              setPendingSave(null)
+              setOpen(true)
+            }}
+          >
+            Back
+          </Button>
+          <Button variant='contained' onClick={confirmImpactSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(confirmId)}
+        onClose={() => {
+          if (deleting) return
+          setConfirmId(null)
+          setDeleteError(null)
+        }}
+        fullScreen={isMobile}
+        maxWidth='sm'
+        fullWidth
+      >
+        <DialogTitle>Delete Plan</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {deleteError ? (
+            <Alert severity='warning'>{deleteError}</Alert>
+          ) : (
+            <Typography>
+              Are you sure you want to delete this plan? This cannot be undone. If organisations still use it, deactivate
+              the plan instead so it is hidden from new subscribers.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant='text'
+            disabled={deleting}
+            onClick={() => {
+              setConfirmId(null)
+              setDeleteError(null)
+            }}
+          >
+            {deleteError ? 'Close' : 'Cancel'}
+          </Button>
+          {!deleteError ? (
+            <Button color='error' variant='contained' onClick={confirmDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          ) : null}
         </DialogActions>
       </Dialog>
     </Box>

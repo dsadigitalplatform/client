@@ -1,6 +1,7 @@
 export type LoanType = {
   id: string
   name: string
+  code: string | null
   description: string | null
   isActive: boolean
   createdAt: string | null

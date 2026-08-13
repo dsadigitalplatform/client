@@ -27,6 +27,7 @@ import type { Dayjs } from 'dayjs'
 
 import { createFollowUpAppointment, getAppointmentById, updateAppointment } from '@features/appointments/services/appointments'
 import type { AppointmentStatus, AppointmentFollowUpType } from '@features/appointments/appointments.types'
+import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type Props = {
   open: boolean
@@ -301,9 +302,9 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                     Lead
                   </Typography>
                   <Typography variant='body2'>{data?.leadTitle || '-'}</Typography>
-                  <Typography variant='caption' color='text.secondary'>
-                    {data?.leadId || ''}
-                  </Typography>
+                  <Box sx={{ mt: 0.5 }}>
+                    <LeadCodeChip code={data?.leadCode || data?.lead?.code} />
+                  </Box>
                 </Box>
               </Box>
 

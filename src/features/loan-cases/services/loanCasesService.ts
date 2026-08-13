@@ -13,6 +13,7 @@ export type GetLoanCasesParams = {
   assignedAgentId?: string
   customerId?: string
   loanTypeId?: string
+  bankCode?: string
   bankName?: string
   showInactive?: boolean
   stagedDateFrom?: string
@@ -27,7 +28,8 @@ export async function getLoanCases(params: GetLoanCasesParams = {}) {
   if (params.assignedAgentId) url.searchParams.set('assignedAgentId', params.assignedAgentId)
   if (params.customerId) url.searchParams.set('customerId', params.customerId)
   if (params.loanTypeId) url.searchParams.set('loanTypeId', params.loanTypeId)
-  if (params.bankName) url.searchParams.set('bankName', params.bankName)
+  if (params.bankCode) url.searchParams.set('bankCode', params.bankCode)
+  else if (params.bankName) url.searchParams.set('bankName', params.bankName)
   if (params.showInactive) url.searchParams.set('showInactive', 'true')
   if (params.stagedDateFrom) url.searchParams.set('stagedDateFrom', params.stagedDateFrom)
   if (params.stagedDateTo) url.searchParams.set('stagedDateTo', params.stagedDateTo)
@@ -90,7 +92,7 @@ export async function createLoanCase(body: CreateLoanCaseInput) {
     throw err
   }
 
-  return data as { id: string }
+  return data as { id: string; code?: string | null }
 }
 
 export async function updateLoanCase(id: string, body: UpdateLoanCaseInput) {
@@ -203,4 +205,33 @@ export async function getLeadAuditHistory(leadId: string) {
   }
 
   return (data?.items ?? []) as LeadAuditHistoryItem[]
+}
+
+export type LeadCodePreviewResult = {
+  template: string
+  preview: string
+}
+
+export async function previewLeadCode(params: {
+  customerName?: string | null
+  loanTypeName?: string | null
+  loanTypeCode?: string | null
+  bankName?: string | null
+  bankCode?: string | null
+}) {
+  const res = await fetch('/api/loan-cases/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview lead code'
+
+    throw new Error(message)
+  }
+
+  return data as LeadCodePreviewResult
 }

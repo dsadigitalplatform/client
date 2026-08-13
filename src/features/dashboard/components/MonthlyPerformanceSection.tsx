@@ -124,7 +124,7 @@ function MetricPanel({
             {formatINR(totalAmount)}
           </Typography>
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-            Requested loan volume
+            Approved loan volume
           </Typography>
         </>
       )}
@@ -199,7 +199,7 @@ export default function MonthlyPerformanceSection({ enabled, loading, error, dat
         totalAmount={data.disbursed.totalAmount}
         configured={data.disbursed.configured}
         stageName={data.disbursed.stageName}
-        missingMessage='No Disbursed stage is configured. Mark a stage under Loan Status Pipeline.'
+        missingMessage='No disbursed stage or disbursement activity found this month.'
       />
     </Box>
   )

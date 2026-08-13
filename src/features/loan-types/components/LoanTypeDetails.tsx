@@ -254,6 +254,7 @@ const LoanTypeDetails = ({ id }: Props) => {
               redirectOnSuccess
               onCancel={() => setEditMode(false)}
               initialValues={{
+                code: data.code,
                 name: data.name,
                 description: data.description,
                 isActive: data.isActive
@@ -272,6 +273,9 @@ const LoanTypeDetails = ({ id }: Props) => {
                 </Box>
               ) : null}
               <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 1.5, flexWrap: 'wrap' }}>
+                {data.code ? (
+                  <Chip label={data.code} size='small' variant='outlined' sx={{ fontWeight: 600 }} />
+                ) : null}
                 <Typography variant='h6' sx={{ wordBreak: 'break-word' }}>
                   {data.name}
                 </Typography>

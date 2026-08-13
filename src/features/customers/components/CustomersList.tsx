@@ -26,12 +26,15 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 
 import { useCustomers } from '@features/customers/hooks/useCustomers'
 import CustomersCreateForm from '@features/customers/components/CustomersCreateForm'
+import { useTenantLimitAccess } from '@features/subscriptions'
 
 const CustomersList = () => {
   const { customers, loading, search, setSearch, refresh } = useCustomers()
   const [openAdd, setOpenAdd] = useState(false)
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const { loading: customersLimitLoading, atLimit: customersAtLimit } = useTenantLimitAccess('maxCustomers')
+  const createCustomerLocked = !customersLimitLoading && customersAtLimit
 
   const formatINR = (v: number) => `₹ ${new Intl.NumberFormat('en-IN').format(v)}`
   const formatListNumber = (index: number) => String(index + 1).padStart(2, '0')
@@ -108,14 +111,27 @@ const CustomersList = () => {
               <Button variant='outlined' onClick={handleExport} startIcon={<i className='ri-download-line' />}>
                 Export
               </Button>
-              <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setOpenAdd(true)}>
+              <Button
+                variant='contained'
+                startIcon={<i className='ri-add-line' />}
+                onClick={() => {
+                  if (createCustomerLocked) return
+                  setOpenAdd(true)
+                }}
+                disabled={createCustomerLocked}
+                title={
+                  createCustomerLocked
+                    ? "This month's customer limit reached — upgrade or wait until next month"
+                    : undefined
+                }
+              >
                 Add
               </Button>
             </Box>
           )}
         </Box>
       </Box>
-      <Drawer anchor='right' open={openAdd} onClose={() => setOpenAdd(false)} keepMounted>
+      <Drawer anchor='right' open={openAdd && !createCustomerLocked} onClose={() => setOpenAdd(false)} keepMounted>
         <Box sx={{ width: { xs: '100vw', sm: 480, md: 520 }, p: 3, '& .MuiTextField-root': { mb: 1.5 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant='h6' color='text.primary'>
@@ -383,7 +399,11 @@ const CustomersList = () => {
         <Fab
           color='primary'
           aria-label='Add customer'
-          onClick={() => setOpenAdd(true)}
+          onClick={() => {
+            if (createCustomerLocked) return
+            setOpenAdd(true)
+          }}
+          disabled={createCustomerLocked}
           sx={{
             position: 'fixed',
             bottom: 24,

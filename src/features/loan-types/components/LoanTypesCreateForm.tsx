@@ -26,7 +26,7 @@ import LinearProgress from '@mui/material/LinearProgress'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
-import { createLoanType } from '@features/loan-types/services/loanTypesService'
+import { createLoanType, previewLoanTypeCode } from '@features/loan-types/services/loanTypesService'
 
 type Props = {
   onSuccess?: (id?: string) => void
@@ -35,6 +35,7 @@ type Props = {
   variant?: 'card' | 'plain'
   submitDisabled?: boolean
   initialValues?: Partial<{
+    code: string | null
     name: string
     description: string | null
     isActive: boolean
@@ -61,6 +62,7 @@ const LoanTypesCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const isEditMode = Boolean(initialValues)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -69,6 +71,9 @@ const LoanTypesCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
   const [redirectOpen, setRedirectOpen] = useState(false)
   const [redirectTarget, setRedirectTarget] = useState<string | null>(null)
   const [redirectProgress, setRedirectProgress] = useState(0)
@@ -80,6 +85,38 @@ const LoanTypesCreateForm = ({
     if (initialValues.description !== undefined) setDescription(initialValues.description || '')
     if (initialValues.isActive != null) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
+
+  useEffect(() => {
+    if (isEditMode) return
+
+    const trimmed = name.trim()
+
+    if (trimmed.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewLoanTypeCode(trimmed)
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [isEditMode, name])
 
   useEffect(() => {
     if (!redirectOpen || !redirectTarget) return
@@ -132,6 +169,7 @@ const LoanTypesCreateForm = ({
         const res = await createLoanType(payload)
 
         createdId = res?.id
+        setCreatedCode(res?.code ? String(res.code) : null)
       }
 
       setSuccessMsg(initialValues ? 'Loan type updated successfully' : 'Loan type created successfully')
@@ -158,6 +196,20 @@ const LoanTypesCreateForm = ({
   const canSubmit = useMemo(() => {
     return name.trim().length >= 2
   }, [name])
+
+  const displayedCode = isEditMode ? initialValues?.code || '' : createdCode || codePreview || ''
+
+  const codePreviewBlock = isEditMode ? (
+    <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+  ) : (
+    <Alert severity='info' icon={false} sx={{ py: 1 }}>
+      {previewLoading
+        ? 'Generating code preview...'
+        : displayedCode
+          ? `Next code preview: ${displayedCode}`
+          : 'A unique loan type code will be generated from your code generation template.'}
+    </Alert>
+  )
 
   const mobileTitle = submitLabel || (initialValues ? 'Update Loan Type' : 'Add Loan Type')
 
@@ -203,16 +255,22 @@ const LoanTypesCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {!isEditMode && createdCode ? (
+          <Alert severity='success' sx={{ mb: 2 }}>
+            Loan type created with code <strong>{createdCode}</strong>
+          </Alert>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
           </Typography>
+          {codePreviewBlock}
           <TextField
             label='Name'
             value={name}
             onChange={e => setName(e.target.value)}
             error={!!fieldErrors.name}
-            helperText={fieldErrors.name}
+            helperText={fieldErrors.name || 'Used by {LOAN_TYPE} and {INITIALS} in code templates'}
             fullWidth
             required
             InputProps={{
@@ -325,16 +383,22 @@ const LoanTypesCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {!isEditMode && createdCode ? (
+          <Alert severity='success' sx={{ mb: 2 }}>
+            Loan type created with code <strong>{createdCode}</strong>
+          </Alert>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
           </Typography>
+          {codePreviewBlock}
           <TextField
             label='Name'
             value={name}
             onChange={e => setName(e.target.value)}
             error={!!fieldErrors.name}
-            helperText={fieldErrors.name}
+            helperText={fieldErrors.name || 'Used by {LOAN_TYPE} and {INITIALS} in code templates'}
             fullWidth
             required
             InputProps={{

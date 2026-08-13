@@ -33,6 +33,8 @@ import TableBody from '@mui/material/TableBody'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
+import { SubscriptionGateAlert, useTenantLimitAccess } from '@features/subscriptions'
+
 type InviteRole = 'ADMIN' | 'USER'
 type EditableRole = 'OWNER' | 'ADMIN' | 'USER'
 
@@ -59,6 +61,14 @@ const InviteUserForm = () => {
   const { data: session } = useSession()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const {
+    loading: usersLimitLoading,
+    atLimit: usersAtLimit,
+    limit: usersLimit,
+    used: usersUsed,
+    planName: usersPlanName
+  } = useTenantLimitAccess('maxUsers')
+  const inviteLocked = !usersLimitLoading && usersAtLimit
 
   const [email, setEmail] = useState<string>('')
   const [role, setRole] = useState<InviteRole>('USER')
@@ -98,6 +108,12 @@ const InviteUserForm = () => {
     setSuccessMsg(null)
     setErrorMsg(null)
 
+    if (inviteLocked) {
+      setErrorMsg('User seat limit reached. Upgrade your plan to invite more users.')
+
+      return
+    }
+
     const currentId = tenantId
 
     if (!currentId) {
@@ -136,6 +152,16 @@ const InviteUserForm = () => {
 
         if (data?.error === 'admin_cannot_invite_admin') {
           throw new Error('Admin users can invite only User role')
+        }
+
+        if (data?.error === 'limit_reached') {
+          throw new Error(
+            data?.message || 'User seat limit reached. Upgrade your plan to invite more users.'
+          )
+        }
+
+        if (data?.error === 'subscription_inactive') {
+          throw new Error(data?.message || 'Organisation subscription is inactive. Renew to continue.')
         }
 
         throw new Error(data?.error || 'Failed to send invitation')
@@ -382,6 +408,25 @@ const InviteUserForm = () => {
       </Box>
       {successMsg ? <Alert severity='success'>{successMsg}</Alert> : null}
       {errorMsg ? <Alert severity='error'>{errorMsg}</Alert> : null}
+      {inviteLocked ? (
+        <SubscriptionGateAlert
+          title='User seat limit reached'
+          message='Please upgrade your subscription to invite more users'
+          planName={usersPlanName}
+          detail={usersLimit >= 0 ? `${usersUsed} / ${usersLimit} seats used` : null}
+        />
+      ) : null}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          opacity: inviteLocked ? 0.55 : 1,
+          pointerEvents: inviteLocked ? 'none' : 'auto',
+          transition: theme => theme.transitions.create('opacity')
+        }}
+        aria-disabled={inviteLocked}
+      >
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <TextField
           label='Email'
@@ -390,23 +435,32 @@ const InviteUserForm = () => {
           onChange={e => setEmail(e.target.value)}
           required
           fullWidth
+          disabled={inviteLocked}
         />
-        <FormControl fullWidth={isMobile} sx={{ minWidth: { sm: 220 } }}>
+        <FormControl fullWidth={isMobile} sx={{ minWidth: { sm: 220 } }} disabled={inviteLocked}>
           <InputLabel id='invite-role-label'>Role</InputLabel>
           <Select
             labelId='invite-role-label'
             label='Role'
             value={role}
             onChange={e => setRole(e.target.value as InviteRole)}
+            disabled={inviteLocked}
           >
             {isSuperAdmin || tenantRole === 'OWNER' ? <MenuItem value='ADMIN'>Admin</MenuItem> : null}
             <MenuItem value='USER'>User</MenuItem>
           </Select>
         </FormControl>
       </Box>
-      <Button variant='contained' disabled={submitting} onClick={handleSubmit} fullWidth={isMobile} startIcon={<i className='ri-send-plane-2-line' />}>
+      <Button
+        variant='contained'
+        disabled={submitting || inviteLocked}
+        onClick={handleSubmit}
+        fullWidth={isMobile}
+        startIcon={<i className='ri-send-plane-2-line' />}
+      >
         {submitting ? 'Sending...' : 'Send Invitation'}
       </Button>
+      </Box>
       <Box className='flex flex-col gap-2'>
         <Typography variant='h6'>Organisation Access</Typography>
         {isMobile ? (

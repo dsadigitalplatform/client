@@ -10,11 +10,13 @@ import { upsertCaseFollowUpReminder } from '@features/reminders/services/reminde
 import { computeProgressPercent } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmittedDate'
+import { fetchLeadCurrentStageSubmittedDate } from '@features/loan-cases/utils/stageAuditDate'
 
 import { authOptions } from '@/lib/auth'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
-import { findBankByName } from '@/app/api/banks/_helpers'
+import { resolveBankForLead } from '@/app/api/banks/_helpers'
+import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
 const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
@@ -280,6 +282,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
         .findOne({ _id: (row as any).corporateId, tenantId: tenantIdObj }, { projection: { name: 1, code: 1 } })
     : null
 
+  const bank = await resolveBankForLead(db, tenantIdObj, {
+    bankId: (row as any).bankId ? String((row as any).bankId) : null,
+    bankCode: (row as any).bankCode ?? null,
+    bankName: (row as any).bankName ?? null
+  })
+
   const leadSource: LeadSource = isLeadSource((row as any).leadSource) ? (row as any).leadSource : 'DIRECT'
 
   const leadIdObj = new ObjectId(id)
@@ -318,19 +326,25 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     }
   }
 
+  const stageIdHex = String((row as any).stageId)
+  const stageSubmittedDate = await fetchLeadCurrentStageSubmittedDate(db, tenantIdObj, id, stageIdHex)
+
   const data = {
     id: String((row as any)._id),
     customerId: String((row as any).customerId),
     customerName: customer ? String((customer as any).fullName || '') : '',
     loanTypeId: String((row as any).loanTypeId),
     loanTypeName: loanType ? String((loanType as any).name || '') : '',
-    bankName: (row as any).bankName ?? null,
+    bankId: bank ? String(bank._id) : (row as any).bankId ? String((row as any).bankId) : null,
+    bankCode: bank?.code ?? ((row as any).bankCode ?? null),
+    bankName: bank?.name ?? ((row as any).bankName ?? null),
     corporateId: (row as any).corporateId ? String((row as any).corporateId) : null,
     corporateName: corporate ? String((corporate as any).name || '') : null,
     corporateCode: corporate ? String((corporate as any).code || '') : null,
+    code: (row as any).code ?? null,
     requestedAmount: (row as any).requestedAmount ?? null,
     approvedAmount: (row as any).approvedAmount ?? null,
-    eligibleAmount: (row as any).eligibleAmount ?? null,
+    loanAccount: (row as any).loanAccount ?? null,
     interestRate: (row as any).interestRate ?? null,
     tenureMonths: (row as any).tenureMonths ?? null,
     emi: (row as any).emi ?? null,
@@ -346,8 +360,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     advocateMobile: advocate
       ? [[(advocate as any).countryCode, (advocate as any).mobile].filter(Boolean).join(' ')].filter(Boolean).join('')
       : null,
-    stageId: String((row as any).stageId),
+    stageId: stageIdHex,
     stageName: stage ? String((stage as any).name || '') : '',
+    stageSubmittedDate,
     documents: Array.isArray((row as any).documents)
       ? (row as any).documents.map((d: any) => ({
           documentId: String(d?.documentId || ''),
@@ -471,17 +486,22 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     }
   }
 
-  if (body.bankName !== undefined) {
-    const rawBankName =
-      body.bankName == null || String(body.bankName).trim().length === 0 ? null : String(body.bankName).trim()
+  if (body.bankId !== undefined) {
+    const rawBankId = body.bankId == null || String(body.bankId).trim().length === 0 ? null : String(body.bankId).trim()
 
-    if (rawBankName === null) {
+    if (rawBankId === null) {
+      patch.bankId = null
+      patch.bankCode = null
       patch.bankName = null
     } else {
-      const bank = await findBankByName(db, tenantIdObj, rawBankName)
+      const bank = await resolveBankForLead(db, tenantIdObj, { bankId: rawBankId })
 
-      if (!bank) errors.bankName = 'Select a bank from bank master'
-      else patch.bankName = String((bank as { name?: string }).name || rawBankName)
+      if (!bank) errors.bankId = 'Select a bank from bank master'
+      else {
+        patch.bankId = bank._id
+        patch.bankCode = bank.code
+        patch.bankName = null
+      }
     }
   }
 
@@ -505,7 +525,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.requestedAmount !== undefined) patch.requestedAmount = body.requestedAmount == null ? null : Number(body.requestedAmount)
   if (body.approvedAmount !== undefined) patch.approvedAmount = body.approvedAmount == null ? null : Number(body.approvedAmount)
   if (body.enableProgressivePayment !== undefined) patch.enableProgressivePayment = Boolean(body.enableProgressivePayment)
-  if (body.eligibleAmount !== undefined) patch.eligibleAmount = body.eligibleAmount == null ? null : Number(body.eligibleAmount)
+  if (body.loanAccount !== undefined) {
+    const rawLoanAccount =
+      body.loanAccount == null || String(body.loanAccount).trim().length === 0 ? null : String(body.loanAccount).trim()
+
+    if (rawLoanAccount != null && rawLoanAccount.length > 20) errors.loanAccount = 'Loan account must be at most 20 characters'
+    else patch.loanAccount = rawLoanAccount
+  }
   if (body.interestRate !== undefined) patch.interestRate = body.interestRate == null ? null : Number(body.interestRate)
   if (body.tenureMonths !== undefined) patch.tenureMonths = body.tenureMonths == null ? null : Number(body.tenureMonths)
   if (body.emi !== undefined) patch.emi = body.emi == null ? null : Number(body.emi)
@@ -628,6 +654,17 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     !(typeof patch.approvedAmount === 'number' && Number.isFinite(patch.approvedAmount) && patch.approvedAmount >= 0)
   )
     errors.approvedAmount = 'Approved amount must be numeric'
+
+  if (patch.enableProgressivePayment === true && !Boolean((existing as any).enableProgressivePayment)) {
+    const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+    const progressiveGate = await assertModuleEnabled(db, tenantIdObj, 'progressiveDisbursement', {
+      bypass: bypassEntitlements
+    })
+
+    if (progressiveGate) {
+      errors.enableProgressivePayment = progressiveGate.message
+    }
+  }
 
   if (patch.enableProgressivePayment === false && Boolean((existing as any).enableProgressivePayment)) {
     const activeTracker = await db.collection('loanDisbursementTrackers').findOne(
@@ -852,6 +889,37 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
         ...(stageSubmittedDateIso ? { stageSubmittedDate: stageSubmittedDateIso } : {})
       }
     })
+  } else if (stageSubmittedDateIso && nextStageId) {
+    const previousStageSubmittedDate = await fetchLeadCurrentStageSubmittedDate(
+      db,
+      tenantIdObj,
+      id,
+      nextStageId.toHexString()
+    )
+
+    if (stageSubmittedDateIso !== previousStageSubmittedDate) {
+      const currentStage = await db
+        .collection('loanStatusPipelineStages')
+        .findOne({ _id: nextStageId, tenantId: tenantIdObj }, { projection: { name: 1 } })
+
+      const stageName = currentStage ? String((currentStage as any).name || '') : ''
+      const stageIdHex = nextStageId.toHexString()
+
+      await writeAuditLog({
+        db,
+        actorUserId: userId,
+        targetTenantId: tenantIdObj,
+        action: AUDIT_ACTIONS.leadStatusChanged,
+        metadata: {
+          leadId: id,
+          fromStageId: stageIdHex,
+          fromStageName: stageName,
+          toStageId: stageIdHex,
+          toStageName: stageName,
+          stageSubmittedDate: stageSubmittedDateIso
+        }
+      })
+    }
   }
 
   if (requestedAmountChanged) {

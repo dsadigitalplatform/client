@@ -38,7 +38,9 @@ import TableContainer from '@mui/material/TableContainer'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createCustomer, getCustomerByMobile, updateCustomer } from '@features/customers/services/customersService'
+import { SubscriptionGateAlert, useTenantLimitAccess } from '@features/subscriptions'
+
+import { createCustomer, getCustomerByMobile, previewCustomerCode, updateCustomer } from '@features/customers/services/customersService'
 import CountryCodeField from '@/components/CountryCodeField'
 import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
 import {
@@ -71,6 +73,7 @@ type Props = {
   showTitle?: boolean
   variant?: 'card' | 'plain'
   initialValues?: Partial<{
+    code: string | null
     fullName: string
     mobile: string
     countryCode: string
@@ -108,6 +111,13 @@ const CustomersCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const {
+    loading: customersLimitLoading,
+    atLimit: customersAtLimit,
+    limit: customersLimit,
+    used: customersUsed,
+    planName: customersPlanName
+  } = useTenantLimitAccess('maxCustomers')
 
   const [fullName, setFullName] = useState('')
   const [countryCode, setCountryCode] = useState('+91')
@@ -134,6 +144,9 @@ const CustomersCreateForm = ({
   const [redirectProgress, setRedirectProgress] = useState(0)
   const [successMsg, setSuccessMsg] = useState('')
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null)
   const lastLookupMobileRef = useRef('')
@@ -176,6 +189,46 @@ const CustomersCreateForm = ({
     if (initialValues.cibilScore !== undefined && initialValues.cibilScore !== null)
       setCibilScore(String(initialValues.cibilScore))
   }, [initialValues])
+
+  const isEditMode = Boolean(initialValues)
+  const isCreatingCustomer = !isEditMode && !matchedCustomerId
+  const createCustomerLocked = isCreatingCustomer && !customersLimitLoading && customersAtLimit
+
+  useEffect(() => {
+    if (isEditMode || matchedCustomerId) {
+      setCodePreview(null)
+
+      return
+    }
+
+    const trimmedName = fullName.trim()
+
+    if (trimmedName.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewCustomerCode({ fullName: trimmedName })
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [fullName, isEditMode, matchedCustomerId])
 
   useEffect(() => {
     if (initialValues) return
@@ -272,6 +325,7 @@ const CustomersCreateForm = ({
     isValidCountryCode(contact.countryCode) && isValidMobile(contact.mobile) && isValidContactType(contact.type)
 
   const canSubmit =
+    !createCustomerLocked &&
     fullName.trim().length >= 2 &&
     isValidCountryCode(countryCode) &&
     isValidMobile(mobile) &&
@@ -360,6 +414,7 @@ const CustomersCreateForm = ({
   }
 
   const handleSubmit = async () => {
+    if (createCustomerLocked) return
     setError(null)
 
     const validationErrors = collectValidationErrors()
@@ -404,6 +459,7 @@ const CustomersCreateForm = ({
         const res = await createCustomer(payload)
 
         setCreatedCustomerId(res?.id ? String(res.id) : null)
+        setCreatedCode(res?.code ? String(res.code) : null)
       }
 
       setSuccessMsg(isEditing ? 'Customer updated successfully' : 'Customer created successfully')
@@ -548,6 +604,20 @@ const CustomersCreateForm = ({
 
   const isEditing = Boolean(initialValues || matchedCustomerId)
   const mobileTitle = submitLabel || (isEditing ? 'Update Customer' : 'Add Customer')
+  const displayedCode = isEditMode ? initialValues?.code || '' : createdCode || codePreview || ''
+
+  const codePreviewBlock =
+    isEditMode ? (
+      <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+    ) : matchedCustomerId ? null : (
+      <Alert severity='info' icon={false} sx={{ py: 1 }}>
+        {previewLoading
+          ? 'Generating code preview...'
+          : displayedCode
+            ? `Next code preview: ${displayedCode}`
+            : 'A unique customer code will be generated from your code generation template.'}
+      </Alert>
+    )
 
   const canAddSecondaryContact = secondaryContacts.length < SECONDARY_CONTACT_LIMIT
 
@@ -595,6 +665,16 @@ const CustomersCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {createCustomerLocked ? (
+          <Box sx={{ mb: 2 }}>
+            <SubscriptionGateAlert
+              title="This month's customer limit reached"
+              message='Upgrade your plan to add more this month, or wait until the count resets next month.'
+              planName={customersPlanName}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used this month` : null}
+            />
+          </Box>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
@@ -624,6 +704,8 @@ const CustomersCreateForm = ({
               )
             }}
           />
+
+          {codePreviewBlock}
 
           <Box
             sx={{
@@ -1090,6 +1172,16 @@ const CustomersCreateForm = ({
           </Box>
         ) : null}
         {error ? <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert> : null}
+        {createCustomerLocked ? (
+          <Box sx={{ mb: 2 }}>
+            <SubscriptionGateAlert
+              title="This month's customer limit reached"
+              message='Upgrade your plan to add more this month, or wait until the count resets next month.'
+              planName={customersPlanName}
+              detail={customersLimit >= 0 ? `${customersUsed} / ${customersLimit} customers used this month` : null}
+            />
+          </Box>
+        ) : null}
         <Stack spacing={isMobile ? 2 : 3}>
           <Typography variant='subtitle2' color='text.secondary'>
             Basic Information
@@ -1119,6 +1211,8 @@ const CustomersCreateForm = ({
               )
             }}
           />
+
+          {codePreviewBlock}
 
           <Box
             sx={{

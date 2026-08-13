@@ -36,7 +36,7 @@ const StyledFooter = styled.footer<StyledFooterProps>`
   }
 
   .${horizontalLayoutClasses.footerContentWrapper} {
-    padding-block: 15px;
+    padding-block: 20px;
     padding-inline: ${themeConfig.layoutPadding}px;
   }
 

@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { reportLeadAmountMongoExpression } from '@features/reports/utils/reportLeadAmount'
 
 function escapeRegexLiteral(input: string) {
   return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
@@ -123,7 +124,7 @@ export async function GET() {
           $group: {
             _id: null,
             totalCases: { $sum: 1 },
-            requestedLoanVolume: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            approvedLoanVolume: { $sum: reportLeadAmountMongoExpression() }
           }
         }
       ])
@@ -169,7 +170,7 @@ export async function GET() {
           $group: {
             _id: { $dateTrunc: { date: '$createdAt', unit: 'week' } },
             count: { $sum: 1 },
-            requestedLoanVolume: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            approvedLoanVolume: { $sum: reportLeadAmountMongoExpression() }
           }
         },
         { $sort: { _id: 1 } }
@@ -220,7 +221,7 @@ export async function GET() {
             let: { leadId: '$leadId', tenantId: '$tenantId' },
             pipeline: [
               { $match: { $expr: { $and: [{ $eq: ['$_id', '$$leadId'] }, { $eq: ['$tenantId', '$$tenantId'] }] } } },
-              { $project: { loanTypeId: 1, bankName: 1 } }
+              { $project: { loanTypeId: 1, bankName: 1, code: 1 } }
             ],
             as: 'lead'
           }
@@ -258,14 +259,15 @@ export async function GET() {
             outcomeComments: 1,
             customerName: '$customer.fullName',
             leadLoanTypeName: '$loanType.name',
-            leadBankName: '$lead.bankName'
+            leadBankName: '$lead.bankName',
+            leadCode: '$lead.code'
           }
         }
       ])
       .toArray()
   ])
 
-  const totals = loanCasesAgg?.[0] || { totalCases: 0, requestedLoanVolume: 0 }
+  const totals = loanCasesAgg?.[0] || { totalCases: 0, approvedLoanVolume: 0 }
 
   const customersTrendByBucket = new Map<string, number>()
 
@@ -275,14 +277,14 @@ export async function GET() {
     customersTrendByBucket.set(key, Number(r.count || 0))
   })
 
-  const loanCasesTrendByBucket = new Map<string, { count: number; requestedLoanVolume: number }>()
+  const loanCasesTrendByBucket = new Map<string, { count: number; approvedLoanVolume: number }>()
 
   loanCasesTrendRows.forEach((r: any) => {
     const key = new Date(r._id).toISOString().slice(0, 10)
 
     loanCasesTrendByBucket.set(key, {
       count: Number(r.count || 0),
-      requestedLoanVolume: Number(r.requestedLoanVolume || 0)
+      approvedLoanVolume: Number(r.approvedLoanVolume || 0)
     })
   })
 
@@ -295,10 +297,10 @@ return { label: b.label, value: customersTrendByBucket.get(key) || 0 }
 
   const loanCasesTrend = buckets.map(b => {
     const key = b.start.toISOString().slice(0, 10)
-    const v = loanCasesTrendByBucket.get(key) || { count: 0, requestedLoanVolume: 0 }
+    const v = loanCasesTrendByBucket.get(key) || { count: 0, approvedLoanVolume: 0 }
 
     
-return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVolume }
+return { label: b.label, count: v.count, approvedLoanVolume: v.approvedLoanVolume }
   })
 
   const upcomingAppointments = (upcomingAppointmentsRows || []).map((r: any) => {
@@ -315,6 +317,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
       status: String(r?.status || 'SCHEDULED') === 'SCHEDULED' ? 'PENDING' : String(r?.status || 'PENDING'),
       outcomeComments: r?.outcomeComments ?? null,
       customerName: r?.customerName ? String(r.customerName) : null,
+      leadCode: r?.leadCode ? String(r.leadCode) : null,
       leadTitle
     }
   })
@@ -330,7 +333,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
           $group: {
             _id: '$assignedAgentId',
             totalCases: { $sum: 1 },
-            requestedLoanVolume: { $sum: { $ifNull: ['$requestedAmount', 0] } }
+            approvedLoanVolume: { $sum: reportLeadAmountMongoExpression() }
           }
         },
         { $sort: { totalCases: -1 } },
@@ -351,7 +354,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
             name: '$user.name',
             email: '$user.email',
             totalCases: 1,
-            requestedLoanVolume: 1
+            approvedLoanVolume: 1
           }
         }
       ])
@@ -363,7 +366,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
         name: r?.name ? String(r.name) : null,
         email: r?.email ? String(r.email) : null,
         totalCases: Number(r.totalCases || 0),
-        requestedLoanVolume: Number(r.requestedLoanVolume || 0)
+        approvedLoanVolume: Number(r.approvedLoanVolume || 0)
       }))
     }
   }
@@ -375,7 +378,7 @@ return { label: b.label, count: v.count, requestedLoanVolume: v.requestedLoanVol
     },
     loanCases: {
       total: Number(totals.totalCases || 0),
-      requestedLoanVolume: Number(totals.requestedLoanVolume || 0),
+      approvedLoanVolume: Number(totals.approvedLoanVolume || 0),
       trend: loanCasesTrend,
       byStage: stageCounts.map((s: any) => ({
         stageId: s.stageId ? String(s.stageId) : null,

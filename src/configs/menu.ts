@@ -4,6 +4,7 @@ export type MenuVisibility = {
   showAdmin: boolean
   showSuperAdmin: boolean
   canInviteUser: boolean
+  canManageSubscription: boolean
 }
 
 export function getMenuVisibility(params: { isSuperAdmin?: boolean; tenantRole?: TenantRole; hasTenantSelected: boolean }): MenuVisibility {
@@ -12,11 +13,13 @@ export function getMenuVisibility(params: { isSuperAdmin?: boolean; tenantRole?:
   const hasTenant = Boolean(params.hasTenantSelected)
 
   const canInvite = hasTenant && (isSuper || role === 'OWNER' || role === 'ADMIN')
+  const canManageSubscription = hasTenant && (isSuper || role === 'OWNER')
 
   return {
     showCustomers: hasTenant,
     showAdmin: true,
     showSuperAdmin: isSuper,
-    canInviteUser: canInvite
+    canInviteUser: canInvite,
+    canManageSubscription
   }
 }

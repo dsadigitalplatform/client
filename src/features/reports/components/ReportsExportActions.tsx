@@ -23,9 +23,10 @@ import { fetchProfileName, fetchSessionTenant } from '../services/reportsService
 type Props = {
   data: ReportQueryResponse | null
   groupBySecondary: ReportDetailGroupDimension | null
+  disabled?: boolean
 }
 
-export default function ReportsExportActions({ data, groupBySecondary }: Props) {
+export default function ReportsExportActions({ data, groupBySecondary, disabled = false }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [meta, setMeta] = useState<Omit<ReportExportMeta, 'reportTitle'> | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -70,16 +71,16 @@ export default function ReportsExportActions({ data, groupBySecondary }: Props) 
       const exportMeta = buildMeta()
 
       if (action === 'excel-flat-only') {
-        exportReportExcelFlatOnly(data)
+        await exportReportExcelFlatOnly(data)
         return
       }
 
       const charts = await resolveReportCharts(data)
 
       if (action === 'excel-grouped') {
-        exportReportExcel(data, { ...exportMeta, detailFormat: 'grouped' })
+        await exportReportExcel(data, { ...exportMeta, detailFormat: 'grouped' })
       } else if (action === 'excel-flat') {
-        exportReportExcelFlat(data, exportMeta)
+        await exportReportExcelFlat(data, exportMeta)
       } else if (action === 'pdf') {
         printReportPdf(data, { ...exportMeta, detailFormat: 'grouped' }, charts)
       } else {
@@ -96,7 +97,7 @@ export default function ReportsExportActions({ data, groupBySecondary }: Props) 
         <Button
           startIcon={exporting ? <CircularProgress size={14} color='inherit' /> : <i className='ri-download-2-line' />}
           onClick={e => setAnchorEl(e.currentTarget)}
-          disabled={exporting}
+          disabled={exporting || disabled}
         >
           {exporting ? 'Preparing…' : 'Export'}
         </Button>
@@ -112,7 +113,7 @@ export default function ReportsExportActions({ data, groupBySecondary }: Props) 
         </MenuItem>
         <MenuItem onClick={() => void runExport('excel-flat-only')} disabled={exporting}>
           <i className='ri-table-line' style={{ marginRight: 8 }} />
-          CSV — simple list (rows only)
+          Excel — simple list (rows only)
         </MenuItem>
         <MenuItem onClick={() => void runExport('pdf')} disabled={exporting}>
           <i className='ri-file-pdf-2-line' style={{ marginRight: 8 }} />

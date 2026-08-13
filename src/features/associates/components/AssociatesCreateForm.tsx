@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -26,7 +26,7 @@ import Select from '@mui/material/Select'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import { createAssociate } from '@features/associates/services/associatesService'
+import { createAssociate, previewAssociateCode } from '@features/associates/services/associatesService'
 import { getAssociateTypes } from '@features/associate-types/services/associateTypesService'
 import CountryCodeField from '@/components/CountryCodeField'
 import { COUNTRY_CODE_VALIDATION_MESSAGE, isValidCountryCode } from '@/lib/countryCodes'
@@ -35,21 +35,6 @@ import {
   MOBILE_VALIDATION_MESSAGE,
   normalizeMobileDigits
 } from '@/lib/mobile'
-
-const buildBaseCode = (associateName: string, companyName: string, mobile: string) => {
-  const nameWords = associateName.trim().split(/\s+/).filter(Boolean)
-  const companyWords = companyName.trim().split(/\s+/).filter(Boolean)
-
-  const nameInitials =
-    nameWords.length > 0 ? nameWords.slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : associateName.trim().slice(0, 2).toUpperCase()
-
-  const companyKeyRaw = companyWords.length > 0 ? companyWords.join('') : companyName
-  const companyKey = companyKeyRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3)
-
-  const last4 = mobile.replace(/\D/g, '').slice(-4)
-
-  return [nameInitials, companyKey, last4].filter(Boolean).join('-')
-}
 
 type Props = {
   onSuccess?: () => void
@@ -66,6 +51,7 @@ type Props = {
     payout: number | null
     code: string
     pan: string | null
+    remarks: string | null
     isActive: boolean
   }>
   onSubmitOverride?: (payload: any) => Promise<void>
@@ -89,6 +75,7 @@ const AssociatesCreateForm = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const useCard = variant === 'card'
+  const isEditMode = Boolean(initialValues)
 
   const [associateName, setAssociateName] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -98,6 +85,7 @@ const AssociatesCreateForm = ({
   const [email, setEmail] = useState('')
   const [payout, setPayout] = useState<string>('')
   const [pan, setPan] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [associateTypes, setAssociateTypes] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
   const [associateTypesLoading, setAssociateTypesLoading] = useState(false)
@@ -107,6 +95,9 @@ const AssociatesCreateForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [codePreview, setCodePreview] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [createdCode, setCreatedCode] = useState('')
 
   useEffect(() => {
     if (!initialValues) {
@@ -127,6 +118,7 @@ const AssociatesCreateForm = ({
     if (initialValues.email !== undefined) setEmail(initialValues.email || '')
     if (initialValues.payout !== undefined && initialValues.payout !== null) setPayout(String(initialValues.payout))
     if (initialValues.pan !== undefined) setPan(initialValues.pan || '')
+    if (initialValues.remarks !== undefined) setRemarks(initialValues.remarks || '')
     if (initialValues.isActive !== undefined) setIsActive(Boolean(initialValues.isActive))
   }, [initialValues])
 
@@ -169,6 +161,42 @@ const AssociatesCreateForm = ({
     }
   }, [initialValues?.associateTypeId])
 
+  useEffect(() => {
+    if (isEditMode) return
+
+    const trimmedName = associateName.trim()
+    const trimmedCompany = companyName.trim()
+
+    if (trimmedName.length < 2 || trimmedCompany.length < 2) {
+      setCodePreview(null)
+
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true)
+
+      try {
+        const preview = await previewAssociateCode({
+          associateName: trimmedName,
+          companyName: trimmedCompany
+        })
+
+        if (!cancelled) setCodePreview(preview || null)
+      } catch {
+        if (!cancelled) setCodePreview(null)
+      } finally {
+        if (!cancelled) setPreviewLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [associateName, companyName, isEditMode])
+
   const isValidMobile = isValidMobileDigits
   const isValidEmail = (v: string) => !v || /^.+@.+\..+$/.test(v)
   const isValidPAN = (v: string) => !v || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v)
@@ -184,10 +212,7 @@ const AssociatesCreateForm = ({
     isValidPAN(pan) &&
     isValidPayout(payout)
 
-  const codePreview = useMemo(
-    () => buildBaseCode(associateName, companyName, mobile),
-    [associateName, companyName, mobile]
-  )
+  const displayedCode = isEditMode ? initialValues?.code || '' : createdCode || codePreview || ''
 
   const handleMobile = (v: string) => {
     setMobile(normalizeMobileDigits(v))
@@ -233,13 +258,16 @@ const AssociatesCreateForm = ({
         email: email ? email.trim() : null,
         payout: payout ? Number(payout) : null,
         pan: pan ? pan.toUpperCase() : null,
+        remarks: remarks ? remarks.trim() : null,
         isActive
       }
 
       if (onSubmitOverride) {
         await onSubmitOverride(payload)
       } else {
-        await createAssociate(payload)
+        const result = await createAssociate(payload)
+
+        if (result.code) setCreatedCode(result.code)
       }
 
       if (onSuccess) onSuccess()
@@ -260,6 +288,7 @@ const AssociatesCreateForm = ({
       setEmail('')
       setPayout('')
       setPan('')
+      setRemarks('')
       setIsActive(true)
       setFieldErrors({})
       setError(null)
@@ -279,6 +308,11 @@ const AssociatesCreateForm = ({
           {error}
         </Alert>
       ) : null}
+      {!isEditMode && createdCode ? (
+        <Alert severity='success'>
+          Associate created with code <strong>{createdCode}</strong>
+        </Alert>
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
           <TextField
@@ -286,62 +320,28 @@ const AssociatesCreateForm = ({
             value={associateName}
             onChange={e => setAssociateName(e.target.value)}
             error={Boolean(fieldErrors.associateName)}
-            helperText={
-              fieldErrors.associateName || (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Typography variant='caption' color='text.secondary'>
-                    Code
-                  </Typography>
-                  <Typography
-                    component='sup'
-                    variant='caption'
-                    color='primary.main'
-                    sx={{
-                      fontWeight: 700,
-                      borderRadius: 999,
-                      px: 0.75,
-                      py: 0.1,
-                      backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                      lineHeight: 1
-                    }}
-                  >
-                    {initialValues?.code || codePreview || '-'}
-                  </Typography>
-                </Box>
-              )
-            }
+            helperText={fieldErrors.associateName}
             fullWidth
-            InputProps={{
-              endAdornment:
-                initialValues?.code || codePreview ? (
-                  <InputAdornment position='end'>
-                    <Typography
-                      component='sup'
-                      variant='caption'
-                      color='primary.main'
-                      sx={{
-                        fontWeight: 700,
-                        borderRadius: 999,
-                        px: 0.75,
-                        py: 0.1,
-                        backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                        lineHeight: 1
-                      }}
-                    >
-                      {initialValues?.code || codePreview}
-                    </Typography>
-                  </InputAdornment>
-                ) : undefined
-            }}
           />
         </Box>
+        {!isEditMode ? (
+          <Alert severity='info' icon={false} sx={{ py: 1 }}>
+            {previewLoading
+              ? 'Generating code preview...'
+              : displayedCode
+                ? `Next code preview: ${displayedCode}`
+                : 'A unique associate code will be generated from your code generation template.'}
+          </Alert>
+        ) : (
+          <TextField label='Code' value={displayedCode || '-'} fullWidth disabled helperText='Auto-generated when created' />
+        )}
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
           <TextField
             label='Company Name'
             value={companyName}
             onChange={e => setCompanyName(e.target.value)}
             error={Boolean(fieldErrors.companyName)}
-            helperText={fieldErrors.companyName}
+            helperText={fieldErrors.companyName || 'Used by {COMPANY_NAME} in code templates'}
             fullWidth
           />
           <FormControl fullWidth>
@@ -428,6 +428,17 @@ const AssociatesCreateForm = ({
           error={Boolean(fieldErrors.pan)}
           helperText={fieldErrors.pan}
           fullWidth
+        />
+        <TextField
+          label='Remarks'
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          error={Boolean(fieldErrors.remarks)}
+          helperText={fieldErrors.remarks || 'Optional (max 500 characters)'}
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={4}
         />
       </Box>
       <FormControlLabel

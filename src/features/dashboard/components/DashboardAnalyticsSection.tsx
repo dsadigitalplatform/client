@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 import {
   buildTimelineBuckets,
   formatDashboardPeriodLabel,
@@ -65,7 +66,7 @@ function aggregateBreakdown(
   const map = new Map<string, { value: number; count: number }>()
 
   leads.forEach(c => {
-    const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
+    const amount = resolveApprovedAmount(c) ?? 0
     const label = pickLabel(c)
 
     const prev = map.get(label) || { value: 0, count: 0 }
@@ -145,7 +146,7 @@ function TimelineApexChart({
       type='area'
       height={260}
       options={options}
-      series={[{ name: 'Loan amount', data: values }]}
+      series={[{ name: 'Approved amount', data: values }]}
     />
   )
 }
@@ -237,7 +238,7 @@ export default function DashboardAnalyticsSection({ leads, loading, enabled, glo
   const datedAmounts = useMemo(() => {
     return leads
       .map(c => {
-        const amount = typeof c.requestedAmount === 'number' ? c.requestedAmount : 0
+        const amount = resolveApprovedAmount(c) ?? 0
         const date = c.updatedAt ? new Date(c.updatedAt) : null
 
         if (!date || !Number.isFinite(date.getTime()) || amount <= 0) return null
@@ -345,7 +346,7 @@ export default function DashboardAnalyticsSection({ leads, loading, enabled, glo
       <AnalyticsCard
         title='Bank-wise loans'
         subtitle='Distribution by lending bank'
-        totalLabel={`${bankRows.length} banks · amount basis`}
+        totalLabel={`${bankRows.length} banks · approved amount basis`}
         totalValue={enabled ? (loading ? '…' : formatINR(bankTotal)) : '—'}
         icon='ri-bank-line'
         accent='var(--mui-palette-primary-main)'
@@ -433,7 +434,7 @@ export default function DashboardAnalyticsSection({ leads, loading, enabled, glo
       </AnalyticsCard>
 
       <AnalyticsCard
-        title='Loan amount timeline'
+        title='Approved amount timeline'
         subtitle={`${periodHint} · ${timelineModeLabel(timelineMode).toLowerCase()} buckets`}
         totalLabel={
           timelinePoints.length > 0
@@ -457,7 +458,7 @@ export default function DashboardAnalyticsSection({ leads, loading, enabled, glo
           : loading
             ? emptyState('Loading timeline…')
             : timelinePoints.length === 0
-              ? emptyState('No dated loan amounts in this range')
+              ? emptyState('No dated approved amounts in this range')
               : (
                 <TimelineApexChart
                   points={timelinePoints}

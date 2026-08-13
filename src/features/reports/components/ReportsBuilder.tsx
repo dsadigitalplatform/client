@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 
+import Accordion from '@mui/material/Accordion'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import AccordionSummary from '@mui/material/AccordionSummary'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Card from '@mui/material/Card'
-import CardContent from '@mui/material/CardContent'
-import Collapse from '@mui/material/Collapse'
+import Chip from '@mui/material/Chip'
 import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import InputLabel from '@mui/material/InputLabel'
@@ -14,12 +15,8 @@ import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import Grid from '@mui/material/Grid'
-import { useTheme } from '@mui/material/styles'
-import useMediaQuery from '@mui/material/useMediaQuery'
 
 import type { ReportDetailGroupDimension, ReportFilterOptions, ReportFilters } from '../reports.types'
 import { DEFAULT_REPORT_FILTERS, filtersEqual, hasActiveDimensionFilters } from '../reports.types'
@@ -29,6 +26,7 @@ type Props = {
   filters: ReportFilters
   filterOptions: ReportFilterOptions | null
   loading: boolean
+  disabled?: boolean
   onChange: <K extends keyof ReportFilters>(key: K, value: ReportFilters[K]) => void
   onRun: () => void
   onClear: () => void
@@ -62,51 +60,53 @@ const PROGRESSIVE_PAYMENT_FILTER_OPTIONS = [
   { value: 'tracking_active', label: 'Tracking active', hint: 'Enabled on lead · disbursement tracker exists' }
 ] as const
 
-export default function ReportsBuilder({ filters, filterOptions, loading, onChange, onRun, onClear }: Props) {
-  const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [expanded, setExpanded] = useState(!isMobile)
+export default function ReportsBuilder({ filters, filterOptions, loading, disabled = false, onChange, onRun, onClear }: Props) {
+  const [expanded, setExpanded] = useState(false)
   const canClear = !filtersEqual(filters, DEFAULT_REPORT_FILTERS)
   const hasDimensionFilters = hasActiveDimensionFilters(filters)
+  const controlsDisabled = loading || disabled
 
   return (
-    <Card variant='outlined'>
-      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-          <Box>
-            <Typography variant='h6'>Report builder</Typography>
-            <Typography variant='body2' color='text.secondary'>
-              Choose dimensions, filters, and output style
-            </Typography>
-          </Box>
-          {isMobile ? (
-            <Button size='small' onClick={() => setExpanded(v => !v)} endIcon={<i className={expanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} />}>
-              {expanded ? 'Hide filters' : 'Show filters'}
-            </Button>
-          ) : null}
+    <Accordion
+      expanded={expanded}
+      onChange={(_, next) => {
+        if (disabled) return
+        setExpanded(next)
+      }}
+      disableGutters
+      variant='outlined'
+      sx={{
+        borderRadius: 1,
+        '&:before': { display: 'none' },
+        opacity: disabled ? 0.7 : 1
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<i className='ri-arrow-down-s-line' />}
+        sx={{
+          px: { xs: 2, sm: 2.5 },
+          '& .MuiAccordionSummary-content': {
+            my: 1.5,
+            alignItems: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap'
+          }
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant='h6'>Report builder</Typography>
+          <Typography variant='body2' color='text.secondary'>
+            Choose dimensions, filters, and output style
+          </Typography>
         </Box>
+        {hasDimensionFilters ? (
+          <Chip size='small' color='primary' variant='outlined' label='Filters active' sx={{ mr: 1 }} />
+        ) : null}
+      </AccordionSummary>
 
-        <Collapse in={expanded || !isMobile}>
+      <AccordionDetails sx={{ px: { xs: 2, sm: 2.5 }, pb: { xs: 2, sm: 2.5 }, pt: 0 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Grid container spacing={2}>
-            <Grid size={{ xs: 12 }}>
-              <ToggleButtonGroup
-                exclusive
-                fullWidth={isMobile}
-                size='small'
-                value={filters.dataMode}
-                onChange={(_, v) => v && onChange('dataMode', v)}
-              >
-                <ToggleButton value='snapshot' sx={{ textTransform: 'none', flex: 1 }}>
-                  <i className='ri-camera-line' style={{ marginRight: 6 }} />
-                  Current snapshot
-                </ToggleButton>
-                <ToggleButton value='historical' sx={{ textTransform: 'none', flex: 1 }}>
-                  <i className='ri-history-line' style={{ marginRight: 6 }} />
-                  Stage history
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Grid>
-
             <Grid size={{ xs: 12 }}>
               <Box
                 sx={{
@@ -228,7 +228,7 @@ export default function ReportsBuilder({ filters, filterOptions, loading, onChan
                 fullWidth
                 size='small'
                 type='date'
-                label={filters.dataMode === 'historical' ? 'Staged from' : 'Created from'}
+                label='Created from'
                 InputLabelProps={{ shrink: true }}
                 value={filters.dateFrom ?? ''}
                 onChange={e => onChange('dateFrom', e.target.value || null)}
@@ -240,7 +240,7 @@ export default function ReportsBuilder({ filters, filterOptions, loading, onChan
                 fullWidth
                 size='small'
                 type='date'
-                label={filters.dataMode === 'historical' ? 'Staged to' : 'Created to'}
+                label='Created to'
                 InputLabelProps={{ shrink: true }}
                 value={filters.dateTo ?? ''}
                 onChange={e => onChange('dateTo', e.target.value || null)}
@@ -352,28 +352,23 @@ export default function ReportsBuilder({ filters, filterOptions, loading, onChan
               />
             </Grid>
           </Grid>
-        </Collapse>
 
-        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Button variant='contained' onClick={onRun} disabled={loading} startIcon={<i className='ri-play-line' />}>
-            {loading ? 'Running…' : 'Run report'}
-          </Button>
-          <Button
-            variant='outlined'
-            color='secondary'
-            onClick={onClear}
-            disabled={loading || !canClear}
-            startIcon={<i className='ri-filter-off-line' />}
-          >
-            Clear filters
-          </Button>
-          {hasDimensionFilters ? (
-            <Typography variant='caption' color='text.secondary'>
-              Dimension filters active
-            </Typography>
-          ) : null}
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Button variant='contained' onClick={onRun} disabled={controlsDisabled} startIcon={<i className='ri-play-line' />}>
+              {loading ? 'Running…' : 'Run report'}
+            </Button>
+            <Button
+              variant='outlined'
+              color='secondary'
+              onClick={onClear}
+              disabled={controlsDisabled || !canClear}
+              startIcon={<i className='ri-filter-off-line' />}
+            >
+              Clear filters
+            </Button>
+          </Box>
         </Box>
-      </CardContent>
-    </Card>
+      </AccordionDetails>
+    </Accordion>
   )
 }

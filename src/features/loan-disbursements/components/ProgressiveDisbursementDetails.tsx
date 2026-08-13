@@ -36,6 +36,8 @@ import {
   getDisbursementAuditHistory,
   getDisbursementTrackerById
 } from '@features/loan-disbursements/services/loanDisbursementsService'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
+import { SubscriptionGateAlert, useTenantModuleAccess } from '@features/subscriptions'
 
 type Props = {
   trackerId: string
@@ -75,6 +77,8 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
   const router = useRouter()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const { loading: accessLoading, enabled: moduleEnabled, planName } = useTenantModuleAccess('progressiveDisbursement')
+  const locked = !accessLoading && !moduleEnabled
   const [tracker, setTracker] = useState<DisbursementTrackerDetails | null>(null)
   const [audit, setAudit] = useState<DisbursementAuditHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -210,11 +214,13 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
           <Button component={Link} href='/progressive-disbursements' startIcon={<i className='ri-arrow-left-line' />} size='small' sx={{ mb: 1 }}>
             All trackers
           </Button>
-          <Typography variant='h5'>{tracker.customerName}</Typography>
-          <Typography variant='body2' color='text.secondary'>
-            {tracker.loanTypeName}
-            {tracker.bankName ? ` · ${tracker.bankName}` : ''} · {tracker.stageName}
-          </Typography>
+          <LeadIdentity
+            customerName={tracker.customerName}
+            code={tracker.leadCode}
+            size='large'
+            nameSx={{ fontSize: '1.5rem', lineHeight: 1.25 }}
+            subtitle={`${tracker.loanTypeName}${tracker.bankName ? ` · ${tracker.bankName}` : ''} · ${tracker.stageName}`}
+          />
           <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Chip size='small' label={chip.label} color={chip.color} />
             <MuiLink component={Link} href={`/loan-cases/${tracker.leadId}`} variant='body2'>
@@ -224,7 +230,16 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
         </Box>
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'center' } }}>
           {canAdd ? (
-            <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setAddOpen(true)} fullWidth={isMobile}>
+            <Button
+              variant='contained'
+              startIcon={<i className='ri-add-line' />}
+              onClick={() => {
+                if (locked) return
+                setAddOpen(true)
+              }}
+              disabled={locked}
+              fullWidth={isMobile}
+            >
               Record disbursement
             </Button>
           ) : (
@@ -235,9 +250,11 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
             color='error'
             startIcon={<i className='ri-delete-bin-line' />}
             onClick={() => {
+              if (locked) return
               setDeleteError(null)
               setDeleteOpen(true)
             }}
+            disabled={locked}
             fullWidth={isMobile}
           >
             Delete tracker
@@ -245,6 +262,34 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
         </Box>
       </Box>
 
+      {accessLoading ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant='body2' color='text.secondary'>
+            Checking subscription access…
+          </Typography>
+        </Box>
+      ) : null}
+
+      {locked ? (
+        <SubscriptionGateAlert
+          title='Progressive disbursement not included in your plan'
+          message='Please upgrade your subscription to manage staged loan payouts'
+          planName={planName}
+        />
+      ) : null}
+
+      <Box
+        sx={{
+          opacity: locked ? 0.55 : 1,
+          pointerEvents: locked ? 'none' : 'auto',
+          transition: theme => theme.transitions.create('opacity'),
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3
+        }}
+        aria-disabled={locked}
+      >
       <Card
         variant='outlined'
         sx={{
@@ -403,8 +448,9 @@ export default function ProgressiveDisbursementDetails({ trackerId }: Props) {
           </Card>
         </Grid>
       </Grid>
+      </Box>
 
-      <Dialog open={addOpen} onClose={() => !submitting && setAddOpen(false)} fullWidth maxWidth='sm'>
+      <Dialog open={addOpen && !locked} onClose={() => !submitting && setAddOpen(false)} fullWidth maxWidth='sm'>
         <DialogTitle>Record disbursement</DialogTitle>
         <DialogContent dividers>
           <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>

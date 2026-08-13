@@ -1,18 +1,32 @@
 import type { ReportDetailGroupDimension, ReportDetailRow, ReportQueryResponse } from '../reports.types'
 import { buildDetailGroups } from './buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from './exportReport'
+import { disbursementStatusLabel, exportDisbursementCells, toSpreadsheetAmount } from './reportDisbursement'
+import type { SpreadsheetCell } from './reportSpreadsheetExport'
 
-function detailCells(row: ReportDetailRow, isHistorical: boolean, indent = '') {
+const DISBURSEMENT_HEADERS = ['Status', 'Balance remaining', 'Disbursed'] as const
+
+type AmountExportMode = 'display' | 'spreadsheet'
+
+function formatExportAmount(amount: number | null | undefined, mode: AmountExportMode): string | number {
+  return mode === 'spreadsheet' ? toSpreadsheetAmount(amount) : formatINR(amount)
+}
+
+function detailCells(row: ReportDetailRow, isHistorical: boolean, mode: AmountExportMode, indent = '') {
+  const disbursementCells = exportDisbursementCells(row, mode)
+
   if (isHistorical) {
     return [
       `${indent}${row.customerName ?? ''}`,
       '',
+      row.leadCode ?? '',
       row.loanTypeName ?? '',
       row.bankName ?? '',
       row.auditStageName ?? row.stageName ?? '',
       row.auditStagedDate ?? '',
       row.agentName ?? '',
-      formatINR(row.requestedAmount),
+      formatExportAmount(row.requestedAmount, mode),
+      ...disbursementCells,
       formatDate(row.createdAt),
       ''
     ]
@@ -21,13 +35,50 @@ function detailCells(row: ReportDetailRow, isHistorical: boolean, indent = '') {
   return [
     `${indent}${row.customerName ?? ''}`,
     '',
+    row.leadCode ?? '',
     row.loanTypeName ?? '',
     row.bankName ?? '',
     row.stageName ?? '',
     row.agentName ?? '',
-    formatINR(row.requestedAmount),
+    formatExportAmount(row.requestedAmount, mode),
+    ...disbursementCells,
     formatDate(row.createdAt),
     ''
+  ]
+}
+
+function detailHeader(isHistorical: boolean, primaryLabel: string) {
+  if (isHistorical) {
+    return [
+      'Level',
+      `${primaryLabel} / Customer`,
+      'Cases',
+      'Lead code',
+      'Loan type',
+      'Bank',
+      'Stage (audit)',
+      'Staged date',
+      'Agent',
+      'Amount',
+      ...DISBURSEMENT_HEADERS,
+      'Created',
+      'Note'
+    ]
+  }
+
+  return [
+    'Level',
+    `${primaryLabel} / Customer`,
+    'Cases',
+    'Lead code',
+    'Loan type',
+    'Bank',
+    'Stage',
+    'Agent',
+    'Amount',
+    ...DISBURSEMENT_HEADERS,
+    'Created',
+    'Note'
   ]
 }
 
@@ -56,86 +107,54 @@ export function buildGroupedDetailCsvRows(
   data: ReportQueryResponse,
   groupBySecondary: ReportDetailGroupDimension | null
 ): string[][] {
+  return buildGroupedDetailSpreadsheetRows(data, groupBySecondary) as string[][]
+}
+
+export function buildGroupedDetailSpreadsheetRows(
+  data: ReportQueryResponse,
+  groupBySecondary: ReportDetailGroupDimension | null
+): SpreadsheetCell[][] {
   if (data.details.length === 0) return []
 
   const isHistorical = data.dataMode === 'historical'
   const { primary, hasSecondary, secondary, groupingLabel, groups } = resolveDetailGrouping(data, groupBySecondary)
-
-  const header = isHistorical
-    ? [
-        'Level',
-        `${groupByLabel(primary)} / Customer`,
-        'Cases',
-        'Loan type',
-        'Bank',
-        'Stage (audit)',
-        'Staged date',
-        'Agent',
-        'Amount',
-        'Created',
-        'Note'
-      ]
-    : [
-        'Level',
-        `${groupByLabel(primary)} / Customer`,
-        'Cases',
-        'Loan type',
-        'Bank',
-        'Stage',
-        'Agent',
-        'Amount',
-        'Created',
-        'Note'
-      ]
-
-  const rows: string[][] = [[`Grouped detail (${groupingLabel})`], header]
+  const header = detailHeader(isHistorical, groupByLabel(primary))
+  const rows: SpreadsheetCell[][] = [[`Grouped detail (${groupingLabel})`], header]
+  const emptyLeadCols = isHistorical ? 6 : 5
+  const emptyDisbursementCells: SpreadsheetCell[] = ['', '', '']
 
   groups.forEach(group => {
-    rows.push(
-      isHistorical
-        ? [
-            'GROUP',
-            group.label,
-            String(group.count),
-            '',
-            '',
-            '',
-            '',
-            '',
-            formatINR(group.amount),
-            '',
-            'GROUP TOTAL'
-          ]
-        : ['GROUP', group.label, String(group.count), '', '', '', '', formatINR(group.amount), '', 'GROUP TOTAL']
-    )
+    rows.push([
+      'GROUP',
+      group.label,
+      String(group.count),
+      ...Array(emptyLeadCols).fill(''),
+      toSpreadsheetAmount(group.amount),
+      ...emptyDisbursementCells,
+      '',
+      'GROUP TOTAL'
+    ])
 
     if (hasSecondary && secondary) {
       group.subgroups.forEach(subgroup => {
-        rows.push(
-          isHistorical
-            ? [
-                'SUBGROUP',
-                subgroup.label,
-                String(subgroup.count),
-                '',
-                '',
-                '',
-                '',
-                '',
-                formatINR(subgroup.amount),
-                '',
-                'SUBTOTAL'
-              ]
-            : ['SUBGROUP', subgroup.label, String(subgroup.count), '', '', '', '', formatINR(subgroup.amount), '', 'SUBTOTAL']
-        )
+        rows.push([
+          'SUBGROUP',
+          subgroup.label,
+          String(subgroup.count),
+          ...Array(emptyLeadCols).fill(''),
+          toSpreadsheetAmount(subgroup.amount),
+          ...emptyDisbursementCells,
+          '',
+          'SUBTOTAL'
+        ])
 
         subgroup.rows.forEach(row => {
-          rows.push(['DETAIL', ...detailCells(row, isHistorical)])
+          rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet')])
         })
       })
     } else {
       group.rows.forEach(row => {
-        rows.push(['DETAIL', ...detailCells(row, isHistorical)])
+        rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet')])
       })
     }
 
@@ -146,43 +165,66 @@ export function buildGroupedDetailCsvRows(
 }
 
 export function buildFlatDetailCsvRows(data: ReportQueryResponse): string[][] {
+  return buildFlatDetailSpreadsheetRows(data) as string[][]
+}
+
+export function buildFlatDetailSpreadsheetRows(data: ReportQueryResponse): SpreadsheetCell[][] {
   if (data.details.length === 0) return []
 
   const isHistorical = data.dataMode === 'historical'
   const limitNote = data.details.length >= 500 ? ' (max 500 rows)' : ''
 
   const header = isHistorical
-    ? ['Customer', 'Loan type', 'Bank', 'Stage (audit)', 'Staged date', 'Agent', 'Amount', 'Created']
-    : ['Customer', 'Loan type', 'Bank', 'Stage', 'Agent', 'Amount', 'Created']
+    ? ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage (audit)', 'Staged date', 'Agent', 'Amount', ...DISBURSEMENT_HEADERS, 'Created']
+    : ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage', 'Agent', 'Amount', ...DISBURSEMENT_HEADERS, 'Created']
 
-  const rows: string[][] = [[`Detailed rows (flat list${limitNote})`], header]
+  const rows: SpreadsheetCell[][] = [[`Detailed rows (flat list${limitNote})`], header]
 
   data.details.forEach(row => {
     rows.push(
       isHistorical
         ? [
             row.customerName ?? '',
+            row.leadCode ?? '',
             row.loanTypeName ?? '',
             row.bankName ?? '',
             row.auditStageName ?? row.stageName ?? '',
             row.auditStagedDate ?? '',
             row.agentName ?? '',
-            formatINR(row.requestedAmount),
+            toSpreadsheetAmount(row.requestedAmount),
+            ...exportDisbursementCells(row, 'spreadsheet'),
             formatDate(row.createdAt)
           ]
         : [
             row.customerName ?? '',
+            row.leadCode ?? '',
             row.loanTypeName ?? '',
             row.bankName ?? '',
             row.stageName ?? '',
             row.agentName ?? '',
-            formatINR(row.requestedAmount),
+            toSpreadsheetAmount(row.requestedAmount),
+            ...exportDisbursementCells(row, 'spreadsheet'),
             formatDate(row.createdAt)
           ]
     )
   })
 
   return rows
+}
+
+function disbursementDetailHtmlCells(row: ReportDetailRow) {
+  const escape = (value: string | null | undefined) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+  if (row.disbursementStatus == null) {
+    return '<td></td><td class="num"></td><td class="num"></td>'
+  }
+
+  return `<td>${escape(disbursementStatusLabel(row.disbursementStatus))}</td><td class="num">${escape(formatINR(row.remainingAmount))}</td><td class="num">${escape(formatINR(row.totalDisbursedAmount))}</td>`
 }
 
 export function buildFlatDetailHtml(data: ReportQueryResponse): string {
@@ -198,16 +240,20 @@ export function buildFlatDetailHtml(data: ReportQueryResponse): string {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
 
+  const disbursementHeaders = '<th>Status</th><th>Balance remaining</th><th>Disbursed</th>'
+
   const headerCells = isHistorical
-    ? '<th>Customer</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th><th>Created</th>'
-    : '<th>Customer</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th><th>Created</th>'
+    ? `<th>Customer</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
+    : `<th>Customer</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
 
   const body = data.details
-    .map(row =>
-      isHistorical
-        ? `<tr><td>${escape(row.customerName)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-        : `<tr><td>${escape(row.customerName)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-    )
+    .map(row => {
+      const disbursementCells = disbursementDetailHtmlCells(row)
+
+      return isHistorical
+        ? `<tr><td>${escape(row.customerName)}</td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+        : `<tr><td>${escape(row.customerName)}</td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+    })
     .join('')
 
   return `<h2>Detailed rows (flat list${limitNote})</h2><table><thead><tr>${headerCells}</tr></thead><tbody>${body}</tbody></table>`
@@ -229,52 +275,60 @@ export function buildGroupedDetailHtml(
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
 
+  const disbursementHeaders = '<th>Status</th><th>Balance remaining</th><th>Disbursed</th>'
+  const emptyLeadColSpan = isHistorical ? 6 : 5
+
   const headerCells = isHistorical
-    ? `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th><th>Created</th>`
-    : `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th><th>Created</th>`
+    ? `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
+    : `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
 
   const body: string[] = []
 
-  groups.forEach(group => {
-    body.push(
-      `<tr class="group-row-primary">
-        <td><span class="level-badge level-group">GROUP</span></td>
-        <td><strong>${escape(group.label)}</strong></td>
-        <td class="num"><strong>${group.count}</strong></td>
-        <td colspan="${isHistorical ? 5 : 4}"></td>
-        <td class="num amount-total"><strong>${escape(formatINR(group.amount))}</strong><div class="sum-label">Group total</div></td>
+  const groupAmountRow = (level: 'primary' | 'secondary', label: string, count: number, amount: number, note: string) => {
+    const levelBadge =
+      level === 'primary'
+        ? '<span class="level-badge level-group">GROUP</span>'
+        : '<span class="level-badge level-subgroup">SUB</span>'
+    const labelCell =
+      level === 'primary'
+        ? `<td><strong>${escape(label)}</strong></td>`
+        : `<td class="indent-sub"><strong>${escape(label)}</strong><div class="sum-label">${escape(note)}</div></td>`
+
+    return `<tr class="group-row-${level === 'primary' ? 'primary' : 'secondary'}">
+        <td>${levelBadge}</td>
+        ${labelCell}
+        <td class="num"><strong>${count}</strong></td>
+        <td colspan="${emptyLeadColSpan}"></td>
+        <td class="num amount-total"><strong>${escape(formatINR(amount))}</strong><div class="sum-label">${level === 'primary' ? 'Group total' : 'Subtotal'}</div></td>
+        <td colspan="3"></td>
         <td></td>
       </tr>`
-    )
+  }
+
+  const detailRowHtml = (row: ReportDetailRow) => {
+    const disbursementCells = disbursementDetailHtmlCells(row)
+
+    return isHistorical
+      ? `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+      : `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+  }
+
+  groups.forEach(group => {
+    body.push(groupAmountRow('primary', group.label, group.count, group.amount, 'Group total'))
 
     if (hasSecondary && secondary) {
       group.subgroups.forEach(subgroup => {
         body.push(
-          `<tr class="group-row-secondary">
-            <td><span class="level-badge level-subgroup">SUB</span></td>
-            <td class="indent-sub"><strong>${escape(subgroup.label)}</strong><div class="sum-label">${escape(groupByLabel(secondary))} subtotal</div></td>
-            <td class="num"><strong>${subgroup.count}</strong></td>
-            <td colspan="${isHistorical ? 5 : 4}"></td>
-            <td class="num amount-total"><strong>${escape(formatINR(subgroup.amount))}</strong><div class="sum-label">Subtotal</div></td>
-            <td></td>
-          </tr>`
+          groupAmountRow('secondary', subgroup.label, subgroup.count, subgroup.amount, `${groupByLabel(secondary)} subtotal`)
         )
 
         subgroup.rows.forEach(row => {
-          body.push(
-            isHistorical
-              ? `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-              : `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-          )
+          body.push(detailRowHtml(row))
         })
       })
     } else {
       group.rows.forEach(row => {
-        body.push(
-          isHistorical
-            ? `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-            : `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td><td>${escape(formatDate(row.createdAt))}</td></tr>`
-        )
+        body.push(detailRowHtml(row))
       })
     }
   })

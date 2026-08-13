@@ -19,6 +19,7 @@ import { useTheme } from '@mui/material/styles'
 
 import { listDisbursementTrackers } from '@features/loan-disbursements/services/loanDisbursementsService'
 import type { DisbursementTrackerListItem } from '@features/loan-disbursements/loan-disbursements.types'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import type { DisbursementListSummary } from '@features/loan-disbursements/services/loanDisbursementsService'
 import { filterByDashboardPeriod, type DashboardTimePeriod } from '@features/dashboard/utils/timelineBuckets'
 
@@ -265,9 +266,9 @@ export default function DisbursementInsightsSection({ enabled, assignedAgentId, 
                       }}
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
-                        <Typography variant='body2' fontWeight={600} noWrap>
-                          {row.customerName}
-                        </Typography>
+                        <Box sx={{ minWidth: 0 }}>
+                          <LeadIdentity customerName={row.customerName} code={row.leadCode} />
+                        </Box>
                         <Typography variant='caption' color='text.secondary' noWrap>
                           {row.progressPercent}%
                         </Typography>

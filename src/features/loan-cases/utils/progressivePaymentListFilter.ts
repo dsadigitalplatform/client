@@ -41,6 +41,38 @@ export function buildDisbursementTrackerLookupStage(tenantIdObj: ObjectId, tenan
   }
 }
 
+/** Lookup tracker money/status fields for report detail rows (preserve null when absent). */
+export function buildDisbursementTrackerDetailsLookupStages(tenantIdObj: ObjectId, tenantIdHex: string) {
+  return [
+    {
+      $lookup: {
+        from: 'loanDisbursementTrackers',
+        let: { leadId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [buildTenantMatchExpr(tenantIdObj, tenantIdHex), buildLeadMatchExpr()]
+              }
+            }
+          },
+          { $limit: 1 },
+          {
+            $project: {
+              approvedAmount: 1,
+              totalDisbursedAmount: 1,
+              remainingAmount: 1,
+              disbursementStatus: 1
+            }
+          }
+        ],
+        as: 'disbursementTracker'
+      }
+    },
+    { $unwind: { path: '$disbursementTracker', preserveNullAndEmptyArrays: true } }
+  ]
+}
+
 /** Progressive payment enabled on lead; no disbursement tracker yet. */
 export function buildProgressivePaymentReadyToTrackMatchStage() {
   return {

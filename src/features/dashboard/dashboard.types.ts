@@ -6,7 +6,7 @@ export type TrendPoint = {
 export type LoanCasesTrendPoint = {
   label: string
   count: number
-  requestedLoanVolume: number
+  approvedLoanVolume: number
 }
 
 export type MonthlyStageMetric = {
@@ -31,7 +31,7 @@ export type DashboardOverview = {
   }
   loanCases: {
     total: number
-    requestedLoanVolume: number
+    approvedLoanVolume: number
     trend: LoanCasesTrendPoint[]
     byStage: Array<{ stageId: string | null; stageName: string; count: number }>
   }
@@ -42,6 +42,7 @@ export type DashboardOverview = {
     upcoming: Array<{
       id: string
       leadId: string | null
+      leadCode: string | null
       customerId: string | null
       leadTitle: string | null
       customerName: string | null
@@ -57,7 +58,7 @@ export type DashboardOverview = {
       name: string | null
       email: string | null
       totalCases: number
-      requestedLoanVolume: number
+      approvedLoanVolume: number
     }>
   }
 }

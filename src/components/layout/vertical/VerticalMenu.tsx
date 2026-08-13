@@ -27,6 +27,7 @@ type RenderExpandIconProps = {
 
 type TenantInfo = {
   role?: 'OWNER' | 'ADMIN' | 'USER'
+  subscriptionPlanName?: string
 }
 
 type Props = {
@@ -39,6 +40,7 @@ type Props = {
     showAdmin: boolean
     showSuperAdmin: boolean
     canInviteUser: boolean
+    canManageSubscription: boolean
   }
 }
 
@@ -62,6 +64,7 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
   const showSuperAdmin = Boolean(menuVisibility?.showSuperAdmin)
   const showAdmin = Boolean(menuVisibility?.showAdmin)
   const canInviteUser = Boolean(menuVisibility?.canInviteUser)
+  const canManageSubscription = Boolean(menuVisibility?.canManageSubscription)
 
   return (
     // eslint-disable-next-line lines-around-comment
@@ -114,6 +117,12 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
               Reports
             </MenuItem>
           )}
+          <MenuItem href='/refer-and-earn' icon={<i className='ri-gift-line' />}>
+            Refer &amp; Earn
+          </MenuItem>
+          <MenuItem href='/rewards' icon={<i className='ri-medal-line' />}>
+            Rewards
+          </MenuItem>
         </SubMenu>
 
         {hasTenant && (
@@ -150,11 +159,23 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
 
         {showSuperAdmin && (
           <SubMenu label='Super Admin' icon={<i className='ri-shield-star-line' />}>
+            <MenuItem href='/super-admin/tenants' icon={<i className='ri-building-4-line' />}>
+              Organisations
+            </MenuItem>
             <MenuItem href='/super-admin/subscription-plans' icon={<i className='ri-price-tag-3-line' />}>
               Subscription Plans
             </MenuItem>
+            <MenuItem href='/super-admin/discount-codes' icon={<i className='ri-coupon-3-line' />}>
+              Discount Codes
+            </MenuItem>
             <MenuItem href='/super-admin/db-maintenance' icon={<i className='ri-database-line' />}>
               DB Maintenance
+            </MenuItem>
+            <MenuItem href='/super-admin/referral-program' icon={<i className='ri-megaphone-line' />}>
+              Referral Program
+            </MenuItem>
+            <MenuItem href='/super-admin/referrals' icon={<i className='ri-share-forward-line' />}>
+              Referrals
             </MenuItem>
           </SubMenu>
         )}
@@ -166,6 +187,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
                 Invite User
               </MenuItem>
             )}
+            {hasTenant && (
+              <MenuItem href='/admin/code-generation' icon={<i className='ri-barcode-box-line' />}>
+                Code Generation
+              </MenuItem>
+            )}
             {showSuperAdmin && (
               <MenuItem href='/create-tenant' icon={<i className='ri-building-2-line' />}>
                 Create Organisation
@@ -174,6 +200,11 @@ const VerticalMenu = ({ scrollMenu, menuVisibility }: Props) => {
             <MenuItem href='/tenants' icon={<i className='ri-building-4-line' />}>
               Organisation Details
             </MenuItem>
+            {canManageSubscription && (
+              <MenuItem href='/admin/subscription' icon={<i className='ri-vip-crown-line' />}>
+                Subscription & Billing
+              </MenuItem>
+            )}
           </SubMenu>
         )}
       </Menu>

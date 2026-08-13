@@ -1,7 +1,6 @@
 export type GetCorporatesParams = { q?: string }
 
 export type CreateCorporateInput = {
-  code: string
   name: string
   isActive?: boolean
 }
@@ -21,6 +20,26 @@ export async function getCorporates(params: GetCorporatesParams = {}) {
   const data = await res.json()
 
   return (data?.corporates ?? []) as any
+}
+
+export async function previewCorporateCode(name: string) {
+  const res = await fetch('/api/corporates/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview corporate code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
 }
 
 export async function createCorporate(body: CreateCorporateInput) {

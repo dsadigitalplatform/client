@@ -7,7 +7,6 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { DUPLICATE_BANK_CODE_ERROR, findDuplicateBankCode, normalizeBankCode } from '../_helpers'
 
 function isNonEmptyString(v: unknown, min = 1) {
   return typeof v === 'string' && v.trim().length >= min
@@ -104,7 +103,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const patch: any = {}
 
-  if (body.code != null) patch.code = String(body.code).trim()
   if (body.name != null) patch.name = String(body.name).trim()
   if (body.description !== undefined)
     patch.description = body.description == null || String(body.description).trim().length === 0 ? null : String(body.description).trim()
@@ -113,21 +111,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const errors: Record<string, string> = {}
 
-  if (patch.code != null && !isNonEmptyString(patch.code)) errors.code = 'Code is required'
+  if (body.code != null) errors.code = 'Bank code is auto-generated and cannot be changed'
   if (patch.name != null && !isNonEmptyString(patch.name, 2)) errors.name = 'Bank name must be at least 2 characters'
   if (patch.description != null && String(patch.description).length > 500) errors.description = 'Description must be ≤ 500 characters'
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
-
-  if (patch.code != null) {
-    const duplicate = await findDuplicateBankCode(db, tenantIdObj, patch.code, new ObjectId(id))
-
-    if (duplicate) {
-      return NextResponse.json(DUPLICATE_BANK_CODE_ERROR, { status: 409 })
-    }
-
-    patch.codeNormalized = normalizeBankCode(patch.code)
-  }
 
   try {
     const userScopedFilter =
@@ -144,7 +132,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     if (err && err.code === 11000) {
-      return NextResponse.json(DUPLICATE_BANK_CODE_ERROR, { status: 409 })
+      return NextResponse.json({ error: 'duplicate_code', message: 'Bank code already exists' }, { status: 409 })
     }
 
     return NextResponse.json({ error: 'unknown_error' }, { status: 500 })

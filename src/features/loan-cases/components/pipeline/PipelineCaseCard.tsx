@@ -2,8 +2,6 @@
 
 import { memo, useMemo, useState } from 'react'
 
-import Link from 'next/link'
-
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -12,11 +10,12 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
-import MuiLink from '@mui/material/Link'
 
 import { useDraggable } from '@dnd-kit/core'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 type Props = {
   loanCase: LoanCaseListItem
@@ -49,6 +48,7 @@ const PipelineCaseCardView = ({
   const moveOptions = useMemo(() => stages.filter(stage => stage.id !== loanCase.stageId), [loanCase.stageId, stages])
   const canMove = Boolean(loanCase.canMoveStage ?? true)
   const showMoveMenu = !forOverlay && canMove && moveOptions.length > 0 && Boolean(onMoveCaseStage)
+  const approvedAmount = resolveApprovedAmount(loanCase)
 
   return (
     <Box
@@ -77,25 +77,12 @@ const PipelineCaseCardView = ({
         <CardContent sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <MuiLink
-                component={Link}
+              <LeadIdentity
+                customerName={loanCase.customerName}
+                code={loanCase.code}
                 href={`/loan-cases/${loanCase.id}`}
-                underline='hover'
-                color='text.primary'
-                sx={{
-                  fontSize: '0.95rem',
-                  fontWeight: 800,
-                  display: 'block',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {loanCase.customerName || 'Customer'}
-              </MuiLink>
-              <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
-                {loanCase.loanTypeName || 'Loan Type'} {loanCase.bankName ? `• ${loanCase.bankName}` : ''}
-              </Typography>
+                subtitle={`${loanCase.loanTypeName || 'Loan Type'}${loanCase.bankName ? ` • ${loanCase.bankName}` : ''}`}
+              />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, flexShrink: 0 }}>
               {showDocsChip && (
@@ -147,8 +134,8 @@ const PipelineCaseCardView = ({
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0.5, mt: 1.25 }}>
             <Typography variant='body2' sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-              <span>Requested</span>
-              <span>{typeof loanCase.requestedAmount === 'number' ? '₹' + loanCase.requestedAmount.toLocaleString('en-IN') : '—'}</span>
+              <span>Approved</span>
+              <span>{typeof approvedAmount === 'number' ? '₹' + approvedAmount.toLocaleString('en-IN') : '—'}</span>
             </Typography>
             <Typography variant='body2' color='text.secondary' sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
               <span>Agent</span>

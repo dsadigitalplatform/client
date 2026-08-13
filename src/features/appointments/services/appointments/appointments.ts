@@ -37,6 +37,7 @@ function toIsoOrString(v: string | Date) {
 export type AppointmentListItem = Appointment & {
   customerName?: string | null
   customerIsNRI?: boolean | null
+  leadCode?: string | null
   leadTitle?: string | null
   organizerId?: string | null
   organizerName?: string | null
@@ -45,7 +46,7 @@ export type AppointmentListItem = Appointment & {
 
 export type AppointmentDetails = AppointmentListItem & {
   customer?: { id: string; fullName: string; mobile?: string | null; countryCode?: string | null; email?: string | null } | null
-  lead?: { id: string; title?: string | null; loanTypeName?: string | null; bankName?: string | null } | null
+  lead?: { id: string; code?: string | null; title?: string | null; loanTypeName?: string | null; bankName?: string | null } | null
 }
 
 export async function listAppointmentsByLead(leadId: string, params: Omit<GetAppointmentsParams, 'leadId'> = {}) {

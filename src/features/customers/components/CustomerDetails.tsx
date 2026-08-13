@@ -38,6 +38,7 @@ import CustomersCreateForm from './CustomersCreateForm'
 import { getCustomer, updateCustomer, deleteCustomer } from '@features/customers/services/customersService'
 import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { LeadCodeChip, LeadCodeText } from '@features/loan-cases/components/LeadCodeDisplay'
 
 type Props = { id: string }
 
@@ -64,6 +65,7 @@ const CustomerDetails = ({ id }: Props) => {
     () =>
       data
         ? {
+            code: data.code ?? null,
             fullName: data.fullName,
             countryCode: data.countryCode,
             mobile: data.mobile,
@@ -174,7 +176,8 @@ const CustomerDetails = ({ id }: Props) => {
               <CardHeader
                 title='Customer Details'
                 subheader={
-                  <Box className='flex items-center gap-2'>
+                  <Box className='flex items-center gap-2 flex-wrap'>
+                    {data.code ? <LeadCodeChip code={data.code} /> : null}
                     <Typography component='span' fontWeight={600}>
                       {data.fullName}
                     </Typography>
@@ -244,6 +247,11 @@ const CustomerDetails = ({ id }: Props) => {
                   <Typography variant='h6' sx={{ fontWeight: 600 }}>
                     {data.fullName}
                   </Typography>
+                  {data.code ? (
+                    <Box sx={{ mt: 0.75 }}>
+                      <LeadCodeChip code={data.code} />
+                    </Box>
+                  ) : null}
                   {data.isNRI ? (
                     <Chip
                       size='small'
@@ -582,6 +590,9 @@ const CustomerDetails = ({ id }: Props) => {
                           >
                             {c.loanTypeName || 'Lead'}
                           </MuiLink>
+                          <Box sx={{ mt: 0.5 }}>
+                            <LeadCodeChip code={c.code} />
+                          </Box>
                           <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
                             {c.bankName ? `${c.bankName} • ` : ''}
                             {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
@@ -615,6 +626,7 @@ const CustomerDetails = ({ id }: Props) => {
                 <Table size='small' sx={{ minWidth: 840 }}>
                   <TableHead>
                     <TableRow>
+                      <TableCell>Code</TableCell>
                       <TableCell>Lead</TableCell>
                       <TableCell>Bank</TableCell>
                       <TableCell align='right'>Requested</TableCell>
@@ -626,6 +638,9 @@ const CustomerDetails = ({ id }: Props) => {
                   <TableBody>
                     {leads.map(c => (
                       <TableRow key={c.id} hover>
+                        <TableCell>
+                          <LeadCodeText code={c.code} />
+                        </TableCell>
                         <TableCell>
                           <MuiLink component={Link} href={`/loan-cases/${c.id}`} underline='hover' sx={{ fontWeight: 700 }}>
                             {c.loanTypeName || 'Lead'}

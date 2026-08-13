@@ -42,6 +42,8 @@ import { getBanks } from '@features/banks/services/banksService'
 import type { Bank } from '@features/banks/banks.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
+import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
+import { useTenantLimitAccess } from '@features/subscriptions'
 
 type StageOption = { id: string; name: string; order: number }
 
@@ -83,6 +85,97 @@ const formatStagedDateLabel = (isoDate: string | null | undefined) => {
 }
 
 const STAGE_AUDIT_SECTION_WIDTH = 236
+
+const formatLeadAmount = (value: number | null | undefined, formatINR: (v: number) => string) =>
+  typeof value === 'number' ? formatINR(value) : '—'
+
+function LeadAmountsMobile({
+  requestedAmount,
+  approvedAmount,
+  loanAccount,
+  formatINR
+}: {
+  requestedAmount: number | null | undefined
+  approvedAmount: number | null | undefined
+  loanAccount: string | null | undefined
+  formatINR: (v: number) => string
+}) {
+  return (
+    <Box
+      sx={{
+        mt: 1.5,
+        borderRadius: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        overflow: 'hidden'
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Requested
+        </Typography>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatLeadAmount(requestedAmount, formatINR)}
+        </Typography>
+      </Box>
+      <Divider />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Approved
+        </Typography>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatLeadAmount(approvedAmount, formatINR)}
+        </Typography>
+      </Box>
+      <Divider />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 1.25,
+          py: 0.75
+        }}
+      >
+        <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 600 }}>
+          Loan account
+        </Typography>
+        <Typography
+          variant='body2'
+          sx={{
+            fontWeight: 600,
+            maxWidth: '60%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            textAlign: 'right'
+          }}
+        >
+          {loanAccount?.trim() || '—'}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
 
 type StageMiniRow = { id: string; label: string; primary: string; secondary?: string | null }
 
@@ -211,7 +304,7 @@ const LoanCasesList = () => {
 
   const [stageId, setStageId] = useState<string>('')
   const [assignedAgentId, setAssignedAgentId] = useState<string>('')
-  const [bankName, setBankName] = useState<string>('')
+  const [bankCode, setBankCode] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('updatedAt_desc')
   const [showInactive, setShowInactive] = useState<boolean>(false)
   const [stagedDateFrom, setStagedDateFrom] = useState<string>('')
@@ -220,7 +313,7 @@ const LoanCasesList = () => {
   const [hasAgentFilterOverride, setHasAgentFilterOverride] = useState(false)
   const [stages, setStages] = useState<StageOption[]>([])
   const [users, setUsers] = useState<TenantUserOption[]>([])
-  const [bankNames, setBankNames] = useState<string[]>([])
+  const [banks, setBanks] = useState<Bank[]>([])
   const effectiveAssignedAgentId = isUserRole ? '' : assignedAgentId
   const defaultAssignedAgentId = sessionUserId || ''
 
@@ -228,18 +321,20 @@ const LoanCasesList = () => {
     () => ({
       stageId: stageId || undefined,
       assignedAgentId: effectiveAssignedAgentId || undefined,
-      bankName: bankName || undefined,
+      bankCode: bankCode || undefined,
       showInactive: showInactive || undefined,
       stagedDateFrom: stagedDateFrom || undefined,
       stagedDateTo: stagedDateTo || undefined,
       progressivePaymentFilter: progressivePaymentFilter || undefined
     }),
-    [bankName, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo, progressivePaymentFilter]
+    [bankCode, stageId, effectiveAssignedAgentId, showInactive, stagedDateFrom, stagedDateTo, progressivePaymentFilter]
   )
 
   const isAuditSearchActive = Boolean(stagedDateFrom || stagedDateTo)
 
   const { cases, loading } = useLoanCases(filters)
+  const { loading: leadsLimitLoading, atLimit: leadsAtLimit } = useTenantLimitAccess('maxLeads')
+  const createLeadLocked = !leadsLimitLoading && leadsAtLimit
 
   const sortedCases = useMemo(() => {
     const list = cases.slice()
@@ -272,7 +367,7 @@ const LoanCasesList = () => {
 
   const hasActiveFilters =
     Boolean(stageId) ||
-    Boolean(bankName) ||
+    Boolean(bankCode) ||
     Boolean(stagedDateFrom) ||
     Boolean(stagedDateTo) ||
     showInactive ||
@@ -298,12 +393,7 @@ const LoanCasesList = () => {
 
         setStages(stagesData as any)
         setUsers(usersData as any)
-        setBankNames(
-          (Array.isArray(banksData) ? banksData : [])
-            .map((b: Bank) => b.name)
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b))
-        )
+        setBanks((Array.isArray(banksData) ? banksData : []) as Bank[])
       } catch {
       }
     })()
@@ -378,15 +468,27 @@ const LoanCasesList = () => {
             justifyContent: 'flex-end'
           }}
         >
-          <Button
-            component={Link}
-            href='/loan-cases/create'
-            variant='contained'
-            startIcon={<i className='ri-add-line' />}
-            fullWidth={isMobile}
-          >
-            Create Lead
-          </Button>
+          {createLeadLocked ? (
+            <Button
+              variant='contained'
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+              disabled
+              title="This month's lead limit reached — upgrade or wait until next month"
+            >
+              Create Lead
+            </Button>
+          ) : (
+            <Button
+              component={Link}
+              href='/loan-cases/create'
+              variant='contained'
+              startIcon={<i className='ri-add-line' />}
+              fullWidth={isMobile}
+            >
+              Create Lead
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -427,15 +529,17 @@ const LoanCasesList = () => {
           <Select
             labelId='loan-cases-bank-filter'
             label='Bank'
-            value={bankName}
+            value={bankCode}
             onChange={e => {
-              setBankName(String(e.target.value))
+              setBankCode(String(e.target.value))
             }}
           >
             <MenuItem value=''>All Banks</MenuItem>
-            {bankNames.map(name => (
-              <MenuItem key={name} value={name}>
-                {name}
+            {[...banks]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(bank => (
+              <MenuItem key={bank.id} value={bank.code}>
+                {bank.name} ({bank.code})
               </MenuItem>
             ))}
           </Select>
@@ -596,7 +700,7 @@ const LoanCasesList = () => {
           sx={{ alignSelf: { sm: 'center' }, minWidth: { sm: 120 } }}
           onClick={() => {
             setStageId('')
-            setBankName('')
+            setBankCode('')
             setStagedDateFrom('')
             setStagedDateTo('')
             setShowInactive(false)
@@ -778,7 +882,7 @@ const LoanCasesList = () => {
                 }}
               >
                 <CardContent sx={{ p: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1, gap: 1, flexWrap: 'wrap' }}>
                     <Chip
                       size='small'
                       label={`#${formatListNumber(index)}`}
@@ -794,28 +898,18 @@ const LoanCasesList = () => {
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ minWidth: 0 }}>
-                      <MuiLink
-                        component={Link}
+                      <LeadIdentity
+                        customerName={c.customerName}
+                        code={c.code}
                         href={`/loan-cases/${c.id}`}
-                        underline='hover'
-                        color='text.primary'
-                        sx={{
-                          fontSize: '1rem',
-                          fontWeight: 700,
-                          display: 'block',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          transition: 'color .2s ease',
+                        size='large'
+                        nameSx={{
                           color: c.isActive === false ? 'text.secondary' : 'text.primary',
+                          textDecoration: c.isActive === false ? 'line-through' : 'none',
                           '&:hover': { color: c.isActive === false ? 'text.secondary' : 'primary.main' }
                         }}
-                      >
-                        {c.customerName || 'Customer'}
-                      </MuiLink>
-                      <Typography variant='body2' color='text.secondary' sx={{ mt: 0.25 }}>
-                        {c.loanTypeName || 'Loan Type'} {c.bankName ? `• ${c.bankName}` : ''}
-                      </Typography>
+                        subtitle={`${c.loanTypeName || 'Loan Type'}${c.bankName ? ` • ${c.bankName}` : ''}`}
+                      />
                     </Box>
                     {isAuditSearchActive ? (
                       <StageCell
@@ -835,14 +929,12 @@ const LoanCasesList = () => {
                     )}
                   </Box>
 
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, gap: 1.5 }}>
-                    <Typography variant='body2' color='text.secondary'>
-                      Requested
-                    </Typography>
-                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                      {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
-                    </Typography>
-                  </Box>
+                  <LeadAmountsMobile
+                    requestedAmount={c.requestedAmount}
+                    approvedAmount={c.approvedAmount}
+                    loanAccount={c.loanAccount}
+                    formatINR={formatINR}
+                  />
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.75, gap: 1.5 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Assigned
@@ -872,16 +964,19 @@ const LoanCasesList = () => {
               size='small'
               sx={{
                 tableLayout: isAuditSearchActive ? 'fixed' : 'auto',
-                minWidth: isAuditSearchActive ? 1080 : undefined
+                minWidth: isAuditSearchActive ? 1360 : undefined
               }}
             >
               {isAuditSearchActive ? (
                 <colgroup>
                   <col style={{ width: 52 }} />
+                  <col style={{ width: 130 }} />
                   <col style={{ width: '14%' }} />
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: 96 }} />
+                  <col style={{ width: 96 }} />
+                  <col style={{ width: 120 }} />
                   <col style={{ width: STAGE_AUDIT_SECTION_WIDTH + 16 }} />
                   <col style={{ width: 128 }} />
                   <col />
@@ -895,6 +990,8 @@ const LoanCasesList = () => {
                   <TableCell>Loan Type</TableCell>
                   <TableCell>Bank</TableCell>
                   <TableCell align='right'>Requested</TableCell>
+                  <TableCell align='right'>Approved</TableCell>
+                  <TableCell>Loan account</TableCell>
                   <TableCell sx={{ width: isAuditSearchActive ? STAGE_AUDIT_SECTION_WIDTH + 16 : undefined }}>
                     {isAuditSearchActive ? 'Stage history' : 'Stage'}
                   </TableCell>
@@ -906,7 +1003,7 @@ const LoanCasesList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={11}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         Loading...
                       </Typography>
@@ -914,7 +1011,7 @@ const LoanCasesList = () => {
                   </TableRow>
                 ) : sortedCases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={11}>
                       <Typography variant='body2' color='text.secondary' sx={{ py: 2 }}>
                         No cases found
                       </Typography>
@@ -944,26 +1041,35 @@ const LoanCasesList = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <MuiLink
-                            component={Link}
-                            href={`/loan-cases/${c.id}`}
-                            underline='hover'
-                            sx={{
-                              fontWeight: 700,
-                              color: c.isActive === false ? 'error.main' : 'text.primary',
-                              textDecoration: c.isActive === false ? 'line-through' : 'none'
-                            }}
-                          >
-                            {c.customerName || 'Customer'}
-                          </MuiLink>
-
-                        </Box>
+                        <LeadIdentity
+                          customerName={c.customerName}
+                          code={c.code}
+                          href={`/loan-cases/${c.id}`}
+                          nameSx={{
+                            color: c.isActive === false ? 'error.main' : 'text.primary',
+                            textDecoration: c.isActive === false ? 'line-through' : 'none'
+                          }}
+                        />
                       </TableCell>
                       <TableCell>{c.loanTypeName || '—'}</TableCell>
                       <TableCell>{c.bankName || '—'}</TableCell>
-                      <TableCell align='right'>
-                        {typeof c.requestedAmount === 'number' ? formatINR(c.requestedAmount) : '—'}
+                      <TableCell align='right' sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatLeadAmount(c.requestedAmount, formatINR)}
+                      </TableCell>
+                      <TableCell align='right' sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatLeadAmount(c.approvedAmount, formatINR)}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          maxWidth: 120,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontFamily: 'monospace',
+                          fontSize: '0.8125rem'
+                        }}
+                      >
+                        {c.loanAccount?.trim() || '—'}
                       </TableCell>
                       <TableCell
                         sx={{

@@ -209,7 +209,7 @@ const LoanTypesList = () => {
                     sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, flex: 1 }}>
                     <TextField
                         size='small'
-                        placeholder='Search by name'
+                        placeholder='Search by name or code'
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         onKeyDown={e => {

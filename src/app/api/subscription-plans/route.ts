@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { serializePlanDoc } from '@features/subscription-plans/services/planSerialization'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -14,29 +15,11 @@ export async function GET() {
 
   const rawPlans = await db
     .collection('subscriptionPlans')
-    .find(
-      { isActive: true },
-      {
-        projection: {
-          _id: 1,
-          name: 1,
-          slug: 1,
-          description: 1,
-          priceMonthly: 1,
-          priceYearly: 1,
-          currency: 1,
-          maxUsers: 1,
-          features: 1,
-          isActive: 1,
-          isDefault: 1
-        }
-      }
-    )
+    .find({ isActive: true })
     .sort({ isDefault: -1, priceMonthly: 1 })
     .toArray()
 
-  const plans = rawPlans.map(p => ({ ...p, _id: String(p._id) }))
+  const plans = rawPlans.map(p => serializePlanDoc(p as any))
 
-  
-return NextResponse.json({ plans })
+  return NextResponse.json({ plans })
 }

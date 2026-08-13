@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from 'react'
 
-import type { MouseEvent } from 'react'
-
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
-import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
-import Divider from '@mui/material/Divider'
+import Skeleton from '@mui/material/Skeleton'
 
 import { listPublicPlans } from '../services/publicPlansService'
+import {
+  TRIAL_DAYS,
+  normalizePlanEntitlements,
+  type PlanEntitlements
+} from '../featureCatalog'
+import { SubscriptionPlanCard } from './SubscriptionPlanCard'
 
 type Plan = {
   _id: string
@@ -20,20 +22,23 @@ type Plan = {
   description: string
   priceMonthly: number
   priceYearly?: number | null
+  currency: string
   maxUsers: number
+  trialDays?: number
+  trialEnabled?: boolean
   isDefault: boolean
-  features: Record<string, boolean>
+  entitlements: PlanEntitlements
 }
 
 type Props = {
   selectedPlanId?: string | null
-  onSelect?: (planId: string) => void
+  onSelect?: (planId: string, plan?: { name: string }) => void
 }
 
 export const SubscriptionPlansPicker = ({ selectedPlanId, onSelect }: Props) => {
   const [plans, setPlans] = useState<Plan[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
@@ -49,12 +54,21 @@ export const SubscriptionPlansPicker = ({ selectedPlanId, onSelect }: Props) => 
           description: p.description,
           priceMonthly: p.priceMonthly,
           priceYearly: p.priceYearly ?? null,
+          currency: p.currency || 'INR',
           maxUsers: p.maxUsers,
+          trialDays: (p as any).trialDays ?? TRIAL_DAYS,
+          trialEnabled: (p as any).trialEnabled !== false,
           isDefault: p.isDefault,
-          features: p.features || {}
+          entitlements: normalizePlanEntitlements((p as any).entitlements || p, p.maxUsers)
         }))
 
         setPlans(list)
+
+        if (!selectedPlanId && onSelect) {
+          const recommended = list.find(p => p.isDefault)
+
+          if (recommended) onSelect(recommended._id, { name: recommended.name })
+        }
       } catch (e: any) {
         setError(e?.message || 'Failed to load plans')
       } finally {
@@ -63,67 +77,81 @@ export const SubscriptionPlansPicker = ({ selectedPlanId, onSelect }: Props) => 
     }
 
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleChoose = (id: string) => (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault()
-    if (onSelect) onSelect(id)
+  const selectPlan = (plan: Plan) => {
+    onSelect?.(plan._id, { name: plan.name })
   }
 
   return (
-    <Box className='flex flex-col gap-3'>
-      <Box className='flex items-center justify-between'>
-        <Typography variant='h6'>Choose a Subscription Plan</Typography>
-        {error ? <Typography color='error'>{error}</Typography> : null}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+      <Box sx={{ maxWidth: 560 }}>
+        <Typography variant='h5' sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Choose a plan for this organisation
+        </Typography>
+        <Typography variant='body2' color='text.secondary' sx={{ mt: 1, lineHeight: 1.6 }}>
+          Pick what fits today. Seats are a standing total; customers and leads reset every month. You can upgrade
+          later when billing is connected.
+        </Typography>
       </Box>
-      <Box className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
-        {loading && plans.length === 0 && <Typography>Loading plans...</Typography>}
-        {!loading && plans.length === 0 && (
-          <Typography color='text.secondary'>No available plans</Typography>
-        )}
+
+      {error ? (
+        <Typography color='error' variant='body2'>
+          {error}
+        </Typography>
+      ) : null}
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+          gap: { xs: 2.5, md: 3 },
+          alignItems: 'stretch'
+        }}
+      >
+        {loading
+          ? [0, 1, 2].map(i => (
+              <Card
+                key={i}
+                variant='outlined'
+                sx={{ borderRadius: 3, boxShadow: 'none', borderColor: 'divider', minHeight: 420 }}
+              >
+                <CardContent sx={{ p: 3.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Skeleton width='36%' height={22} />
+                  <Skeleton width='55%' height={32} />
+                  <Skeleton width='90%' />
+                  <Skeleton width='45%' height={48} sx={{ mt: 1 }} />
+                  <Skeleton height={64} sx={{ borderRadius: 2 }} />
+                  <Skeleton />
+                  <Skeleton />
+                  <Skeleton height={44} sx={{ mt: 'auto', borderRadius: 1.5 }} />
+                </CardContent>
+              </Card>
+            ))
+          : null}
+
+        {!loading && plans.length === 0 ? (
+          <Typography color='text.secondary'>No available plans yet. Ask a super admin to create one.</Typography>
+        ) : null}
+
         {plans.map(p => {
           const selected = selectedPlanId === p._id
 
-          
-return (
-            <Card key={p._id} className={selected ? 'ring-2 ring-primary' : ''}>
-              <CardContent className='flex flex-col gap-2'>
-                <Box className='flex items-center justify-between'>
-                  <Typography variant='h5'>{p.name}</Typography>
-                  {p.isDefault ? <Chip label='Popular' size='small' color='primary' variant='outlined' /> : null}
-                </Box>
-                <Typography variant='body2' color='text.secondary'>
-                  {p.description}
-                </Typography>
-                <Typography variant='h4'>${p.priceMonthly}<Typography component='span' variant='subtitle2'>/month</Typography></Typography>
-                <Typography variant='body2' color='text.secondary'>
-                  Max users: {p.maxUsers}
-                </Typography>
-                <Divider />
-                <Box className='flex flex-col gap-1'>
-                  {Object.keys(p.features || {}).length === 0 ? (
-                    <Typography color='text.secondary' variant='body2'>No feature highlights</Typography>
-                  ) : (
-                    Object.entries(p.features)
-                      .filter(([, enabled]) => Boolean(enabled))
-                      .slice(0, 5)
-                      .map(([label]) => (
-                        <Box key={label} className='flex items-center gap-2'>
-                          <i className='ri-check-line' />
-                          <Typography variant='body2'>{label}</Typography>
-                        </Box>
-                      ))
-                  )}
-                </Box>
-                <Button
-                  variant={selected ? 'contained' : 'outlined'}
-                  color='primary'
-                  onClick={handleChoose(p._id)}
-                >
-                  {selected ? 'Selected' : 'Choose'}
-                </Button>
-              </CardContent>
-            </Card>
+          return (
+            <SubscriptionPlanCard
+              key={p._id}
+              plan={p}
+              highlighted={selected}
+              recommended={Boolean(p.isDefault)}
+              onCardClick={() => selectPlan(p)}
+              primaryAction={{
+                label: selected ? 'Selected' : 'Select plan',
+                onClick: () => selectPlan(p),
+                variant: selected ? 'contained' : 'outlined',
+                startIcon: <i className={selected ? 'ri-check-line' : 'ri-arrow-right-line'} />
+              }}
+            />
           )
         })}
       </Box>

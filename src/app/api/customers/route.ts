@@ -8,6 +8,8 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { isValidCountryCode } from '@/lib/countryCodes'
 import { getDb } from '@/lib/mongodb'
+import { generateCustomerBusinessCode } from '@features/customers/server/customerCode.server'
+import { assertWithinLimit } from '@features/subscriptions/services/entitlements.server'
 
 type EmploymentType = 'SALARIED' | 'SELF_EMPLOYED'
 type SourceType = 'WALK_IN' | 'REFERRAL' | 'ONLINE' | 'SOCIAL_MEDIA' | 'OTHER'
@@ -131,6 +133,7 @@ export async function GET(request: Request) {
 
     const data = {
       id: String((row as any)._id),
+      code: (row as any).code ? String((row as any).code) : null,
       fullName: (row as any).fullName || '',
       countryCode: isValidCountryCode((row as any).countryCode) ? String((row as any).countryCode) : '+91',
       mobile: (row as any).mobile || '',
@@ -157,7 +160,8 @@ export async function GET(request: Request) {
     baseFilter.$or = [
       { fullName: { $regex: safe, $options: 'i' } },
       { email: { $regex: safe, $options: 'i' } },
-      { mobile: { $regex: safe } }
+      { mobile: { $regex: safe } },
+      { code: { $regex: safe, $options: 'i' } }
     ]
   }
 
@@ -166,6 +170,7 @@ export async function GET(request: Request) {
     .collection('customers')
     .find(baseFilter, {
       projection: {
+        code: 1,
         fullName: 1,
         countryCode: 1,
         mobile: 1,
@@ -233,6 +238,7 @@ export async function GET(request: Request) {
 
   const customers = rows.map(r => ({
     id: String((r as any)._id),
+    code: (r as any).code ? String((r as any).code) : null,
     fullName: String((r as any).fullName || ''),
     countryCode: isValidCountryCode((r as any).countryCode) ? String((r as any).countryCode) : '+91',
     mobile: String((r as any).mobile || ''),
@@ -285,6 +291,21 @@ export async function POST(request: Request) {
 
   if (!membership) return NextResponse.json({ error: 'not_member' }, { status: 403 })
 
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const customerLimit = await assertWithinLimit(db, tenantIdObj, 'maxCustomers', { bypass: bypassEntitlements })
+
+  if (customerLimit) {
+    return NextResponse.json(
+      {
+        error: customerLimit.error,
+        message: customerLimit.message,
+        limit: customerLimit.limit,
+        used: customerLimit.used
+      },
+      { status: 403 }
+    )
+  }
+
   // parse + normalize payload
   const body = await request.json().catch(() => ({}))
 
@@ -329,7 +350,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
   }
 
-
+  const code = await generateCustomerBusinessCode({
+    db,
+    tenantId: tenantIdObj,
+    fullName
+  })
 
   // insert with tenant + creator attribution
   const now = new Date()
@@ -337,6 +362,7 @@ export async function POST(request: Request) {
   const doc: any = {
     tenantId: tenantIdObj,
     fullName,
+    code,
     countryCode,
     mobile,
     isNRI,
@@ -361,7 +387,7 @@ export async function POST(request: Request) {
     const res = await db.collection('customers').insertOne(doc)
 
     
-return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
+return NextResponse.json({ id: res.insertedId.toHexString(), code }, { status: 201 })
   } catch (err: any) {
     if (err && err.code === 121) {
       return NextResponse.json({ error: 'validation_error', message: 'Customer creation failed validation' }, { status: 400 })
@@ -373,9 +399,11 @@ return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
       const details =
         key === 'mobile'
           ? { mobile: 'Mobile already exists' }
-          : key === 'fullName'
-            ? { fullName: 'Customer name already exists' }
-            : undefined
+          : key === 'code'
+            ? { code: 'Generated customer code already exists' }
+            : key === 'fullName'
+              ? { fullName: 'Customer name already exists' }
+              : undefined
 
       return NextResponse.json(
         { error: 'duplicate_key', message: 'Duplicate value', details },

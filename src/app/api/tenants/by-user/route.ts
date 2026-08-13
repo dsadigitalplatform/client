@@ -6,6 +6,7 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 import { getDb } from '@/lib/mongodb'
+import { resolveSubscriptionPlansByIds } from '@features/subscription-plans/services/resolveSubscriptionPlan.server'
 
 type Role = 'OWNER' | 'ADMIN' | 'USER'
 
@@ -56,16 +57,27 @@ export async function GET() {
 
   memberships.forEach(m => roleById.set((m.tenantId as ObjectId).toHexString(), m.role as Role))
 
-  const result = tenants.map(t => ({
-    _id: (t._id as ObjectId).toHexString(),
-    name: t.name as string,
-    type: t.type as 'sole_trader' | 'company',
-    status: t.status as 'active' | 'suspended',
-    role: roleById.get((t._id as ObjectId).toHexString()) || 'USER',
-    subscriptionPlanId: (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null,
-    createdAt: (t.createdAt as Date)?.toISOString?.() || '',
-    updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''
-  }))
+  const plansById = await resolveSubscriptionPlansByIds(
+    db,
+    tenants.map(t => (t as any).subscriptionPlanId)
+  )
+
+  const result = tenants.map(t => {
+    const planId = (t as any).subscriptionPlanId ? (t as any).subscriptionPlanId.toHexString() : null
+    const subscriptionPlan = planId ? plansById.get(planId) ?? null : null
+
+    return {
+      _id: (t._id as ObjectId).toHexString(),
+      name: t.name as string,
+      type: t.type as 'sole_trader' | 'company',
+      status: t.status as 'active' | 'suspended',
+      role: roleById.get((t._id as ObjectId).toHexString()) || 'USER',
+      subscriptionPlanId: planId,
+      subscriptionPlan,
+      createdAt: (t.createdAt as Date)?.toISOString?.() || '',
+      updatedAt: (t.updatedAt as Date)?.toISOString?.() || ''
+    }
+  })
 
   return NextResponse.json({ tenants: result })
 }

@@ -10,6 +10,7 @@ export type SecondaryContact = {
 
 export type Customer = {
   id: string
+  code: string | null
   fullName: string
   countryCode: string
   mobile: string

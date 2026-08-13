@@ -37,7 +37,27 @@ export async function getCustomers(params: GetCustomersParams = {}) {
   const data = await res.json()
 
   
-return (data?.customers ?? []) as any
+  return (data?.customers ?? []) as any
+}
+
+export async function previewCustomerCode(params: { fullName: string }) {
+  const res = await fetch('/api/customers/code-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const message = data?.message || data?.error || 'Failed to preview customer code'
+    const err = new Error(message) as Error & { details?: Record<string, string> }
+
+    if (data?.details) err.details = data.details
+    throw err
+  }
+
+  return String(data?.preview || '')
 }
 
 export async function getCustomerByMobile(mobile: string) {

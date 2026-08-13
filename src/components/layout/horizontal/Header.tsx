@@ -15,6 +15,7 @@ type UserInfo = {
 type TenantInfo = {
   tenantName?: string
   role?: 'OWNER' | 'ADMIN' | 'USER'
+  subscriptionPlanName?: string
 }
 
 const Header = ({

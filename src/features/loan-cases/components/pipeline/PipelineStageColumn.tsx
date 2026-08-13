@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography'
 import { useDroppable } from '@dnd-kit/core'
 
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 import PipelineCaseCard from './PipelineCaseCard'
 
@@ -37,7 +38,7 @@ const PipelineStageColumn = ({ stage, stageColor, stages, caseIds, casesById, on
 
     caseIds.forEach(id => {
       const c = casesById[id]
-      const amt = c?.requestedAmount
+      const amt = c ? resolveApprovedAmount(c) : null
 
       if (typeof amt === 'number' && Number.isFinite(amt)) total += amt
     })

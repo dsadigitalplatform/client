@@ -12,11 +12,15 @@ import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import InputAdornment from '@mui/material/InputAdornment'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import Avatar from '@mui/material/Avatar'
@@ -30,9 +34,14 @@ import dayjs from 'dayjs'
 import { getLoanCases, updateCaseStage } from '@features/loan-cases/services/loanCasesService'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
+import { leadMatchesQuery } from '@features/loan-cases/components/LeadCodeDisplay'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 import { PipelineCaseCardOverlay } from './PipelineCaseCard'
+import PipelineFocusWorkspace from './PipelineFocusWorkspace'
 import PipelineStageColumn, { type PipelineStage } from './PipelineStageColumn'
+
+type PipelineViewMode = 'focus' | 'board'
 
 type BoardState = {
   stages: PipelineStage[]
@@ -88,6 +97,9 @@ const LoanCasesPipelineDashboard = () => {
   const [board, setBoard] = useState<BoardState>({ stages: [], casesById: {}, caseIdsByStage: {} })
   const [activeCaseId, setActiveCaseId] = useState<string>('')
   const [activeFromStageId, setActiveFromStageId] = useState<string>('')
+  const [viewMode, setViewMode] = useState<PipelineViewMode>('focus')
+  const [focusedStageId, setFocusedStageId] = useState<string>('')
+  const [hideEmptyStages, setHideEmptyStages] = useState(true)
 
   const [filters, setFilters] = useState<Filters>({
     assignedAgentId: '',
@@ -122,6 +134,10 @@ const LoanCasesPipelineDashboard = () => {
           .filter((c: LoanCaseListItem) => c?.id?.length > 0)
 
         setBoard(buildBoardState(stages, cases))
+
+        const firstWithCases = stages.find(s => cases.some(c => c.stageId === s.id))
+
+        setFocusedStageId(prev => prev || firstWithCases?.id || stages[0]?.id || '')
       } catch (e: any) {
         setError(e?.message || 'Failed to load pipeline')
       } finally {
@@ -235,7 +251,17 @@ const LoanCasesPipelineDashboard = () => {
 
         if (filters.assignedAgentId && (!isUserRole || filters.assignedAgentId !== sessionUserId) && c.assignedAgentId !== filters.assignedAgentId) return false
         if (filters.loanTypeId && c.loanTypeId !== filters.loanTypeId) return false
-        if (search && !(c.customerName || '').toLowerCase().includes(search)) return false
+        if (
+          search &&
+          !leadMatchesQuery(search, {
+            code: c.code,
+            customerName: c.customerName,
+            loanTypeName: c.loanTypeName,
+            bankName: c.bankName,
+            stageName: c.stageName
+          })
+        )
+          return false
 
         return true
       })
@@ -244,16 +270,33 @@ const LoanCasesPipelineDashboard = () => {
     return result
   }, [board.caseIdsByStage, board.casesById, board.stages, filters.assignedAgentId, filters.loanTypeId, filters.search, filters.stageId, isUserRole, sessionUserId])
 
+  useEffect(() => {
+    if (!board.stages.length) return
+    if (filters.stageId && board.stages.some(s => s.id === filters.stageId)) {
+      setFocusedStageId(filters.stageId)
+
+      return
+    }
+    if (focusedStageId && board.stages.some(s => s.id === focusedStageId)) return
+
+    const firstWithCases = board.stages.find(s => (filteredCaseIdsByStage[s.id] || []).length > 0)
+
+    setFocusedStageId(firstWithCases?.id || board.stages[0]?.id || '')
+  }, [board.stages, filteredCaseIdsByStage, filters.stageId, focusedStageId])
+
+  const boardStages = useMemo(() => {
+    if (!hideEmptyStages) return board.stages
+
+    return board.stages.filter(s => (filteredCaseIdsByStage[s.id] || []).length > 0)
+  }, [board.stages, filteredCaseIdsByStage, hideEmptyStages])
+
   const analytics = useMemo(() => {
     const filteredIds = Object.values(filteredCaseIdsByStage).flat()
     const filteredCases = filteredIds.map(id => board.casesById[id]).filter(Boolean)
 
     const totalCases = filteredCases.length
 
-    const totalLoanValue = filteredCases.reduce(
-      (acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc),
-      0
-    )
+    const totalLoanValue = filteredCases.reduce((acc, c) => acc + (resolveApprovedAmount(c) ?? 0), 0)
 
     const pendingDocuments = filteredCases.reduce(
       (acc, c) => (typeof c.pendingDocumentsCount === 'number' ? acc + c.pendingDocumentsCount : acc),
@@ -363,14 +406,38 @@ const LoanCasesPipelineDashboard = () => {
     <Box
       sx={{
         display: 'flex',
-        flexDirection: 'column',
-        gap: 0.5
+        flexDirection: { xs: 'column', sm: 'row' },
+        alignItems: { xs: 'stretch', sm: 'flex-start' },
+        justifyContent: 'space-between',
+        gap: 1.5
       }}
     >
-      <Typography variant='h5'>Lead & Loan Status Board</Typography>
-      <Typography variant='body2' color='text.secondary'>
-        Track cases across stages and move them quickly
-      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+        <Typography variant='h5'>Lead & Loan Status Board</Typography>
+        <Typography variant='body2' color='text.secondary'>
+          {viewMode === 'focus'
+            ? 'See every stage at a glance, then work one stage at a time'
+            : 'Classic kanban board for drag-and-drop across stages'}
+        </Typography>
+      </Box>
+      <ToggleButtonGroup
+        exclusive
+        size='small'
+        value={viewMode}
+        onChange={(_e, next) => {
+          if (next) setViewMode(next)
+        }}
+        sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' }, flexShrink: 0 }}
+      >
+        <ToggleButton value='focus' aria-label='Focus view'>
+          <i className='ri-layout-masonry-line' style={{ marginRight: 6 }} />
+          Focus
+        </ToggleButton>
+        <ToggleButton value='board' aria-label='Board view'>
+          <i className='ri-layout-column-line' style={{ marginRight: 6 }} />
+          Board
+        </ToggleButton>
+      </ToggleButtonGroup>
     </Box>
   )
 
@@ -419,7 +486,7 @@ const LoanCasesPipelineDashboard = () => {
           <TextField
             size='small'
             label='Search'
-            placeholder='Customer name'
+            placeholder='Customer, lead code, loan type…'
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
             fullWidth
@@ -502,7 +569,7 @@ const LoanCasesPipelineDashboard = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant='body2' color='text.secondary'>
-                Total Loan Value
+                Total Approved Value
               </Typography>
               <Typography variant='h6' sx={{ fontWeight: 900, mt: 0.25 }}>
                 ₹ {analytics.totalLoanValue.toLocaleString('en-IN')}
@@ -616,20 +683,92 @@ const LoanCasesPipelineDashboard = () => {
 
       <Divider />
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
-        {isMobile ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            {board.stages.map((stage, idx) => (
-              <Accordion key={stage.id} defaultExpanded={idx === 0} disableGutters sx={{ borderRadius: 4 }}>
-                <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: stageColorById[stage.id] }} />
-                    <Typography sx={{ fontWeight: 900, flex: 1 }}>{stage.name}</Typography>
-                    <Chip size='small' label={(filteredCaseIdsByStage[stage.id] || []).length} />
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails>
+      {viewMode === 'focus' ? (
+        <PipelineFocusWorkspace
+          stages={board.stages}
+          caseIdsByStage={filteredCaseIdsByStage}
+          casesById={board.casesById}
+          stageColorById={stageColorById}
+          focusedStageId={focusedStageId || board.stages[0]?.id || ''}
+          onFocusStage={setFocusedStageId}
+          onMoveCaseStage={(caseId, toStageId) => void moveCaseStage(caseId, toStageId)}
+        />
+      ) : (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant='body2' color='text.secondary'>
+              {hideEmptyStages
+                ? `Showing ${boardStages.length} of ${board.stages.length} stages with cases`
+                : `Showing all ${board.stages.length} stages`}
+            </Typography>
+            <FormControlLabel
+              control={<Switch size='small' checked={hideEmptyStages} onChange={e => setHideEmptyStages(e.target.checked)} />}
+              label='Hide empty stages'
+            />
+          </Box>
+
+          <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
+            {isMobile ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                {boardStages.map((stage, idx) => (
+                  <Accordion key={stage.id} defaultExpanded={idx === 0} disableGutters sx={{ borderRadius: 4 }}>
+                    <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: stageColorById[stage.id] }} />
+                        <Typography sx={{ fontWeight: 900, flex: 1 }}>{stage.name}</Typography>
+                        <Chip size='small' label={(filteredCaseIdsByStage[stage.id] || []).length} />
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <PipelineStageColumn
+                        stage={stage}
+                        stageColor={stageColorById[stage.id]}
+                        stages={board.stages}
+                        caseIds={filteredCaseIdsByStage[stage.id] || []}
+                        casesById={board.casesById}
+                        onMoveCaseStage={moveCaseStage}
+                        dragDropEnabled={dragDropEnabled}
+                      />
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
+              </Box>
+            ) : (
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2.5,
+                  overflowX: 'auto',
+                  pb: 1.75,
+                  px: 1,
+                  scrollPaddingInline: 8,
+                  scrollSnapType: 'x mandatory',
+                  overscrollBehaviorX: 'contain',
+                  backgroundColor: theme => theme.palette.background.default,
+                  borderRadius: 4,
+                  pt: 1.25,
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.35) transparent',
+                  '&::-webkit-scrollbar': {
+                    height: 10
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    backgroundColor: 'transparent'
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.3)',
+                    borderRadius: 999,
+                    border: '3px solid transparent',
+                    backgroundClip: 'content-box'
+                  },
+                  '&::-webkit-scrollbar-thumb:hover': {
+                    backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.45)'
+                  }
+                }}
+              >
+                {boardStages.map(stage => (
                   <PipelineStageColumn
+                    key={stage.id}
                     stage={stage}
                     stageColor={stageColorById[stage.id]}
                     stages={board.stages}
@@ -638,67 +777,25 @@ const LoanCasesPipelineDashboard = () => {
                     onMoveCaseStage={moveCaseStage}
                     dragDropEnabled={dragDropEnabled}
                   />
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2.5,
-              overflowX: 'auto',
-              pb: 1.75,
-              px: 1,
-              scrollPaddingInline: 8,
-              scrollSnapType: 'x mandatory',
-              overscrollBehaviorX: 'contain',
-              backgroundColor: theme => theme.palette.background.default,
-              borderRadius: 4,
-              pt: 1.25,
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.35) transparent',
-              '&::-webkit-scrollbar': {
-                height: 10
-              },
-              '&::-webkit-scrollbar-track': {
-                backgroundColor: 'transparent'
-              },
-              '&::-webkit-scrollbar-thumb': {
-                backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.3)',
-                borderRadius: 999,
-                border: '3px solid transparent',
-                backgroundClip: 'content-box'
-              },
-              '&::-webkit-scrollbar-thumb:hover': {
-                backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.45)'
-              }
-            }}
-          >
-            {board.stages.map(stage => (
-              <PipelineStageColumn
-                key={stage.id}
-                stage={stage}
-                stageColor={stageColorById[stage.id]}
-                stages={board.stages}
-                caseIds={filteredCaseIdsByStage[stage.id] || []}
-                casesById={board.casesById}
-                onMoveCaseStage={moveCaseStage}
-                dragDropEnabled={dragDropEnabled}
-              />
-            ))}
-          </Box>
-        )}
+                ))}
+              </Box>
+            )}
 
-        <DragOverlay zIndex={theme.zIndex.modal + 10}>
-          {activeCaseId && board.casesById[activeCaseId] ? (
-            <PipelineCaseCardOverlay
-              loanCase={board.casesById[activeCaseId]}
-              stageColor={stageColorById[activeFromStageId || board.casesById[activeCaseId].stageId] || theme.palette.primary.main}
-            />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+            {boardStages.length === 0 ? (
+              <Alert severity='info'>No stages match the current filters. Turn off “Hide empty stages” or clear filters.</Alert>
+            ) : null}
+
+            <DragOverlay zIndex={theme.zIndex.modal + 10}>
+              {activeCaseId && board.casesById[activeCaseId] ? (
+                <PipelineCaseCardOverlay
+                  loanCase={board.casesById[activeCaseId]}
+                  stageColor={stageColorById[activeFromStageId || board.casesById[activeCaseId].stageId] || theme.palette.primary.main}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </>
+      )}
     </Box>
   )
 }

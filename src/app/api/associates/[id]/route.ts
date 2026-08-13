@@ -33,47 +33,6 @@ function isValidPayout(v: unknown) {
   return Number.isFinite(n) && n >= 0 && n <= 100
 }
 
-const buildBaseCode = (associateName: string, companyName: string, mobile: string) => {
-  const nameWords = associateName.trim().split(/\s+/).filter(Boolean)
-  const companyWords = companyName.trim().split(/\s+/).filter(Boolean)
-
-  const nameInitials =
-    nameWords.length > 0 ? nameWords.slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : associateName.trim().slice(0, 2).toUpperCase()
-
-  const companyKeyRaw = companyWords.length > 0 ? companyWords.join('') : companyName
-  const companyKey = companyKeyRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3)
-
-  const last4 = mobile.replace(/\D/g, '').slice(-4)
-
-  return [nameInitials, companyKey, last4].filter(Boolean).join('-')
-}
-
-const generateUniqueCode = async (
-  db: any,
-  tenantId: ObjectId,
-  associateName: string,
-  companyName: string,
-  mobile: string,
-  excludeId?: ObjectId
-) => {
-  const base = buildBaseCode(associateName, companyName, mobile)
-  const safeBase = base.length > 0 ? base : 'ASSOC'
-  let suffix = 0
-
-  for (let i = 0; i < 50; i++) {
-    const code = suffix === 0 ? safeBase : `${safeBase}-${suffix + 1}`
-    const filter: any = { tenantId, code }
-
-    if (excludeId) filter._id = { $ne: excludeId }
-    const existing = await db.collection('associates').findOne(filter, { projection: { _id: 1 } })
-
-    if (!existing) return code
-    suffix += 1
-  }
-
-  return `${safeBase}-${Date.now()}`
-}
-
 async function getRequestContext(session: any) {
   const store = await cookies()
   const cookieTenantId = store.get('CURRENT_TENANT_ID')?.value || ''
@@ -156,6 +115,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     payout: (row as any).payout ?? null,
     code: (row as any).code || '',
     pan: (row as any).pan ?? null,
+    remarks: (row as any).remarks ?? null,
     isActive: Boolean((row as any).isActive),
     canManage
   }
@@ -189,11 +149,15 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.email !== undefined) patch.email = body.email == null || String(body.email).trim().length === 0 ? null : String(body.email).trim()
   if (body.payout !== undefined) patch.payout = body.payout == null ? null : Number(body.payout)
   if (body.pan !== undefined) patch.pan = body.pan ? String(body.pan).toUpperCase().trim() : null
+  if (body.remarks !== undefined)
+    patch.remarks = body.remarks == null || String(body.remarks).trim().length === 0 ? null : String(body.remarks).trim()
   if (body.isActive !== undefined) patch.isActive = Boolean(body.isActive)
 
   patch.updatedAt = new Date()
 
   const errors: Record<string, string> = {}
+
+  if (body.code != null) errors.code = 'Associate code is auto-generated and cannot be changed'
 
   if (patch.associateName != null && patch.associateName.length < 2)
     errors.associateName = 'Associate name must be at least 2 characters'
@@ -206,6 +170,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (patch.email != null && !isValidEmail(patch.email)) errors.email = 'Invalid email format'
   if (patch.pan != null && !isValidPAN(patch.pan)) errors.pan = 'Invalid PAN format'
   if (patch.payout != null && !isValidPayout(patch.payout)) errors.payout = 'Payout must be between 0 and 100'
+  if (patch.remarks != null && String(patch.remarks).length > 500) errors.remarks = 'Remarks must be ≤ 500 characters'
 
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
@@ -222,25 +187,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     patch.associateTypeId = new ObjectId(patch.associateTypeId)
-  }
-
-  if (patch.associateName != null || patch.companyName != null || patch.mobile != null) {
-    const userScopedFilter =
-      role === 'ADMIN' || role === 'OWNER'
-        ? {}
-        : { $or: [{ createdBy: userId }, { createdBy: userId.toHexString() }] }
-
-    const existing = await db
-      .collection('associates')
-      .findOne({ _id: new ObjectId(id), tenantId: tenantIdObj, ...userScopedFilter }, { projection: { associateName: 1, companyName: 1, mobile: 1 } })
-
-    if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-
-    const nextName = patch.associateName ?? String((existing as any).associateName || '')
-    const nextCompany = patch.companyName ?? String((existing as any).companyName || '')
-    const nextMobile = patch.mobile ?? String((existing as any).mobile || '')
-
-    patch.code = await generateUniqueCode(db, tenantIdObj, nextName, nextCompany, nextMobile, new ObjectId(id))
   }
 
   try {

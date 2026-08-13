@@ -1,6 +1,6 @@
 export type ReminderStatus = 'pending' | 'done' | 'skipped'
 
-export type ReminderSource = 'CASE_FOLLOW_UP' | 'APPOINTMENT'
+export type ReminderSource = 'CASE_FOLLOW_UP' | 'APPOINTMENT' | 'SUBSCRIPTION_BILLING'
 
 export type ReminderListItem = {
   id: string
@@ -15,6 +15,7 @@ export type ReminderListItem = {
   caseRef: string | null
   customerId: string | null
   customerName: string | null
+  leadCode: string | null
   appointmentId: string | null
 }
 

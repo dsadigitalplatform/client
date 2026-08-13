@@ -38,7 +38,7 @@ import {
   type DbMaintenanceTenantPurgeResult
 } from '../db-maintenance.types'
 
-const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Other'] as const
+const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Refer & Earn', 'Other'] as const
 
 const hiddenUiGroups = new Set<string>(DB_MAINTENANCE_UI_HIDDEN_GROUPS)
 
@@ -93,6 +93,7 @@ export const DbMaintenanceView = () => {
   const [tenantError, setTenantError] = useState<string | null>(null)
   const [purgeOpen, setPurgeOpen] = useState(false)
   const [purgeConfirmText, setPurgeConfirmText] = useState('')
+  const [purgeMode, setPurgeMode] = useState<'data' | 'tenant'>('data')
   const [purging, setPurging] = useState(false)
   const [lastPurgeResult, setLastPurgeResult] = useState<DbMaintenanceTenantPurgeResult | null>(null)
 
@@ -150,12 +151,18 @@ export const DbMaintenanceView = () => {
 
   const selectedCollectionLabel = selectedInfo?.label || selected
 
-  const load = async () => {
+  const load = async (tenantId = selectedTenantId) => {
+    if (!tenantId) {
+      setCollections([])
+
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
-      const res = await dbMaintenanceService.list()
+      const res = await dbMaintenanceService.list(tenantId)
       const list = Array.isArray(res?.collections) ? res.collections : []
 
       setCollections(list)
@@ -176,8 +183,14 @@ export const DbMaintenanceView = () => {
       const list = Array.isArray(res?.tenants) ? res.tenants : []
 
       setTenants(list)
-      if (selectedTenantId && !list.some(t => t.id === selectedTenantId)) setSelectedTenantId('')
-      if (!selectedTenantId && list.length > 0) setSelectedTenantId(list[0].id)
+
+      setSelectedTenantId(prev => {
+        if (prev && list.some(t => t.id === prev)) return prev
+
+        const preferred = list.find(t => t.isDemo) || list[0]
+
+        return preferred?.id || ''
+      })
     } catch (e: any) {
       setTenantError(e?.message || 'Failed to load tenants')
     } finally {
@@ -186,12 +199,24 @@ export const DbMaintenanceView = () => {
   }
 
   useEffect(() => {
-    load()
     loadTenants()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const openPurge = () => {
+  useEffect(() => {
+    if (!selectedTenantId) {
+      setCollections([])
+
+      return
+    }
+
+    if (recordsOpen) closeRecords()
+    load(selectedTenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTenantId])
+
+  const openPurge = (mode: 'data' | 'tenant' = 'data') => {
+    setPurgeMode(mode)
     setPurgeConfirmText('')
     setPurgeOpen(true)
   }
@@ -205,20 +230,27 @@ export const DbMaintenanceView = () => {
   const canConfirmPurge = Boolean(selectedTenant) && purgeConfirmText.trim() === (selectedTenant?.name || '')
 
   const purgeTenant = async () => {
-    if (!selectedTenantId || !canConfirmPurge) return
+    if (!selectedTenantId || !selectedTenant || !canConfirmPurge) return
 
     setPurging(true)
     setTenantError(null)
     setLastPurgeResult(null)
 
     try {
-      const res = await dbMaintenanceService.purgeTenant(selectedTenantId)
+      const deleteTenant = purgeMode === 'tenant'
+      const res = await dbMaintenanceService.purgeTenant(selectedTenantId, { deleteTenant })
 
       setLastPurgeResult(res.result || null)
       setPurgeOpen(false)
       setPurgeConfirmText('')
-      await loadTenants()
-      await load()
+
+      if (deleteTenant) {
+        setSelectedTenantId('')
+        setCollections([])
+        await loadTenants()
+      } else {
+        await load(selectedTenantId)
+      }
     } catch (e: any) {
       setTenantError(e?.message || 'Failed to purge tenant')
     } finally {
@@ -240,19 +272,19 @@ export const DbMaintenanceView = () => {
   const canConfirm = Boolean(selected) && confirmText.trim() === selected
 
   const clearSelected = async () => {
-    if (!selected || !canConfirm) return
+    if (!selected || !selectedTenantId || !canConfirm) return
 
     setClearing(true)
     setError(null)
     setLastResult(null)
 
     try {
-      const res = await dbMaintenanceService.clear(selected)
+      const res = await dbMaintenanceService.clear(selected, selectedTenantId)
 
       setLastResult(res.result || null)
       setConfirmOpen(false)
       setConfirmText('')
-      await load()
+      await load(selectedTenantId)
     } catch (e: any) {
       setError(e?.message || 'Failed to clear collection')
     } finally {
@@ -261,7 +293,7 @@ export const DbMaintenanceView = () => {
   }
 
   const loadRecords = async (collectionName: string, opts?: { reset?: boolean }) => {
-    if (!collectionName) return
+    if (!collectionName || !selectedTenantId) return
 
     const reset = Boolean(opts?.reset)
 
@@ -274,6 +306,7 @@ export const DbMaintenanceView = () => {
       const cursor = reset ? null : recordsNextCursor
 
       const res = await dbMaintenanceService.listDocuments(collectionName, {
+        tenantId: selectedTenantId,
         limit: 50,
         cursor,
         createdById: creatorFilteringEnabled ? selectedCreatedById : null
@@ -296,7 +329,7 @@ export const DbMaintenanceView = () => {
   }
 
   const loadCreators = async (collectionName: string) => {
-    if (!supportsCreatorFilterCollection(collectionName)) {
+    if (!supportsCreatorFilterCollection(collectionName) || !selectedTenantId) {
       setCreators([])
       setSelectedCreatedById('')
       setCreatorsError(null)
@@ -308,7 +341,7 @@ export const DbMaintenanceView = () => {
     setCreatorsError(null)
 
     try {
-      const res = await dbMaintenanceService.listCreators(collectionName)
+      const res = await dbMaintenanceService.listCreators(collectionName, selectedTenantId)
       const list = Array.isArray(res?.creators) ? res.creators : []
 
       setCreators(list)
@@ -323,7 +356,7 @@ export const DbMaintenanceView = () => {
   const openRecords = async (collectionName?: string) => {
     const name = typeof collectionName === 'string' && collectionName.length > 0 ? collectionName : selected
 
-    if (!name) return
+    if (!name || !selectedTenantId) return
 
     setSelected(name)
     setRecordsOpen(true)
@@ -378,19 +411,19 @@ export const DbMaintenanceView = () => {
     supportsCreatorFilter && Boolean(selectedCreatedById) && deleteByUserConfirmText.trim().toUpperCase() === 'DELETE'
 
   const deleteSelected = async () => {
-    if (!selected || !canDeleteSelected) return
+    if (!selected || !selectedTenantId || !canDeleteSelected) return
 
     setDeletingSelected(true)
     setError(null)
     setRecordsError(null)
 
     try {
-      await dbMaintenanceService.deleteDocuments(selected, selectedIds)
+      await dbMaintenanceService.deleteDocuments(selected, selectedIds, { tenantId: selectedTenantId })
       setRecordSelections({})
       setRecordsConfirmOpen(false)
       setRecordsConfirmText('')
       await loadRecords(selected, { reset: true })
-      await load()
+      await load(selectedTenantId)
     } catch (e: any) {
       setRecordsError(e?.message || 'Failed to delete records')
     } finally {
@@ -410,20 +443,23 @@ export const DbMaintenanceView = () => {
   }
 
   const deleteByUser = async () => {
-    if (!selected || !selectedCreatedById || !supportsCreatorFilter || !canDeleteByUser) return
+    if (!selected || !selectedTenantId || !selectedCreatedById || !supportsCreatorFilter || !canDeleteByUser) return
 
     setDeletingByUser(true)
     setError(null)
     setRecordsError(null)
 
     try {
-      await dbMaintenanceService.deleteDocuments(selected, [], { createdById: selectedCreatedById })
+      await dbMaintenanceService.deleteDocuments(selected, [], {
+        tenantId: selectedTenantId,
+        createdById: selectedCreatedById
+      })
       setRecordSelections({})
       setDeleteByUserConfirmOpen(false)
       setDeleteByUserConfirmText('')
       await loadCreators(selected)
       await loadRecords(selected, { reset: true })
-      await load()
+      await load(selectedTenantId)
     } catch (e: any) {
       setRecordsError(e?.message || 'Failed to delete records by creator')
     } finally {
@@ -440,16 +476,16 @@ export const DbMaintenanceView = () => {
 
   return (
     <Box className='flex flex-col gap-4'>
-      <Alert severity='info' sx={{ borderRadius: 2 }}>
-        Deletions are limited to the demo organisation configured in <code>DEMO_TENANT_ID</code>. Platform data is managed via tenant
-        purge only and is not shown here.
+      <Alert severity='warning' sx={{ borderRadius: 2 }}>
+        Super admins can load, clear, and delete data for any tenant. Prefer purge for resets; use full delete only when the organisation
+        should be removed permanently.
       </Alert>
 
       <Card sx={{ borderRadius: 3, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 2 }}>
           <Typography variant='h6'>Tools</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Database maintenance tools for super admins. Only demo tenant data can be deleted.
+            Database maintenance for super admins. Collection counts and deletes are always scoped to the selected tenant.
           </Typography>
         </CardContent>
       </Card>
@@ -459,8 +495,8 @@ export const DbMaintenanceView = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant='h6'>Tenant Maintenance</Typography>
             <Typography variant='body2' color='text.secondary'>
-              Purge all operational data for the demo organisation only. The demo tenant record is kept. Users are removed only if they are
-              not super admins and not part of other tenants.
+              Choose a tenant to inspect its collections. Purge removes all related operational data but keeps the tenant record. Delete
+              tenant also removes the organisation itself. Orphan users (not super admins and not in other tenants) are removed.
             </Typography>
           </Box>
 
@@ -478,34 +514,46 @@ export const DbMaintenanceView = () => {
               {tenants.map(t => (
                 <MenuItem key={t.id} value={t.id}>
                   {t.name}
+                  {t.isDemo ? ' (demo)' : ''}
+                  {t.status ? ` — ${t.status}` : ''}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
+          <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' }, flexWrap: 'wrap' }}>
             <Button variant='outlined' onClick={loadTenants} disabled={tenantsLoading || purging} fullWidth={isMobile}>
               Refresh Tenants
             </Button>
             <Button
-              color='error'
+              color='warning'
               variant='contained'
-              onClick={openPurge}
+              onClick={() => openPurge('data')}
               disabled={!selectedTenantId || tenantsLoading || purging}
               fullWidth={isMobile}
             >
               Purge Tenant Data
+            </Button>
+            <Button
+              color='error'
+              variant='contained'
+              onClick={() => openPurge('tenant')}
+              disabled={!selectedTenantId || tenantsLoading || purging}
+              fullWidth={isMobile}
+            >
+              Delete Tenant Completely
             </Button>
           </Box>
 
           {lastPurgeResult && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Typography variant='body2' sx={{ fontWeight: 600 }}>
-                Purge result: {lastPurgeResult.tenantName || lastPurgeResult.tenantId}
+                {lastPurgeResult.deletedTenant ? 'Deleted tenant' : 'Purge result'}:{' '}
+                {lastPurgeResult.tenantName || lastPurgeResult.tenantId}
               </Typography>
               <Typography variant='body2' color='text.secondary'>
-                Deleted users: {lastPurgeResult.deletedUsers} | Kept super admins: {lastPurgeResult.keptUsers.superAdmins} | Kept users in other tenants:{' '}
-                {lastPurgeResult.keptUsers.otherTenants}
+                Deleted users: {lastPurgeResult.deletedUsers} | Kept super admins: {lastPurgeResult.keptUsers.superAdmins} | Kept users in
+                other tenants: {lastPurgeResult.keptUsers.otherTenants}
               </Typography>
               <Table size='small'>
                 <TableHead>
@@ -534,17 +582,24 @@ export const DbMaintenanceView = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
               <Typography variant='h6'>Collections</Typography>
               <Typography variant='body2' color='text.secondary'>
-                Select a collection and clear demo tenant documents only.
+                {selectedTenant
+                  ? `Showing document counts for ${selectedTenant.name}. Clear / view / delete only affects this tenant.`
+                  : 'Select a tenant to load its collections.'}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
-              <Button variant='outlined' onClick={load} disabled={loading || clearing} fullWidth={isMobile}>
+              <Button
+                variant='outlined'
+                onClick={() => load(selectedTenantId)}
+                disabled={!selectedTenantId || loading || clearing}
+                fullWidth={isMobile}
+              >
                 Refresh
               </Button>
               <Button
                 variant='outlined'
                 onClick={() => openRecords()}
-                disabled={!selected || loading || clearing}
+                disabled={!selectedTenantId || !selected || loading || clearing}
                 fullWidth={isMobile}
               >
                 View Records
@@ -553,10 +608,10 @@ export const DbMaintenanceView = () => {
                 color='error'
                 variant='contained'
                 onClick={openConfirm}
-                disabled={!selected || !selectedCollectionDeletable || loading || clearing}
+                disabled={!selectedTenantId || !selected || !selectedCollectionDeletable || loading || clearing}
                 fullWidth={isMobile}
               >
-                Clear Demo Data
+                Clear Tenant Data
               </Button>
             </Box>
           </Box>
@@ -675,7 +730,7 @@ export const DbMaintenanceView = () => {
           {selectedInfo && (
             <Typography variant='body2' color='text.secondary'>
               Selected: {selectedCollectionLabel} ({selectedInfo.name})
-              {selectedInfo.exists ? ` — ${selectedInfo.documentCount} demo documents` : ' — collection not created yet'}
+              {selectedInfo.exists ? ` — ${selectedInfo.documentCount} documents` : ' — collection not created yet'}
               {!selectedCollectionDeletable ? ' — clear/delete disabled (platform collection)' : ''}
             </Typography>
           )}
@@ -687,7 +742,8 @@ export const DbMaintenanceView = () => {
         <DialogTitle>Clear Collection</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all <strong>demo tenant</strong> documents in: <strong>{selected || '-'}</strong>
+            This will permanently delete all documents for <strong>{selectedTenant?.name || 'the selected tenant'}</strong> in:{' '}
+            <strong>{selected || '-'}</strong>
           </Typography>
           <Typography variant='body2' color='text.secondary'>
             Type the collection name to confirm.
@@ -711,11 +767,20 @@ export const DbMaintenanceView = () => {
       </Dialog>
 
       <Dialog open={purgeOpen} onClose={closePurge} fullWidth maxWidth='sm' fullScreen={isMobile}>
-        <DialogTitle>Purge Tenant Data</DialogTitle>
+        <DialogTitle>{purgeMode === 'tenant' ? 'Delete Tenant Completely' : 'Purge Tenant Data'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all records for tenant: <strong>{selectedTenant?.name || '-'}</strong>
+            This will permanently delete all related records for tenant: <strong>{selectedTenant?.name || '-'}</strong>
           </Typography>
+          {purgeMode === 'tenant' ? (
+            <Typography variant='body2' color='error'>
+              The tenant organisation itself will also be deleted and cannot be reused.
+            </Typography>
+          ) : (
+            <Typography variant='body2' color='text.secondary'>
+              The tenant record will be kept so the organisation can be reused after purge.
+            </Typography>
+          )}
           <Typography variant='body2' color='text.secondary'>
             Users will be deleted only if they are not super admins and not part of any other tenant.
           </Typography>
@@ -735,7 +800,7 @@ export const DbMaintenanceView = () => {
             Cancel
           </Button>
           <Button color='error' variant='contained' onClick={purgeTenant} disabled={!canConfirmPurge || purging}>
-            {purging ? 'Purging...' : 'Purge'}
+            {purging ? (purgeMode === 'tenant' ? 'Deleting...' : 'Purging...') : purgeMode === 'tenant' ? 'Delete Tenant' : 'Purge'}
           </Button>
         </DialogActions>
       </Dialog>

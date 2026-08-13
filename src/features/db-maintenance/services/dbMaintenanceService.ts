@@ -26,36 +26,51 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const dbMaintenanceService = {
-  list: () => api<{ collections: DbMaintenanceCollectionInfo[] }>('/api/super-admin/db-maintenance'),
-  clear: (collection: string) =>
+  list: (tenantId: string) =>
+    api<{ collections: DbMaintenanceCollectionInfo[] }>(
+      `/api/super-admin/db-maintenance?tenantId=${encodeURIComponent(tenantId)}`
+    ),
+  clear: (collection: string, tenantId: string) =>
     api<{ result: DbMaintenanceClearResult }>('/api/super-admin/db-maintenance', {
       method: 'POST',
-      body: JSON.stringify({ collection })
+      body: JSON.stringify({ collection, tenantId })
     }),
   listTenants: () => api<{ tenants: DbMaintenanceTenantInfo[] }>('/api/super-admin/db-maintenance/tenants'),
-  purgeTenant: (tenantId: string) =>
+  purgeTenant: (tenantId: string, options?: { deleteTenant?: boolean }) =>
     api<{ result: DbMaintenanceTenantPurgeResult }>('/api/super-admin/db-maintenance/tenant-purge', {
       method: 'POST',
-      body: JSON.stringify({ tenantId })
+      body: JSON.stringify({ tenantId, deleteTenant: Boolean(options?.deleteTenant) })
     }),
-  listDocuments: (collection: string, params?: { limit?: number; cursor?: string | null; createdById?: string | null }) => {
+  listDocuments: (
+    collection: string,
+    params: { tenantId: string; limit?: number; cursor?: string | null; createdById?: string | null }
+  ) => {
     const qs = new URLSearchParams()
 
-    if (params?.limit != null) qs.set('limit', String(params.limit))
-    if (params?.cursor) qs.set('cursor', String(params.cursor))
-    if (params?.createdById) qs.set('createdById', String(params.createdById))
-
-    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    qs.set('tenantId', params.tenantId)
+    if (params.limit != null) qs.set('limit', String(params.limit))
+    if (params.cursor) qs.set('cursor', String(params.cursor))
+    if (params.createdById) qs.set('createdById', String(params.createdById))
 
     return api<{ items: DbMaintenanceDocumentPreview[]; nextCursor: string | null }>(
-      `/api/super-admin/db-maintenance/${encodeURIComponent(collection)}${suffix}`
+      `/api/super-admin/db-maintenance/${encodeURIComponent(collection)}?${qs.toString()}`
     )
   },
-  listCreators: (collection: string) =>
-    api<{ creators: DbMaintenanceCreatorOption[] }>(`/api/super-admin/db-maintenance/${encodeURIComponent(collection)}/creators`),
-  deleteDocuments: (collection: string, ids: string[], options?: { createdById?: string | null }) =>
+  listCreators: (collection: string, tenantId: string) =>
+    api<{ creators: DbMaintenanceCreatorOption[] }>(
+      `/api/super-admin/db-maintenance/${encodeURIComponent(collection)}/creators?tenantId=${encodeURIComponent(tenantId)}`
+    ),
+  deleteDocuments: (
+    collection: string,
+    ids: string[],
+    options: { tenantId: string; createdById?: string | null }
+  ) =>
     api<{ deleted: number }>(`/api/super-admin/db-maintenance/${encodeURIComponent(collection)}`, {
       method: 'POST',
-      body: JSON.stringify({ ids, createdById: options?.createdById || null })
+      body: JSON.stringify({
+        ids,
+        tenantId: options.tenantId,
+        createdById: options.createdById || null
+      })
     })
 }

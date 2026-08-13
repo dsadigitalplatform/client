@@ -24,6 +24,7 @@ import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
+import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
 import OrganisationSetupSupportDialog from '@features/support/components/OrganisationSetupSupportDialog'
 import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
@@ -47,6 +48,7 @@ import {
 import DashboardAnalyticsSection from '@features/dashboard/components/DashboardAnalyticsSection'
 import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
 import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
+import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
 
 const DONUT_SIZE = 64
 
@@ -607,7 +609,7 @@ const DashboardHome = () => {
     }, [periodFilteredLeads, closedStageIds])
 
     const activeCasesValue = useMemo(() => {
-        return activeCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
+        return activeCases.reduce((acc, c) => acc + (resolveApprovedAmount(c) ?? 0), 0)
     }, [activeCases])
 
     const closedCases = useMemo(() => {
@@ -617,7 +619,7 @@ const DashboardHome = () => {
     }, [periodFilteredLeads, closedStageIds])
 
     const closedCasesValue = useMemo(() => {
-        return closedCases.reduce((acc, c) => (typeof c.requestedAmount === 'number' ? acc + c.requestedAmount : acc), 0)
+        return closedCases.reduce((acc, c) => acc + (resolveApprovedAmount(c) ?? 0), 0)
     }, [closedCases])
 
     const activeCustomersCount = useMemo(() => {
@@ -657,7 +659,7 @@ const DashboardHome = () => {
                 stageId,
                 stageName,
                 count: prev.count + 1,
-                totalValue: prev.totalValue + (typeof c.requestedAmount === 'number' ? c.requestedAmount : 0)
+                totalValue: prev.totalValue + (resolveApprovedAmount(c) ?? 0)
             })
         })
 
@@ -791,21 +793,64 @@ const DashboardHome = () => {
                 onPeriodChange={hasTenant ? setDashboardPeriod : undefined}
                 periodDisabled={myLeadsLoading}
             />
-            {showWelcomeCta && (
+            {!checking && !hasMembership && (
                 <Box className='mt-4 flex flex-col gap-2'>
-                    <Typography variant='h6'>Welcome!</Typography>
-                    <Typography color='text.secondary'>
-                        Start by creating your organization to unlock your workspace.
-                    </Typography>
-                    <Button
-                        variant='contained'
-                        size='large'
-                        component={Link}
-                        href='/create-tenant'
-                        startIcon={<i className='ri-building-2-line' />}
-                    >
-                        Create Organization
-                    </Button>
+                    {showWelcomeCta ? (
+                        <>
+                            <Typography variant='h6'>Welcome!</Typography>
+                            <Typography color='text.secondary'>
+                                Start by creating your organization to unlock your workspace. You can still invite DSAs
+                                from Refer &amp; Earn before joining an organisation.
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                <Button
+                                    variant='contained'
+                                    size='large'
+                                    component={Link}
+                                    href='/create-tenant'
+                                    startIcon={<i className='ri-building-2-line' />}
+                                >
+                                    Create Organization
+                                </Button>
+                                <Button
+                                    variant='outlined'
+                                    size='large'
+                                    component={Link}
+                                    href='/refer-and-earn'
+                                    startIcon={<i className='ri-gift-line' />}
+                                >
+                                    Refer &amp; Earn
+                                </Button>
+                            </Box>
+                        </>
+                    ) : (
+                        <>
+                            <Typography variant='h6'>Refer &amp; Earn is ready</Typography>
+                            <Typography color='text.secondary'>
+                                You don&apos;t need to join an organisation to invite DSAs and track rewards.
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                <Button
+                                    variant='contained'
+                                    size='large'
+                                    component={Link}
+                                    href='/refer-and-earn'
+                                    startIcon={<i className='ri-gift-line' />}
+                                >
+                                    Refer &amp; Earn
+                                </Button>
+                                <Button
+                                    variant='outlined'
+                                    size='large'
+                                    component={Link}
+                                    href='/rewards'
+                                    startIcon={<i className='ri-medal-line' />}
+                                >
+                                    Rewards
+                                </Button>
+                            </Box>
+                        </>
+                    )}
                 </Box>
             )}
             <Box
@@ -843,7 +888,7 @@ const DashboardHome = () => {
                     loading={hasTenant && myLeadsLoading}
                 />
                 <DashboardStatCard
-                    label='Active pipeline value'
+                    label='Active approved value'
                     value={hasTenant ? (myLeadsLoading ? '…' : formatINR(activeCasesValue)) : '—'}
                     hint={`${hasTenant && !myLeadsLoading ? widgetMetrics.activeCases : '—'} open cases`}
                     icon='ri-hand-coin-line'
@@ -852,7 +897,7 @@ const DashboardHome = () => {
                     highlight
                 />
                 <DashboardStatCard
-                    label='Closed / disbursed value'
+                    label='Closed approved value'
                     value={hasTenant ? (myLeadsLoading ? '…' : formatINR(closedCasesValue)) : '—'}
                     hint={`${hasTenant && !myLeadsLoading ? closedCases.length : '—'} closed cases`}
                     icon='ri-checkbox-circle-line'
@@ -942,6 +987,7 @@ const DashboardHome = () => {
                                                     <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>
                                                         {title}
                                                     </Typography>
+                                                    {m?.leadCode ? <LeadCodeChip code={m.leadCode} variant='outlined' color='default' /> : null}
                                                     {m?.customerIsNRI ? (
                                                         <Chip
                                                             size='small'

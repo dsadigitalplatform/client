@@ -10,7 +10,7 @@ import {
   listDbMaintenanceCreators
 } from '@/features/db-maintenance/services/dbMaintenanceAdmin.server'
 
-export async function GET(_request: Request, ctx: { params: Promise<{ collection: string }> }) {
+export async function GET(request: Request, ctx: { params: Promise<{ collection: string }> }) {
   const session = await getServerSession(authOptions)
 
   if (!(session as any)?.isSuperAdmin) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -22,7 +22,17 @@ export async function GET(_request: Request, ctx: { params: Promise<{ collection
     return NextResponse.json({ error: 'invalid_collection' }, { status: 400 })
   }
 
-  const creators = await listDbMaintenanceCreators({ collection })
+  const tenantId = (new URL(request.url).searchParams.get('tenantId') || '').trim()
 
-  return NextResponse.json({ creators })
+  if (!tenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+
+  try {
+    const creators = await listDbMaintenanceCreators({ collection, tenantId })
+
+    return NextResponse.json({ creators })
+  } catch (e: any) {
+    const status = typeof e?.status === 'number' ? e.status : 400
+
+    return NextResponse.json({ error: e?.message || 'failed' }, { status })
+  }
 }

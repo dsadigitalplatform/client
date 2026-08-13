@@ -10,6 +10,7 @@ export type Associate = {
   payout: number | null
   code: string
   pan: string | null
+  remarks: string | null
   isActive: boolean
   createdAt: string | null
 }
