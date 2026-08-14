@@ -58,7 +58,7 @@ export async function exportReportExcel(data: ReportQueryResponse, meta: ReportE
   ]
 
   if (data.breakdown.length > 0) {
-    rows.push(['Breakdown', 'Cases', 'Amount'])
+    rows.push([`Breakdown by ${groupByLabel(data.groupBy)}`, 'Cases', 'Amount'])
     data.breakdown.forEach(row => {
       rows.push([row.label, String(row.count), toSpreadsheetAmount(row.amount)])
     })
@@ -84,7 +84,7 @@ export async function exportReportExcel(data: ReportQueryResponse, meta: ReportE
 
   const suffix = meta.detailFormat === 'flat' ? '-flat' : ''
 
-  await downloadSpreadsheet(rows, `report${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  await downloadSpreadsheet(rows, `${reportFileSlug(data.groupBy)}${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 export async function exportReportExcelFlat(data: ReportQueryResponse, meta: ReportExportMeta) {
@@ -96,7 +96,7 @@ export async function exportReportExcelFlatOnly(data: ReportQueryResponse) {
 
   const rows = buildFlatDetailSpreadsheetRows(data)
 
-  await downloadSpreadsheet(rows, `report-details-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  await downloadSpreadsheet(rows, `${reportFileSlug(data.groupBy)}-details-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta, charts?: ReportChartImages, options?: { autoPrint?: boolean }) {
@@ -106,7 +106,7 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
 
   const breakdownHtml =
     data.breakdown.length > 0
-      ? `<h2>Breakdown</h2><table><thead><tr><th>Dimension</th><th>Cases</th><th>Amount</th></tr></thead><tbody>${data.breakdown
+      ? `<h2>Breakdown by ${escapeHtml(groupByLabel(data.groupBy))}</h2><table><thead><tr><th>${escapeHtml(groupByLabel(data.groupBy))}</th><th>Cases</th><th>Amount</th></tr></thead><tbody>${data.breakdown
           .map(
             r =>
               `<tr><td>${escapeHtml(r.label)}</td><td>${r.count}</td><td>${escapeHtml(formatINR(r.amount))}</td></tr>`
@@ -278,7 +278,7 @@ export function exportReportHtml(data: ReportQueryResponse, meta: ReportExportMe
   const a = document.createElement('a')
 
   a.href = url
-  a.download = `report-${new Date().toISOString().slice(0, 10)}.html`
+  a.download = `${reportFileSlug(data.groupBy)}-${new Date().toISOString().slice(0, 10)}.html`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -294,6 +294,36 @@ export function groupByLabel(groupBy: string) {
   }
 
   return labels[groupBy] ?? groupBy
+}
+
+export function reportCategoryTitle(groupBy: string, groupBySecondary?: string | null) {
+  const titles: Record<string, string> = {
+    stage: 'Stage-wise Loans',
+    agent: 'Agent-wise Performance',
+    customer: 'Customer-wise Report',
+    bank: 'Bank-wise Distribution',
+    loanType: 'Loan-wise Distribution',
+    time: 'Time-wise Report'
+  }
+
+  const primary = titles[groupBy] ?? groupByLabel(groupBy)
+
+  if (!groupBySecondary) return primary
+
+  return `${primary} → ${groupByLabel(groupBySecondary)}`
+}
+
+export function reportFileSlug(groupBy: string) {
+  const slugs: Record<string, string> = {
+    stage: 'stage-wise',
+    agent: 'agent-wise',
+    customer: 'customer-wise',
+    bank: 'bank-wise',
+    loanType: 'loan-wise',
+    time: 'time-wise'
+  }
+
+  return slugs[groupBy] ?? 'report'
 }
 
 export { formatINR, formatDate }

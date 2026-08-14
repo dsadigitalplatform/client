@@ -1,4 +1,9 @@
-import type { ReportDetailGroupDimension, ReportDetailRow, ReportQueryResponse } from '../reports.types'
+import {
+  showsLoanTypeDetailColumn,
+  type ReportDetailGroupDimension,
+  type ReportDetailRow,
+  type ReportQueryResponse
+} from '../reports.types'
 import { buildDetailGroups } from './buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from './exportReport'
 import { disbursementStatusLabel, exportDisbursementCells, toSpreadsheetAmount } from './reportDisbursement'
@@ -12,15 +17,22 @@ function formatExportAmount(amount: number | null | undefined, mode: AmountExpor
   return mode === 'spreadsheet' ? toSpreadsheetAmount(amount) : formatINR(amount)
 }
 
-function detailCells(row: ReportDetailRow, isHistorical: boolean, mode: AmountExportMode, indent = '') {
+function detailCells(
+  row: ReportDetailRow,
+  isHistorical: boolean,
+  mode: AmountExportMode,
+  includeLoanType: boolean,
+  indent = ''
+) {
   const disbursementCells = exportDisbursementCells(row, mode)
+  const loanTypeCell = includeLoanType ? [row.loanTypeName ?? ''] : []
 
   if (isHistorical) {
     return [
       `${indent}${row.customerName ?? ''}`,
       '',
       row.leadCode ?? '',
-      row.loanTypeName ?? '',
+      ...loanTypeCell,
       row.bankName ?? '',
       row.auditStageName ?? row.stageName ?? '',
       row.auditStagedDate ?? '',
@@ -36,7 +48,7 @@ function detailCells(row: ReportDetailRow, isHistorical: boolean, mode: AmountEx
     `${indent}${row.customerName ?? ''}`,
     '',
     row.leadCode ?? '',
-    row.loanTypeName ?? '',
+    ...loanTypeCell,
     row.bankName ?? '',
     row.stageName ?? '',
     row.agentName ?? '',
@@ -47,14 +59,16 @@ function detailCells(row: ReportDetailRow, isHistorical: boolean, mode: AmountEx
   ]
 }
 
-function detailHeader(isHistorical: boolean, primaryLabel: string) {
+function detailHeader(isHistorical: boolean, primaryLabel: string, includeLoanType: boolean) {
+  const loanTypeHeader = includeLoanType ? ['Loan type'] : []
+
   if (isHistorical) {
     return [
       'Level',
       `${primaryLabel} / Customer`,
       'Cases',
       'Lead code',
-      'Loan type',
+      ...loanTypeHeader,
       'Bank',
       'Stage (audit)',
       'Staged date',
@@ -71,7 +85,7 @@ function detailHeader(isHistorical: boolean, primaryLabel: string) {
     `${primaryLabel} / Customer`,
     'Cases',
     'Lead code',
-    'Loan type',
+    ...loanTypeHeader,
     'Bank',
     'Stage',
     'Agent',
@@ -118,9 +132,10 @@ export function buildGroupedDetailSpreadsheetRows(
 
   const isHistorical = data.dataMode === 'historical'
   const { primary, hasSecondary, secondary, groupingLabel, groups } = resolveDetailGrouping(data, groupBySecondary)
-  const header = detailHeader(isHistorical, groupByLabel(primary))
+  const includeLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
+  const header = detailHeader(isHistorical, groupByLabel(primary), includeLoanType)
   const rows: SpreadsheetCell[][] = [[`Grouped detail (${groupingLabel})`], header]
-  const emptyLeadCols = isHistorical ? 6 : 5
+  const emptyLeadCols = (isHistorical ? 6 : 5) - (includeLoanType ? 0 : 1)
   const emptyDisbursementCells: SpreadsheetCell[] = ['', '', '']
 
   groups.forEach(group => {
@@ -149,12 +164,12 @@ export function buildGroupedDetailSpreadsheetRows(
         ])
 
         subgroup.rows.forEach(row => {
-          rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet')])
+          rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType)])
         })
       })
     } else {
       group.rows.forEach(row => {
-        rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet')])
+        rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType)])
       })
     }
 
@@ -267,6 +282,7 @@ export function buildGroupedDetailHtml(
 
   const isHistorical = data.dataMode === 'historical'
   const { primary, hasSecondary, secondary, groupingLabel, groups } = resolveDetailGrouping(data, groupBySecondary)
+  const includeLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
 
   const escape = (value: string | null | undefined) =>
     String(value ?? '')
@@ -276,11 +292,12 @@ export function buildGroupedDetailHtml(
       .replace(/"/g, '&quot;')
 
   const disbursementHeaders = '<th>Status</th><th>Balance remaining</th><th>Disbursed</th>'
-  const emptyLeadColSpan = isHistorical ? 6 : 5
+  const emptyLeadColSpan = (isHistorical ? 6 : 5) - (includeLoanType ? 0 : 1)
+  const loanTypeHeader = includeLoanType ? '<th>Loan type</th>' : ''
 
   const headerCells = isHistorical
-    ? `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
-    : `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
+    ? `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th>${loanTypeHeader}<th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
+    : `<th>Level</th><th>${escape(groupByLabel(primary))} / Customer</th><th>Cases</th><th>Lead code</th>${loanTypeHeader}<th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
 
   const body: string[] = []
 
@@ -307,10 +324,11 @@ export function buildGroupedDetailHtml(
 
   const detailRowHtml = (row: ReportDetailRow) => {
     const disbursementCells = disbursementDetailHtmlCells(row)
+    const loanTypeCell = includeLoanType ? `<td>${escape(row.loanTypeName)}</td>` : ''
 
     return isHistorical
-      ? `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
-      : `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+      ? `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td>${loanTypeCell}<td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
+      : `<tr class="detail-row"><td></td><td class="indent-detail">${escape(row.customerName)}</td><td></td><td>${escape(row.leadCode)}</td>${loanTypeCell}<td>${escape(row.bankName)}</td><td>${escape(row.stageName)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
   }
 
   groups.forEach(group => {

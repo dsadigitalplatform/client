@@ -8,7 +8,7 @@ export type ReportViewType = 'summary' | 'detailed' | 'trend' | 'full'
 
 export type ReportTrendGranularity = 'week' | 'month'
 
-export type ReportPresetId = 'stage-wise-loans' | 'agent-wise-loans' | 'bank-wise-loans'
+export type ReportPresetId = 'stage-wise-loans' | 'agent-wise-loans' | 'bank-wise-loans' | 'loan-wise-loans'
 
 export type ReportDetailGroupDimension = Exclude<ReportGroupBy, 'time'>
 
@@ -226,5 +226,25 @@ export const REPORT_PRESETS: ReportPreset[] = [
       view: 'full',
       metric: 'count'
     }
+  },
+  {
+    id: 'loan-wise-loans',
+    title: 'Loan-wise Distribution',
+    description: 'See how leads are distributed across loan types.',
+    icon: 'ri-file-list-3-line',
+    filters: {
+      dataMode: 'snapshot',
+      groupBy: 'loanType',
+      groupBySecondary: 'bank',
+      view: 'full',
+      metric: 'count'
+    }
   }
 ]
+
+export function showsLoanTypeDetailColumn(
+  groupBy: ReportGroupBy,
+  groupBySecondary?: ReportDetailGroupDimension | null
+) {
+  return groupBy !== 'loanType' && groupBySecondary !== 'loanType'
+}
