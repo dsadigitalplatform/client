@@ -273,12 +273,14 @@ export function TenantSubscriptionPanel() {
   if (!data) return null
 
   const entitlements = data.entitlements as PlanEntitlements
+  const listedFeatures = MODULE_FEATURES.filter(f => entitlements.modules[f.key] || f.status === 'coming_soon')
   const usage = data.usage
   const sub = data.subscription
   const access = data.access
   const copy = data.changePolicy?.copy
   const periodEndLabel = formatDate(sub?.currentPeriodEnd)
-  const payAmountLabel = (() => {
+  const pricing = data.pricing
+  const payAmountLabel = pricing?.payLabel || (() => {
     if (!data.plan) return null
 
     const yearly = sub?.billingInterval === 'yearly' && typeof data.plan.priceYearly === 'number'
@@ -435,14 +437,47 @@ export function TenantSubscriptionPanel() {
             </Typography>
           )}
 
-          {sub?.discountSnapshot ? (
-            <Typography variant='body2'>
-              Discount applied: <strong>{sub.discountSnapshot.code}</strong> (
-              {sub.discountSnapshot.type === 'percent'
-                ? `${sub.discountSnapshot.value}%`
-                : `${sub.discountSnapshot.value} ${sub.discountSnapshot.currency || ''}`}
-              )
-            </Typography>
+          {pricing?.discount ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5,
+                p: 1.75,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'success.light',
+                bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+              }}
+            >
+              <Box>
+                <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 700, letterSpacing: 0.4 }}>
+                  Amount due
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+                  <Typography
+                    variant='body1'
+                    color='text.secondary'
+                    sx={{ textDecoration: 'line-through', fontWeight: 600 }}
+                  >
+                    {pricing.originalLabel} {pricing.intervalSuffix}
+                  </Typography>
+                  <Typography variant='h6' sx={{ fontWeight: 800, color: 'success.main' }}>
+                    {pricing.payableLabel} {pricing.intervalSuffix}
+                  </Typography>
+                </Box>
+              </Box>
+              {pricing.discountCaption ? (
+                <Chip
+                  color='success'
+                  icon={<i className='ri-coupon-3-line' />}
+                  label={pricing.discountCaption}
+                  sx={{ fontWeight: 700 }}
+                />
+              ) : null}
+            </Box>
           ) : null}
 
           <Divider />
@@ -483,27 +518,30 @@ export function TenantSubscriptionPanel() {
           <Divider />
 
           <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>
-            Modules
+            Features
           </Typography>
-          <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap>
-            {MODULE_FEATURES.map(f => {
-              const enabled = entitlements.modules[f.key]
+          {listedFeatures.length === 0 ? (
+            <Typography variant='body2' color='text.secondary'>
+              Core workspace only — no extra features on this plan.
+            </Typography>
+          ) : (
+            <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap>
+              {listedFeatures.map(f => {
+                const enabled = entitlements.modules[f.key]
 
-              return (
-                <Chip
-                  key={f.key}
-                  size='small'
-                  color={enabled ? 'primary' : 'default'}
-                  variant={enabled ? 'filled' : 'outlined'}
-                  label={
-                    f.status === 'coming_soon'
-                      ? `${f.label} · Watch this space`
-                      : `${f.label}: ${enabled ? 'On' : 'Off'}`
-                  }
-                />
-              )
-            })}
-          </Stack>
+                return (
+                  <Chip
+                    key={f.key}
+                    size='small'
+                    color={enabled ? 'primary' : 'warning'}
+                    variant={enabled ? 'filled' : 'outlined'}
+                    icon={<i className={f.icon} style={{ fontSize: 14 }} />}
+                    label={f.status === 'coming_soon' && !enabled ? `${f.label} · Watch this space` : f.label}
+                  />
+                )
+              })}
+            </Stack>
+          )}
         </CardContent>
       </Card>
 
@@ -741,6 +779,7 @@ export function TenantSubscriptionPanel() {
 
             <UpiPaymentInstructions
               amountLabel={payAmountLabel}
+              pricing={pricing}
               organisationName={data.tenantName || null}
               planName={data.plan?.name || null}
             />

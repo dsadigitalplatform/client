@@ -1,3 +1,5 @@
+import type { PlanEntitlements } from '../featureCatalog'
+
 export type CreatePlanInput = {
   name: string
   slug: string
@@ -8,10 +10,7 @@ export type CreatePlanInput = {
   maxUsers: number
   trialDays?: number
   trialEnabled?: boolean
-  entitlements?: {
-    limits: { maxUsers: number; maxCustomers: number; maxLeads: number }
-    modules: { reports: boolean; progressiveDisbursement: boolean; associateCommission: boolean }
-  }
+  entitlements?: PlanEntitlements
   features?: Record<string, boolean>
   isActive?: boolean
   isDefault?: boolean

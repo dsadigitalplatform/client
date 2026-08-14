@@ -11,8 +11,9 @@ import { getSupportRecipientEmails } from '@/lib/env'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 import { resolveCurrentTenantId } from '@/lib/tenantSession'
-import { formatPlanMoney } from '@features/subscription-plans/currencies'
 import { getCurrentTenantSubscriptionDoc } from '@features/subscriptions/services/entitlements.server'
+import { ensureEligibleDiscountOnSubscription } from '@features/subscriptions/services/discountCodes.server'
+import { buildSubscriptionPricing, planPriceForInterval } from '@features/subscriptions/services/discountPricing'
 
 function escapeHtml(value: string): string {
   return value
@@ -133,13 +134,23 @@ export async function POST(request: Request) {
   const gstBillingEmail = String((tenant as any)?.billingEmail || '—')
   const planName = String((plan as any)?.name || '—')
   const currency = String((plan as any)?.currency || 'INR')
-  const interval = String(sub.billingInterval || 'monthly')
-  const priceLabel =
-    interval === 'yearly' && typeof (plan as any)?.priceYearly === 'number'
-      ? `${formatPlanMoney((plan as any).priceYearly, currency)} / year`
-      : typeof (plan as any)?.priceMonthly === 'number'
-        ? `${formatPlanMoney((plan as any).priceMonthly, currency)} / month`
-        : '—'
+  const interval = String(sub.billingInterval || 'monthly') === 'yearly' ? 'yearly' : 'monthly'
+  const discountForPay = await ensureEligibleDiscountOnSubscription({
+    db,
+    tenantId,
+    subscription: sub,
+    plan: plan as any
+  })
+  const pricing = buildSubscriptionPricing({
+    originalAmount: planPriceForInterval(plan as any, interval),
+    currency,
+    interval,
+    snapshot: discountForPay.snapshot || (sub as any).discountSnapshot || null,
+    discountName: discountForPay.discountName
+  })
+  const priceLabel = pricing.discount
+    ? `${pricing.payableLabel} ${pricing.intervalSuffix} (was ${pricing.originalLabel}; ${pricing.discountCaption})`
+    : `${pricing.payLabel}`
   const status = String(sub.status || '—')
   const trialEndsAt =
     sub.trialEndsAt instanceof Date
@@ -166,7 +177,9 @@ export async function POST(request: Request) {
           ${row('Legal name', escapeHtml(legalName))}
           ${row('GSTIN', escapeHtml(gstin))}
           ${row('GST billing email', escapeHtml(gstBillingEmail))}
-          ${row('Plan', escapeHtml(`${planName} · ${priceLabel}`))}
+          ${row('Plan', escapeHtml(planName))}
+          ${row('Amount to pay', escapeHtml(priceLabel))}
+          ${pricing.discountCaption ? row('Discount', escapeHtml(pricing.discountCaption)) : ''}
           ${row('Billing interval', escapeHtml(interval))}
           ${row('Subscription status', escapeHtml(status))}
           ${row('Trial ends', escapeHtml(trialEndsAt))}
@@ -192,7 +205,9 @@ export async function POST(request: Request) {
     `Legal name: ${legalName}`,
     `GSTIN: ${gstin}`,
     `GST billing email: ${gstBillingEmail}`,
-    `Plan: ${planName} · ${priceLabel}`,
+    `Plan: ${planName}`,
+    `Amount to pay: ${priceLabel}`,
+    pricing.discountCaption ? `Discount: ${pricing.discountCaption}` : '',
     `Billing interval: ${interval}`,
     `Subscription status: ${status}`,
     `Trial ends: ${trialEndsAt}`,

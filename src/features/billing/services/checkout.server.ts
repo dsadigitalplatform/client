@@ -6,6 +6,7 @@ import { ObjectId } from 'mongodb'
 import type { CheckoutSessionResult } from '../billing.types'
 import { appBaseUrl, getActiveBillingProvider } from './activeProvider.server'
 import { createSubscriptionInvoice, planAmountPaise } from './invoices.server'
+import { ensureEligibleDiscountOnSubscription } from '@features/subscriptions/services/discountCodes.server'
 import {
   createRazorpayCustomer,
   createRazorpayOrder,
@@ -178,6 +179,13 @@ export async function startCheckoutSession(params: {
   const periodEnd =
     sub.currentPeriodEnd instanceof Date ? sub.currentPeriodEnd : new Date(sub.currentPeriodEnd)
 
+  const discountForInvoice = await ensureEligibleDiscountOnSubscription({
+    db: params.db,
+    tenantId: params.tenantId,
+    subscription: sub,
+    plan: plan as any
+  })
+
   const invoice = await createSubscriptionInvoice({
     db: params.db,
     tenantId: params.tenantId,
@@ -187,7 +195,7 @@ export async function startCheckoutSession(params: {
     periodStart: Number.isFinite(periodStart.getTime()) ? periodStart : now,
     periodEnd: Number.isFinite(periodEnd.getTime()) ? periodEnd : now,
     provider,
-    discountSnapshot: (sub as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || (sub as any).discountSnapshot || null,
     billingContactEmail: (tenant as any).billingEmail || contact.email,
     status: 'open'
   })
@@ -388,6 +396,14 @@ export async function startAutopaySubscription(params: {
     planId: String(plan._id)
   }
 
+  const discountForInvoice = await ensureEligibleDiscountOnSubscription({
+    db: params.db,
+    tenantId: params.tenantId,
+    subscription: sub,
+    plan: plan as any
+  })
+  const discountSnapshot = discountForInvoice.snapshot || (sub as any).discountSnapshot || null
+
   if (provider === 'stripe') {
     // Charge plan + GST for recurring: create a preview invoice total for first period pricing
     const now = new Date()
@@ -401,7 +417,7 @@ export async function startAutopaySubscription(params: {
       periodStart: now,
       periodEnd,
       provider: 'stripe',
-      discountSnapshot: (sub as any).discountSnapshot || null,
+      discountSnapshot,
       billingContactEmail: (tenant as any).billingEmail || contact.email,
       status: 'open'
     })

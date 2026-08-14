@@ -74,6 +74,21 @@ export type DiscountSnapshot = {
   durationMonths: number | null
 }
 
+export type SubscriptionPricing = {
+  currency: string
+  interval: BillingInterval
+  originalAmount: number
+  discountAmount: number
+  payableAmount: number
+  originalLabel: string
+  payableLabel: string
+  payLabel: string
+  intervalSuffix: '/ month' | '/ year'
+  discount: DiscountSnapshot | null
+  discountName: string | null
+  discountCaption: string | null
+}
+
 export type DiscountCode = {
   _id: string
   code: string
@@ -137,6 +152,8 @@ export type TenantSubscriptionView = {
   canNominateBillingContact: boolean
   /** Owner (or super admin) may change / cancel plan */
   canChangePlan: boolean
+  /** List price vs payable after an eligible Super Admin discount. */
+  pricing: SubscriptionPricing | null
   pendingPlan: (TenantSubscriptionSummary & { entitlements: PlanEntitlements }) | null
   availablePlans: Array<
     TenantSubscriptionSummary & {

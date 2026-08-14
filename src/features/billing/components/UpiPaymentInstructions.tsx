@@ -16,9 +16,12 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 
 import { getUpiPaymentConfig } from '../upiPaymentConfig'
+import { PayAmountDisplay } from '@features/subscriptions/components/PayAmountDisplay'
+import type { SubscriptionPricing } from '@features/subscriptions/subscriptions.types'
 
 type UpiPaymentInstructionsProps = {
   amountLabel?: string | null
+  pricing?: SubscriptionPricing | null
   organisationName?: string | null
   planName?: string | null
 }
@@ -107,13 +110,10 @@ export function UpiPaymentInstructions(props: UpiPaymentInstructionsProps) {
             </Typography>
           </Box>
         </Stack>
-        {props.amountLabel ? (
-          <Chip
-            color='primary'
-            variant='filled'
-            label={`Pay ${props.amountLabel}`}
-            sx={{ fontWeight: 700 }}
-          />
+        {props.pricing ? (
+          <PayAmountDisplay pricing={props.pricing} />
+        ) : props.amountLabel ? (
+          <Chip color='primary' variant='filled' label={`Pay ${props.amountLabel}`} sx={{ fontWeight: 700 }} />
         ) : null}
       </Box>
 
@@ -334,7 +334,9 @@ export function UpiPaymentInstructions(props: UpiPaymentInstructionsProps) {
             />
           </Box>
 
-          {props.amountLabel ? (
+          {props.pricing ? (
+            <PayAmountDisplay pricing={props.pricing} align='center' />
+          ) : props.amountLabel ? (
             <Chip color='primary' label={`Pay ${props.amountLabel}`} sx={{ fontWeight: 700 }} />
           ) : null}
 

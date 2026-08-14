@@ -1,3 +1,5 @@
+import type { PlanEntitlements } from './featureCatalog'
+
 export type SubscriptionPlan = {
   _id: string
   name: string
@@ -9,18 +11,7 @@ export type SubscriptionPlan = {
   maxUsers: number
   /** @deprecated prefer entitlements.modules — kept for backward compatibility */
   features: Record<string, boolean>
-  entitlements?: {
-    limits: {
-      maxUsers: number
-      maxCustomers: number
-      maxLeads: number
-    }
-    modules: {
-      reports: boolean
-      progressiveDisbursement: boolean
-      associateCommission: boolean
-    }
-  }
+  entitlements?: PlanEntitlements
   trialDays?: number
   /** When false, new organisations on this plan skip the free trial. */
   trialEnabled?: boolean

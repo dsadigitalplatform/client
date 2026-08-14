@@ -709,6 +709,16 @@ export async function recordManualPayment(params: {
   const tenant = await db.collection('tenants').findOne({ _id: tenantId })
   const { createSubscriptionInvoice } = await import('@features/billing/services/invoices.server')
   const { finalizeSuccessfulPayment } = await import('@features/billing/services/payments.server')
+  const { ensureEligibleDiscountOnSubscription } = await import(
+    '@features/subscriptions/services/discountCodes.server'
+  )
+
+  const discountForInvoice = await ensureEligibleDiscountOnSubscription({
+    db,
+    tenantId,
+    subscription: sub,
+    plan: plan as any
+  })
 
   let billingContactEmail: string | null = null
 
@@ -736,7 +746,7 @@ export async function recordManualPayment(params: {
     periodStart: bounds.start,
     periodEnd: bounds.end,
     provider: 'manual',
-    discountSnapshot: (sub as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || (sub as any).discountSnapshot || null,
     // Buyer snapshot prefers GST billing email; contact email is fallback for the party record.
     billingContactEmail: gstBillingEmail || billingContactEmail,
     status: 'open'

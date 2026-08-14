@@ -21,7 +21,6 @@ import {
   isUnlimited,
   limitResetCaption,
   type LimitFeatureKey,
-  type ModuleFeatureKey,
   type PlanEntitlements
 } from '../featureCatalog'
 
@@ -29,12 +28,6 @@ const LIMIT_ICONS: Record<LimitFeatureKey, { icon: string; color: 'primary' | 'i
   maxUsers: { icon: 'ri-team-line', color: 'primary' },
   maxCustomers: { icon: 'ri-user-heart-line', color: 'info' },
   maxLeads: { icon: 'ri-briefcase-4-line', color: 'success' }
-}
-
-const MODULE_ICONS: Record<ModuleFeatureKey, string> = {
-  reports: 'ri-bar-chart-box-line',
-  progressiveDisbursement: 'ri-funds-line',
-  associateCommission: 'ri-hand-coin-line'
 }
 
 export type SubscriptionPlanCardPlan = {
@@ -260,17 +253,26 @@ export function SubscriptionPlanCard({
           color='text.secondary'
           sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7 }}
         >
-          Included modules
+          Included features
         </Typography>
-        <Stack spacing={1.25} sx={{ mt: 1.75 }}>
-          {modules.length === 0 ? (
-            <Typography variant='body2' color='text.secondary'>
-              Core DSA workspace
-            </Typography>
-          ) : (
-            modules.map(f => {
+        {modules.length === 0 ? (
+          <Typography variant='body2' color='text.secondary' sx={{ mt: 1.5 }}>
+            Core DSA workspace
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              mt: 1.5,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.85
+            }}
+          >
+            {modules.map(f => {
               const on = entitlements.modules[f.key]
-              const comingSoon = f.status === 'coming_soon'
+              const comingSoon = f.status === 'coming_soon' && !on
+              const toneKey = comingSoon ? 'warning' : f.accent
+              const tone = theme.palette[toneKey].main
 
               return (
                 <Box
@@ -278,28 +280,27 @@ export function SubscriptionPlanCard({
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 1.5,
-                    px: 1.25,
-                    py: 1,
+                    gap: 1.25,
+                    minWidth: 0,
+                    px: 1,
+                    py: 0.7,
                     borderRadius: 2,
-                    bgcolor: 'action.hover'
+                    bgcolor: alpha(tone, 0.06)
                   }}
                 >
                   <Box
                     sx={{
-                      width: 34,
-                      height: 34,
+                      width: 32,
+                      height: 32,
                       borderRadius: '10px',
                       display: 'grid',
                       placeItems: 'center',
                       flexShrink: 0,
-                      bgcolor: on
-                        ? alpha(theme.palette.success.main, 0.14)
-                        : alpha(theme.palette.warning.main, 0.14),
-                      color: on ? 'success.main' : 'warning.main'
+                      bgcolor: alpha(tone, 0.16),
+                      color: tone
                     }}
                   >
-                    <i className={MODULE_ICONS[f.key]} style={{ fontSize: 17, lineHeight: 1 }} />
+                    <i className={f.icon} style={{ fontSize: 16, lineHeight: 1 }} />
                   </Box>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.3 }}>
@@ -311,18 +312,11 @@ export function SubscriptionPlanCard({
                       </Typography>
                     ) : null}
                   </Box>
-                  <i
-                    className={on ? 'ri-checkbox-circle-fill' : 'ri-time-line'}
-                    style={{
-                      fontSize: 18,
-                      color: on ? theme.palette.success.main : theme.palette.warning.main
-                    }}
-                  />
                 </Box>
               )
-            })
-          )}
-        </Stack>
+            })}
+          </Box>
+        )}
       </Box>
 
       {primaryAction ? (

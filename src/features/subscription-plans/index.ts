@@ -16,12 +16,19 @@ export {
   FEATURE_CATALOG,
   LIMIT_FEATURES,
   MODULE_FEATURES,
+  MODULE_CATEGORIES,
   TRIAL_DAYS,
   UNLIMITED,
   defaultPlanEntitlements,
   normalizePlanEntitlements,
   isUnlimited,
   isMonthlyLimit,
-  limitResetCaption
+  limitResetCaption,
+  modulesByCategory
 } from './featureCatalog'
-export type { LimitResetPolicy } from './featureCatalog'
+export type {
+  LimitResetPolicy,
+  ModuleFeatureKey,
+  PlanEntitlements,
+  PlanModules
+} from './featureCatalog'
