@@ -1,6 +1,8 @@
 export type {
   TenantSubscription,
   DiscountCode,
+  DiscountSnapshot,
+  SubscriptionPricing,
   ResolvedEntitlements,
   TenantSubscriptionView,
   UsageSnapshot,

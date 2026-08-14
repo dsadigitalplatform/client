@@ -8,6 +8,8 @@ import { entitlementsSnapshotFromPlanDoc } from '@features/subscription-plans/se
 
 import type { BillingInterval, DiscountSnapshot, RenewalMode } from '../subscriptions.types'
 import { buildTrialPeriod, serializeTenantSubscription } from './entitlements.server'
+import { findBestEligibleDiscount } from './discountCodes.server'
+import { planPriceForInterval } from './discountPricing'
 
 export async function createTenantSubscription(params: {
   db: Db
@@ -66,6 +68,24 @@ export async function createTenantSubscription(params: {
   const planDoc = await db.collection('subscriptionPlans').findOne({ _id: planId })
   const snap = entitlementsSnapshotFromPlanDoc(planDoc as any)
 
+  let resolvedCodeId = discountCodeId
+  let resolvedSnapshot = discountSnapshot
+
+  if (!resolvedSnapshot) {
+    const best = await findBestEligibleDiscount({
+      db,
+      tenantId,
+      planId,
+      price: planPriceForInterval(planDoc as any, billingInterval)
+    })
+
+    if (best) {
+      resolvedCodeId = best.objectId
+      resolvedSnapshot = best.snapshot
+      await db.collection('discountCodes').updateOne({ _id: best.objectId }, { $inc: { redemptionCount: 1 } })
+    }
+  }
+
   const doc = {
     tenantId,
     planId,
@@ -86,8 +106,8 @@ export async function createTenantSubscription(params: {
     entitlementsVersion: snap?.entitlementsVersion ?? null,
     billingContactUserId: ownerUserId,
     billingContactNominatedBy: null,
-    discountCodeId,
-    discountSnapshot,
+    discountCodeId: resolvedCodeId,
+    discountSnapshot: resolvedSnapshot,
     paymentProvider: null,
     externalCustomerId: null,
     externalSubscriptionId: null,

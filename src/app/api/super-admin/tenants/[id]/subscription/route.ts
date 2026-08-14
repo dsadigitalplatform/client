@@ -19,6 +19,8 @@ import {
   resolvePlanEntitlements,
   resolveTenantEntitlements
 } from '@features/subscriptions/services/entitlements.server'
+import { ensureEligibleDiscountOnSubscription } from '@features/subscriptions/services/discountCodes.server'
+import { buildSubscriptionPricing, planPriceForInterval } from '@features/subscriptions/services/discountPricing'
 import {
   assignTenantPlan,
   clearPendingPlanChange,
@@ -80,12 +82,43 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const planResolved = await resolvePlanEntitlements(db, resolved.planId)
 
   let plan: any = null
+  let planDoc: Record<string, any> | null = null
 
   if (resolved.planId && ObjectId.isValid(resolved.planId)) {
-    const planDoc = await db.collection('subscriptionPlans').findOne({ _id: new ObjectId(resolved.planId) })
+    planDoc = await db.collection('subscriptionPlans').findOne({ _id: new ObjectId(resolved.planId) })
 
     if (planDoc) plan = planPayload(planDoc as any)
   }
+
+  let appliedSnapshot = resolved.subscription?.discountSnapshot || null
+  let discountName: string | null = appliedSnapshot?.code || null
+
+  if (resolved.subscription) {
+    const attached = await ensureEligibleDiscountOnSubscription({
+      db,
+      tenantId,
+      subscription: resolved.subscription,
+      plan: planDoc
+    })
+
+    appliedSnapshot = attached.snapshot
+    discountName = attached.discountName
+
+    if (appliedSnapshot) {
+      resolved.subscription.discountSnapshot = appliedSnapshot
+    }
+  }
+
+  const billingInterval = (resolved.subscription?.billingInterval || 'monthly') as 'monthly' | 'yearly'
+  const pricing = plan
+    ? buildSubscriptionPricing({
+        originalAmount: planPriceForInterval(plan, billingInterval),
+        currency: plan.currency,
+        interval: billingInterval,
+        snapshot: appliedSnapshot,
+        discountName
+      })
+    : null
 
   let pendingPlan: any = null
 
@@ -156,6 +189,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     subscription: resolved.subscription,
     plan,
     pendingPlan,
+    pricing,
     entitlements: resolved.entitlements,
     usage: resolved.usage,
     access: resolved.access,

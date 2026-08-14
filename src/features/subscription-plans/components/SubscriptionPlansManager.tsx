@@ -368,7 +368,7 @@ export const SubscriptionPlansManager = () => {
     }
 
     return `Seats ${fmt('maxUsers')} · Customers ${fmt('maxCustomers')} · Leads ${fmt('maxLeads')}${
-      modulesOn.length ? ` · ${modulesOn.length} modules` : ''
+      modulesOn.length ? ` · ${modulesOn.length} features` : ''
     }`
   }
 
@@ -391,7 +391,7 @@ export const SubscriptionPlansManager = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1 }}>
           <Typography variant='h5'>All Plans</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Pricing, trial days, usage limits (seats total · customers & leads per month), and modules
+            Pricing, trial days, usage limits (seats total · customers & leads per month), and included features
           </Typography>
         </Box>
         <Button
@@ -573,7 +573,7 @@ export const SubscriptionPlansManager = () => {
         </Table>
       )}
 
-      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='md' fullScreen={isMobile}>
+      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth='lg' fullScreen={isMobile}>
         <DialogTitle>{isEdit ? 'Edit Plan' : 'Create Plan'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
           {formError ? (

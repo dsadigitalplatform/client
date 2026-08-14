@@ -24,7 +24,8 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 
 import { formatPlanMoney } from '@features/subscription-plans/currencies'
-import type { ManualPaymentMethod } from '@features/subscriptions/subscriptions.types'
+import type { ManualPaymentMethod, SubscriptionPricing } from '@features/subscriptions/subscriptions.types'
+import { PayAmountDisplay } from '@features/subscriptions/components/PayAmountDisplay'
 
 type TenantRow = {
   _id: string
@@ -51,6 +52,7 @@ type DetailState = {
   availablePlans: any[]
   access: any
   usage: any
+  pricing: SubscriptionPricing | null
 }
 
 const PAYMENT_METHODS: { value: ManualPaymentMethod; label: string }[] = [
@@ -291,6 +293,30 @@ export function SuperAdminTenantsManager() {
                   ) : null}
                 </Box>
 
+                {detail.pricing?.discount ? (
+                  <Box
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'success.light',
+                      bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                    }}
+                  >
+                    <PayAmountDisplay pricing={detail.pricing} align='left' />
+                  </Box>
+                ) : detail.plan ? (
+                  <Typography variant='body2' color='text.secondary'>
+                    {formatPlanMoney(
+                      detail.subscription?.billingInterval === 'yearly' && detail.plan.priceYearly
+                        ? detail.plan.priceYearly
+                        : detail.plan.priceMonthly,
+                      detail.plan.currency
+                    )}{' '}
+                    / {detail.subscription?.billingInterval === 'yearly' ? 'year' : 'month'}
+                  </Typography>
+                ) : null}
+
                 <Typography variant='body2' color='text.secondary'>
                   Period {fmtDate(detail.subscription?.currentPeriodStart)} →{' '}
                   {fmtDate(detail.subscription?.currentPeriodEnd)}
@@ -447,6 +473,21 @@ export function SuperAdminTenantsManager() {
             CC&apos;d when set), ends any remaining trial, and activates the paid subscription period from the later of
             now or the current period end.
           </Typography>
+          {detail?.pricing ? (
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: detail.pricing.discount ? 'success.light' : 'divider',
+                bgcolor: detail.pricing.discount
+                  ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
+                  : 'action.hover'
+              }}
+            >
+              <PayAmountDisplay pricing={detail.pricing} align='left' />
+            </Box>
+          ) : null}
           <FormControl fullWidth>
             <InputLabel>Method</InputLabel>
             <Select
