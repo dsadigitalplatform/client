@@ -21,7 +21,12 @@ import Typography from '@mui/material/Typography'
 import { alpha, useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 
-import type { ReportDetailGroupDimension, ReportDetailRow, ReportQueryResponse } from '../reports.types'
+import {
+  showsLoanTypeDetailColumn,
+  type ReportDetailGroupDimension,
+  type ReportDetailRow,
+  type ReportQueryResponse
+} from '../reports.types'
 import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { buildDetailGroups } from '../utils/buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from '../utils/exportReport'
@@ -111,11 +116,13 @@ function DetailRowCells({
   row,
   isHistorical,
   showDisbursement,
+  showLoanType,
   indent = 0
 }: {
   row: ReportDetailRow
   isHistorical: boolean
   showDisbursement: boolean
+  showLoanType: boolean
   indent?: number
 }) {
   return (
@@ -123,7 +130,7 @@ function DetailRowCells({
       <TableCell sx={{ pl: 2 + indent * 3 }}>
         <LeadIdentity customerName={row.customerName ?? '—'} code={row.leadCode} />
       </TableCell>
-      <TableCell>{row.loanTypeName ?? '—'}</TableCell>
+      {showLoanType ? <TableCell>{row.loanTypeName ?? '—'}</TableCell> : null}
       <TableCell>{row.bankName ?? '—'}</TableCell>
       <TableCell>
         {isHistorical ? (
@@ -214,23 +221,22 @@ function GroupRowBannerCell({
   collapsed,
   tone,
   indent = 0,
-  isHistorical
+  colSpan
 }: {
   groupLabel: string
   count: number
   collapsed: boolean
   tone: 'primary' | 'secondary'
   indent?: number
-  isHistorical: boolean
+  colSpan: number
 }) {
   const theme = useTheme()
   const accent = tone === 'primary' ? theme.palette.primary : theme.palette.secondary
   const caseLabel = count === 1 ? 'case' : 'cases'
-  const bannerColSpan = isHistorical ? 6 : 5
 
   return (
     <TableCell
-      colSpan={bannerColSpan}
+      colSpan={colSpan}
       sx={{
         verticalAlign: 'middle',
         pl: 2 + indent * 3,
@@ -377,11 +383,13 @@ function MobileDisbursementBlock({ row }: { row: ReportDetailRow }) {
 function MobileDetailCard({
   row,
   isHistorical,
-  showDisbursement
+  showDisbursement,
+  showLoanType
 }: {
   row: ReportDetailRow
   isHistorical: boolean
   showDisbursement: boolean
+  showLoanType: boolean
 }) {
   const stageValue = isHistorical ? (
     <Chip size='small' color='warning' variant='outlined' label={row.auditStageName ?? row.stageName ?? '—'} sx={{ height: 22 }} />
@@ -415,7 +423,7 @@ function MobileDetailCard({
             alignItems: 'center'
           }}
         >
-          <MobileDetailField label='Loan type' value={row.loanTypeName ?? '—'} />
+          {showLoanType ? <MobileDetailField label='Loan type' value={row.loanTypeName ?? '—'} /> : null}
           <MobileDetailField label='Bank' value={row.bankName ?? '—'} />
           <MobileDetailField label={isHistorical ? 'Stage (audit)' : 'Stage'} value={stageValue} />
           <MobileDetailField label='Agent' value={row.agentName ?? '—'} />
@@ -444,6 +452,8 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
   const isHistorical = data.dataMode === 'historical'
   const hasSecondary = Boolean(groupBySecondary && groupBySecondary !== data.groupBy)
   const showDisbursement = useMemo(() => hasReportDisbursementData(data.details), [data.details])
+  const showLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
+  const groupBannerColSpan = (isHistorical ? 5 : 4) + (showLoanType ? 1 : 0)
 
   const groups = useMemo(
     () =>
@@ -583,6 +593,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                     row={row}
                                     isHistorical={isHistorical}
                                     showDisbursement={showDisbursement}
+                                    showLoanType={showLoanType}
                                   />
                                 ))}
                               </Box>
@@ -596,6 +607,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                           row={row}
                           isHistorical={isHistorical}
                           showDisbursement={showDisbursement}
+                          showLoanType={showLoanType}
                         />
                       ))}
                 </Box>
@@ -652,12 +664,12 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
         </Box>
 
         <TableContainer sx={{ overflowX: 'auto' }}>
-          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? 980 : 780 }}>
+          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? (showLoanType ? 980 : 900) : showLoanType ? 780 : 700 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 44, px: 0.5, textAlign: 'center' }} aria-label='Row level' />
                 <TableCell sx={{ minWidth: 200 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
-                <TableCell>Loan type</TableCell>
+                {showLoanType ? <TableCell>Loan type</TableCell> : null}
                 <TableCell>Bank</TableCell>
                 <TableCell>{isHistorical ? 'Stage (audit)' : 'Stage'}</TableCell>
                 {isHistorical ? <TableCell>Staged date</TableCell> : null}
@@ -700,7 +712,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                         collapsed={primaryCollapsed}
                         tone='primary'
                         count={group.count}
-                        isHistorical={isHistorical}
+                        colSpan={groupBannerColSpan}
                       />
                       <GroupAmountCell amount={group.amount} label='Group total' />
                       {showDisbursement ? (
@@ -737,7 +749,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                   tone='secondary'
                                   indent={1}
                                   count={subgroup.count}
-                                  isHistorical={isHistorical}
+                                  colSpan={groupBannerColSpan}
                                 />
                                 <GroupAmountCell amount={subgroup.amount} label='Subtotal' />
                                 {showDisbursement ? (
@@ -760,6 +772,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                         row={row}
                                         isHistorical={isHistorical}
                                         showDisbursement={showDisbursement}
+                                        showLoanType={showLoanType}
                                         indent={2}
                                       />
                                     </TableRow>
@@ -780,6 +793,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                               row={row}
                               isHistorical={isHistorical}
                               showDisbursement={showDisbursement}
+                              showLoanType={showLoanType}
                               indent={1}
                             />
                           </TableRow>

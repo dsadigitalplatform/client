@@ -71,7 +71,11 @@ export default function ReportsView() {
             Build dynamic reports across leads, stages, agents, customers, banks, and loan types.
           </Typography>
         </Box>
-        {data && !locked ? <ReportsExportActions data={data} groupBySecondary={filters.groupBySecondary} disabled={locked} /> : null}
+        {data && !locked ? (
+          <Box sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0 }}>
+            <ReportsExportActions data={data} groupBySecondary={filters.groupBySecondary} disabled={locked} />
+          </Box>
+        ) : null}
       </Box>
 
       {accessLoading ? (

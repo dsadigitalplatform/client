@@ -7,6 +7,7 @@ import ButtonGroup from '@mui/material/ButtonGroup'
 import CircularProgress from '@mui/material/CircularProgress'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
+import Typography from '@mui/material/Typography'
 
 import type { ReportDetailGroupDimension, ReportExportMeta, ReportQueryResponse } from '../reports.types'
 import {
@@ -14,7 +15,7 @@ import {
   exportReportExcelFlat,
   exportReportExcelFlatOnly,
   exportReportHtml,
-  groupByLabel,
+  reportCategoryTitle,
   printReportPdf
 } from '../utils/exportReport'
 import { resolveReportCharts } from '../utils/resolveReportCharts'
@@ -53,11 +54,13 @@ export default function ReportsExportActions({ data, groupBySecondary, disabled 
 
   if (!data) return null
 
+  const groupingLabel = reportCategoryTitle(data.groupBy, groupBySecondary)
+
   const buildMeta = (): ReportExportMeta => ({
     organisationName: meta?.organisationName ?? 'Organisation',
     preparedBy: meta?.preparedBy ?? 'User',
     preparedAt: meta?.preparedAt ?? new Date().toLocaleString(),
-    reportTitle: `${groupByLabel(data.groupBy)}${groupBySecondary ? ` → ${groupByLabel(groupBySecondary)}` : ''} report (${data.dataMode === 'historical' ? 'audit history' : 'snapshot'})`,
+    reportTitle: `${groupingLabel} (${data.dataMode === 'historical' ? 'audit history' : 'snapshot'})`,
     dataMode: data.dataMode,
     disclaimer: data.disclaimer,
     groupBySecondary
@@ -93,16 +96,27 @@ export default function ReportsExportActions({ data, groupBySecondary, disabled 
 
   return (
     <>
-      <ButtonGroup variant='outlined' size='small'>
+      <ButtonGroup variant='outlined' size='small' sx={{ width: { xs: '100%', md: 'auto' } }}>
         <Button
           startIcon={exporting ? <CircularProgress size={14} color='inherit' /> : <i className='ri-download-2-line' />}
           onClick={e => setAnchorEl(e.currentTarget)}
           disabled={exporting || disabled}
+          sx={{ width: { xs: '100%', md: 'auto' } }}
         >
           {exporting ? 'Preparing…' : 'Export'}
         </Button>
       </ButtonGroup>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={() => setAnchorEl(null)}
+        slotProps={{ paper: { sx: { minWidth: { xs: 260, sm: 280 }, maxWidth: 'calc(100vw - 32px)' } } }}
+      >
+        <MenuItem disabled sx={{ opacity: '1 !important', whiteSpace: 'normal' }}>
+          <Typography variant='caption' color='text.secondary' sx={{ lineHeight: 1.4 }}>
+            {groupingLabel}
+          </Typography>
+        </MenuItem>
         <MenuItem onClick={() => void runExport('excel-grouped')} disabled={exporting}>
           <i className='ri-file-excel-2-line' style={{ marginRight: 8 }} />
           Excel — grouped (with subtotals)
