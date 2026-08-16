@@ -103,10 +103,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
     appliedSnapshot = attached.snapshot
     discountName = attached.discountName
-
-    if (appliedSnapshot) {
-      resolved.subscription.discountSnapshot = appliedSnapshot
-    }
+    resolved.subscription.discountSnapshot = appliedSnapshot
   }
 
   const billingInterval = (resolved.subscription?.billingInterval || 'monthly') as 'monthly' | 'yearly'

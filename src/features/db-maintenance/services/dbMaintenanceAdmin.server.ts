@@ -6,6 +6,7 @@ import { getDb } from '@/lib/mongodb'
 import {
   buildTenantScopeFilter,
   isDbMaintenanceCollectionDeletable,
+  isDbMaintenanceGlobalCollection,
   isDbMaintenanceGroupVisibleInUi,
   mergeWithTenantScopeFilter,
   resolveTenantForMaintenance
@@ -99,7 +100,7 @@ const DB_MAINTENANCE_COLLECTION_META: Record<
   auditLogs: { label: 'Audit logs', group: 'Platform' },
   subscriptionPlans: { label: 'Subscription plans', group: 'Platform' },
   tenantSubscriptions: { label: 'Tenant subscriptions', group: 'Platform' },
-  discountCodes: { label: 'Discount codes', group: 'Platform' },
+  discountCodes: { label: 'Discount codes', group: 'Subscriptions' },
   referralProgramSettings: { label: 'Referral program settings', group: 'Refer & Earn' },
   customers: { label: 'Customers', group: 'DSA Master' },
   associates: { label: 'Associates', group: 'DSA Master' },
@@ -166,7 +167,8 @@ export async function listDbMaintenanceCollections(tenantIdRaw: string): Promise
       group,
       exists,
       documentCount,
-      deletable
+      deletable,
+      global: isDbMaintenanceGlobalCollection(name)
     })
   }
 
@@ -188,6 +190,14 @@ export async function clearDbMaintenanceCollection(name: string, tenantIdRaw: st
   const before = await coll.countDocuments(scopeFilter)
   const del = await coll.deleteMany(scopeFilter)
   const after = await coll.countDocuments(scopeFilter)
+
+  if (name === 'discountCodes') {
+    const { afterAllDiscountCodesCleared } = await import(
+      '@features/subscriptions/services/discountCodes.server'
+    )
+
+    await afterAllDiscountCodesCleared(db)
+  }
 
   return { name, before, deleted: del.deletedCount || 0, after }
 }
@@ -411,6 +421,8 @@ export async function deleteDbMaintenanceDocuments(params: {
   const baseQuery = queryParts.length === 1 ? queryParts[0] : { $and: queryParts }
   const deleteQuery = await mergeWithTenantScopeFilter(collection, tenantId, baseQuery)
   let loanCaseIdsToDelete: string[] = []
+  let removedDiscountIds: ObjectId[] = []
+  let removedDiscountCodes: string[] = []
 
   if (collection === 'loanCases') {
     const rows = await db.collection('loanCases').find(deleteQuery, { projection: { _id: 1 } }).toArray()
@@ -418,10 +430,30 @@ export async function deleteDbMaintenanceDocuments(params: {
     loanCaseIdsToDelete = rows.map((r: any) => toIdString(r?._id)).filter(Boolean)
   }
 
+  if (collection === 'discountCodes') {
+    const rows = await db
+      .collection('discountCodes')
+      .find(deleteQuery, { projection: { _id: 1, code: 1 } })
+      .toArray()
+
+    removedDiscountIds = rows.map((r: any) => r._id).filter(Boolean)
+    removedDiscountCodes = rows.map((r: any) => String(r?.code || '').trim().toUpperCase()).filter(Boolean)
+  }
+
   const res = await db.collection(collection).deleteMany(deleteQuery)
 
   if (collection === 'loanCases' && loanCaseIdsToDelete.length > 0) {
     await deleteAuditLogsForLoanCaseIds(db, loanCaseIdsToDelete, tenantId)
+  }
+
+  if (collection === 'discountCodes' && removedDiscountIds.length > 0) {
+    const { afterDiscountCodesRemoved } = await import('@features/subscriptions/services/discountCodes.server')
+
+    await afterDiscountCodesRemoved({
+      db,
+      discountCodeIds: removedDiscountIds,
+      codes: removedDiscountCodes
+    })
   }
 
   return { deleted: res.deletedCount || 0 }

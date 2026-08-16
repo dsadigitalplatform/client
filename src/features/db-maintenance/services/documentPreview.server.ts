@@ -345,6 +345,22 @@ function getProjectionForCollection(collection: string): Record<string, 1> {
         ctaLabel: 1,
         updatedByUserId: 1
       }
+    case 'discountCodes':
+      return {
+        ...common,
+        code: 1,
+        name: 1,
+        description: 1,
+        type: 1,
+        value: 1,
+        currency: 1,
+        scope: 1,
+        isActive: 1,
+        validFrom: 1,
+        validTo: 1,
+        redemptionCount: 1,
+        maxRedemptions: 1
+      }
     default:
       return {
         ...common,
@@ -544,6 +560,26 @@ function buildPreview(collection: string, doc: any, maps: NameMaps): DbMaintenan
       title = compactJoin([doc.headline, doc.commissionPercent != null ? `${doc.commissionPercent}%` : null])
       if (!title) title = 'Referral program settings'
       if (doc.ctaLabel) details.push(`CTA: ${String(doc.ctaLabel)}`)
+      break
+    }
+    case 'discountCodes': {
+      const off =
+        doc.type === 'percent'
+          ? `${doc.value}% off`
+          : doc.type === 'fixed'
+            ? `${doc.value} ${doc.currency || ''} off`.trim()
+            : null
+
+      title = compactJoin([doc.code, doc.name, doc.isActive === false ? 'inactive' : null])
+      if (!title) title = `Discount ${shortId(id)}`
+      if (off) details.push(off)
+      if (doc.scope) details.push(`Scope: ${String(doc.scope)}`)
+      if (doc.validFrom || doc.validTo) {
+        details.push(`Valid ${formatDate(doc.validFrom) || '—'} → ${formatDate(doc.validTo) || '—'}`)
+      }
+      details.push(
+        `Redeemed ${Number(doc.redemptionCount || 0)}${doc.maxRedemptions != null ? ` / ${doc.maxRedemptions}` : ''}`
+      )
       break
     }
     default: {
