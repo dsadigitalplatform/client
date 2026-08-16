@@ -3,6 +3,8 @@ import 'server-only'
 import type { Db } from 'mongodb'
 import { ObjectId } from 'mongodb'
 
+import { ensureEligibleDiscountOnSubscription } from '@features/subscriptions/services/discountCodes.server'
+
 import { createSubscriptionInvoice, planAmountPaise } from './invoices.server'
 import { finalizeSuccessfulPayment } from './payments.server'
 
@@ -298,6 +300,12 @@ async function processSubscriptionCharged(
   const periodEnd = new Date(periodStart.getTime() + days * 24 * 60 * 60 * 1000)
 
   const tenant = await db.collection('tenants').findOne({ _id: subDoc.tenantId })
+  const discountForInvoice = await ensureEligibleDiscountOnSubscription({
+    db,
+    tenantId: subDoc.tenantId,
+    subscription: subDoc as Record<string, any>,
+    plan: plan as any
+  })
   const invoice = await createSubscriptionInvoice({
     db,
     tenantId: subDoc.tenantId,
@@ -307,7 +315,7 @@ async function processSubscriptionCharged(
     periodStart,
     periodEnd,
     provider: 'razorpay',
-    discountSnapshot: (subDoc as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || null,
     billingContactEmail: (tenant as any)?.billingEmail || null,
     status: 'open'
   })
@@ -646,6 +654,12 @@ async function processStripeInvoicePaid(
   const days = interval === 'yearly' ? 365 : 30
   const periodEnd = new Date(periodStart.getTime() + days * 24 * 60 * 60 * 1000)
   const tenant = await db.collection('tenants').findOne({ _id: subDoc.tenantId })
+  const discountForInvoice = await ensureEligibleDiscountOnSubscription({
+    db,
+    tenantId: subDoc.tenantId,
+    subscription: subDoc as Record<string, any>,
+    plan: plan as any
+  })
 
   const invoice = await createSubscriptionInvoice({
     db,
@@ -656,7 +670,7 @@ async function processStripeInvoicePaid(
     periodStart,
     periodEnd,
     provider: 'stripe',
-    discountSnapshot: (subDoc as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || null,
     billingContactEmail: (tenant as any)?.billingEmail || null,
     status: 'open'
   })

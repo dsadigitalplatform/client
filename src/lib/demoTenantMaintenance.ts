@@ -24,6 +24,15 @@ export const DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS = [
 
 const blockedDeleteSet = new Set<string>(DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS)
 
+/** Platform-wide masters: counts, view, and clear apply to the whole collection, not one tenant. */
+export const DB_MAINTENANCE_GLOBAL_COLLECTIONS = ['discountCodes'] as const
+
+const globalCollectionSet = new Set<string>(DB_MAINTENANCE_GLOBAL_COLLECTIONS)
+
+export function isDbMaintenanceGlobalCollection(collection: string): boolean {
+  return globalCollectionSet.has(collection)
+}
+
 /** Collections scoped by `tenantId`. */
 export const DB_MAINTENANCE_TENANT_ID_COLLECTIONS = [
   'customers',
@@ -134,6 +143,10 @@ export async function buildTenantScopeFilter(
 ): Promise<Record<string, unknown>> {
   if (!isDbMaintenanceCollectionDeletable(collection)) {
     throw Object.assign(new Error('collection_not_deletable'), { status: 403 })
+  }
+
+  if (isDbMaintenanceGlobalCollection(collection)) {
+    return {}
   }
 
   if (collection === 'referralInvites') {

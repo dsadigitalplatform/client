@@ -8,7 +8,10 @@ import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
 import { isSupportedCurrency, normalizeCurrency } from '@features/subscription-plans/currencies'
-import { serializeDiscountCode } from '@features/subscriptions/services/discountCodes.server'
+import {
+  applyBestDiscountsToEligibleSubscriptions,
+  serializeDiscountCode
+} from '@features/subscriptions/services/discountCodes.server'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -111,6 +114,15 @@ export async function POST(req: Request) {
 
     const res = await db.collection('discountCodes').insertOne(doc)
     const saved = await db.collection('discountCodes').findOne({ _id: res.insertedId })
+
+    if (doc.isActive !== false) {
+      await applyBestDiscountsToEligibleSubscriptions({
+        db,
+        scope,
+        planIds,
+        tenantIds
+      })
+    }
 
     return NextResponse.json({ discount: serializeDiscountCode(saved as any) }, { status: 201 })
   } catch (e: any) {

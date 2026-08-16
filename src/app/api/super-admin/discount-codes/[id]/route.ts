@@ -7,7 +7,23 @@ import { ObjectId } from 'mongodb'
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
-import { serializeDiscountCode } from '@features/subscriptions/services/discountCodes.server'
+import {
+  reapplyBestDiscountsForCode,
+  serializeDiscountCode
+} from '@features/subscriptions/services/discountCodes.server'
+
+function updatedDocument(res: unknown): Record<string, any> | null {
+  if (!res || typeof res !== 'object') return null
+
+  const rec = res as Record<string, any>
+
+  // MongoDB Node driver 6+ returns the document directly. Discount codes also have a numeric
+  // `value` field, so `res.value` is the percent/amount — never treat that as the document.
+  if (rec._id) return rec
+  if (rec.value && typeof rec.value === 'object' && rec.value._id) return rec.value as Record<string, any>
+
+  return null
+}
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -44,17 +60,22 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const db = await getDb()
+  const discountId = new ObjectId(id)
   const res = await db.collection('discountCodes').findOneAndUpdate(
-    { _id: new ObjectId(id) },
+    { _id: discountId },
     { $set: update },
     { returnDocument: 'after' }
   )
 
-  const doc = (res as any)?.value ?? res
+  const doc = updatedDocument(res)
 
-  if (!doc || !(doc as any)._id) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!doc) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  return NextResponse.json({ discount: serializeDiscountCode(doc as any) })
+  if (doc.isActive === false) {
+    await reapplyBestDiscountsForCode({ db, discountCodeId: discountId, code: String(doc.code || '') })
+  }
+
+  return NextResponse.json({ discount: serializeDiscountCode(doc) })
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -69,9 +90,17 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   }
 
   const db = await getDb()
-  const res = await db.collection('discountCodes').deleteOne({ _id: new ObjectId(id) })
+  const discountId = new ObjectId(id)
+  const existing = await db.collection('discountCodes').findOne({ _id: discountId }, { projection: { code: 1 } })
+  const res = await db.collection('discountCodes').deleteOne({ _id: discountId })
 
   if (!res.deletedCount) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  await reapplyBestDiscountsForCode({
+    db,
+    discountCodeId: discountId,
+    code: existing?.code ? String(existing.code) : null
+  })
 
   return NextResponse.json({ success: true })
 }

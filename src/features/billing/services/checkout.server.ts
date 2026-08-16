@@ -195,7 +195,7 @@ export async function startCheckoutSession(params: {
     periodStart: Number.isFinite(periodStart.getTime()) ? periodStart : now,
     periodEnd: Number.isFinite(periodEnd.getTime()) ? periodEnd : now,
     provider,
-    discountSnapshot: discountForInvoice.snapshot || (sub as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || null,
     billingContactEmail: (tenant as any).billingEmail || contact.email,
     status: 'open'
   })
@@ -402,7 +402,7 @@ export async function startAutopaySubscription(params: {
     subscription: sub,
     plan: plan as any
   })
-  const discountSnapshot = discountForInvoice.snapshot || (sub as any).discountSnapshot || null
+  const discountSnapshot = discountForInvoice.snapshot || null
 
   if (provider === 'stripe') {
     // Charge plan + GST for recurring: create a preview invoice total for first period pricing

@@ -14,6 +14,13 @@ export function isDbMaintenanceCollectionDeletable(collection: string): boolean 
   return !(DB_MAINTENANCE_DELETE_BLOCKED_COLLECTIONS as readonly string[]).includes(collection)
 }
 
+/** Platform-wide masters — clear/delete removes every document, not one tenant. */
+export const DB_MAINTENANCE_GLOBAL_COLLECTIONS = ['discountCodes'] as const
+
+export function isDbMaintenanceGlobalCollection(collection: string): boolean {
+  return (DB_MAINTENANCE_GLOBAL_COLLECTIONS as readonly string[]).includes(collection)
+}
+
 export type DbMaintenanceCollectionInfo = {
   name: string
   label: string
@@ -21,6 +28,8 @@ export type DbMaintenanceCollectionInfo = {
   exists: boolean
   documentCount: number
   deletable: boolean
+  /** True when clear/view/delete operate on the whole collection, not the selected tenant. */
+  global?: boolean
 }
 
 export const DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS = [

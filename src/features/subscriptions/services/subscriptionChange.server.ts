@@ -746,7 +746,7 @@ export async function recordManualPayment(params: {
     periodStart: bounds.start,
     periodEnd: bounds.end,
     provider: 'manual',
-    discountSnapshot: discountForInvoice.snapshot || (sub as any).discountSnapshot || null,
+    discountSnapshot: discountForInvoice.snapshot || null,
     // Buyer snapshot prefers GST billing email; contact email is fallback for the party record.
     billingContactEmail: gstBillingEmail || billingContactEmail,
     status: 'open'

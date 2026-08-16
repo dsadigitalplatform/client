@@ -31,6 +31,7 @@ import {
   DB_MAINTENANCE_CREATOR_FILTER_COLLECTIONS,
   DB_MAINTENANCE_UI_HIDDEN_GROUPS,
   isDbMaintenanceCollectionDeletable,
+  isDbMaintenanceGlobalCollection,
   type DbMaintenanceCollectionInfo,
   type DbMaintenanceCreatorOption,
   type DbMaintenanceDocumentPreview,
@@ -38,7 +39,7 @@ import {
   type DbMaintenanceTenantPurgeResult
 } from '../db-maintenance.types'
 
-const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Refer & Earn', 'Other'] as const
+const COLLECTION_GROUP_ORDER = ['DSA Master', 'Leads & operations', 'Subscriptions', 'Refer & Earn', 'Other'] as const
 
 const hiddenUiGroups = new Set<string>(DB_MAINTENANCE_UI_HIDDEN_GROUPS)
 
@@ -120,6 +121,10 @@ export const DbMaintenanceView = () => {
   const selectedInfo = useMemo(() => collections.find(c => c.name === selected) || null, [collections, selected])
   const selectedCollectionDeletable = useMemo(
     () => (selectedInfo ? selectedInfo.deletable : selected ? isDbMaintenanceCollectionDeletable(selected) : false),
+    [selectedInfo, selected]
+  )
+  const selectedCollectionGlobal = useMemo(
+    () => (selectedInfo ? Boolean(selectedInfo.global) : selected ? isDbMaintenanceGlobalCollection(selected) : false),
     [selectedInfo, selected]
   )
   const selectedIds = useMemo(() => Object.keys(recordSelections).filter(k => recordSelections[k]), [recordSelections])
@@ -583,7 +588,9 @@ export const DbMaintenanceView = () => {
               <Typography variant='h6'>Collections</Typography>
               <Typography variant='body2' color='text.secondary'>
                 {selectedTenant
-                  ? `Showing document counts for ${selectedTenant.name}. Clear / view / delete only affects this tenant.`
+                  ? selectedCollectionGlobal
+                    ? `${selectedCollectionLabel} is a platform master. View / clear / delete affects every organisation, not only ${selectedTenant.name}.`
+                    : `Showing document counts for ${selectedTenant.name}. Clear / view / delete only affects this tenant.`
                   : 'Select a tenant to load its collections.'}
               </Typography>
             </Box>
@@ -611,7 +618,7 @@ export const DbMaintenanceView = () => {
                 disabled={!selectedTenantId || !selected || !selectedCollectionDeletable || loading || clearing}
                 fullWidth={isMobile}
               >
-                Clear Tenant Data
+                {selectedCollectionGlobal ? 'Clear Master' : 'Clear Tenant Data'}
               </Button>
             </Box>
           </Box>
@@ -731,6 +738,7 @@ export const DbMaintenanceView = () => {
             <Typography variant='body2' color='text.secondary'>
               Selected: {selectedCollectionLabel} ({selectedInfo.name})
               {selectedInfo.exists ? ` — ${selectedInfo.documentCount} documents` : ' — collection not created yet'}
+              {selectedInfo.global ? ' — platform master (all organisations)' : ''}
               {!selectedCollectionDeletable ? ' — clear/delete disabled (platform collection)' : ''}
             </Typography>
           )}
@@ -739,12 +747,24 @@ export const DbMaintenanceView = () => {
 
 
       <Dialog open={confirmOpen} onClose={closeConfirm} fullWidth maxWidth='sm' fullScreen={isMobile}>
-        <DialogTitle>Clear Collection</DialogTitle>
+        <DialogTitle>{selectedCollectionGlobal ? 'Clear Discount Codes Master' : 'Clear Collection'}</DialogTitle>
         <DialogContent className='flex flex-col gap-3'>
-          <Typography variant='body2' color='text.secondary'>
-            This will permanently delete all documents for <strong>{selectedTenant?.name || 'the selected tenant'}</strong> in:{' '}
-            <strong>{selected || '-'}</strong>
-          </Typography>
+          {selectedCollectionGlobal ? (
+            <>
+              <Typography variant='body2' color='text.secondary'>
+                This will permanently delete <strong>every</strong> document in the discount codes master:{' '}
+                <strong>{selected || '-'}</strong>
+              </Typography>
+              <Typography variant='body2' color='error'>
+                Applied discounts will be removed from all organisations. This is not limited to the selected tenant.
+              </Typography>
+            </>
+          ) : (
+            <Typography variant='body2' color='text.secondary'>
+              This will permanently delete all documents for <strong>{selectedTenant?.name || 'the selected tenant'}</strong> in:{' '}
+              <strong>{selected || '-'}</strong>
+            </Typography>
+          )}
           <Typography variant='body2' color='text.secondary'>
             Type the collection name to confirm.
           </Typography>
@@ -959,6 +979,7 @@ export const DbMaintenanceView = () => {
         <DialogContent className='flex flex-col gap-3'>
           <Typography variant='body2' color='text.secondary'>
             This will permanently delete {selectedIds.length} selected record(s) from: <strong>{selectedCollectionLabel}</strong>
+            {selectedCollectionGlobal ? ' (platform master — all organisations)' : ''}
           </Typography>
           <Typography variant='body2' color='text.secondary'>Type DELETE to confirm.</Typography>
           <TextField

@@ -145,7 +145,7 @@ export async function POST(request: Request) {
     originalAmount: planPriceForInterval(plan as any, interval),
     currency,
     interval,
-    snapshot: discountForPay.snapshot || (sub as any).discountSnapshot || null,
+    snapshot: discountForPay.snapshot || null,
     discountName: discountForPay.discountName
   })
   const priceLabel = pricing.discount
