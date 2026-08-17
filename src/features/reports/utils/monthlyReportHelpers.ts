@@ -103,6 +103,18 @@ export function findDisbursedStageId(stages: ReportFilterOptions['stages']) {
   return byName?.id ?? null
 }
 
+export function findRejectedStageIds(stages: ReportFilterOptions['stages']) {
+  const flagged = stages.filter(s => s.isRejected).map(s => s.id)
+
+  if (flagged.length > 0) return flagged
+
+  return stages.filter(s => /reject/i.test(s.name)).map(s => s.id)
+}
+
+export function findRejectedStageId(stages: ReportFilterOptions['stages']) {
+  return findRejectedStageIds(stages)[0] ?? null
+}
+
 function sameSortedIds(a: string[], b: string[]) {
   if (a.length !== b.length) return false
 

@@ -106,7 +106,15 @@ export type ReportQueryResponse = {
 }
 
 export type ReportFilterOptions = {
-  stages: Array<{ id: string; name: string; order: number; isLoggedIn?: boolean; isDisbursed?: boolean }>
+  stages: Array<{
+    id: string
+    name: string
+    order: number
+    isLoggedIn?: boolean
+    isDisbursed?: boolean
+    isClosed?: boolean
+    isRejected?: boolean
+  }>
   agents: Array<{ id: string; name: string | null; email: string | null }>
   customers: Array<{ id: string; name: string }>
   loanTypes: Array<{ id: string; name: string }>

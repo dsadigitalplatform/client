@@ -157,7 +157,9 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                 description: data.description,
                 order: data.order,
                 isLoggedIn: Boolean(data.isLoggedIn),
-                isDisbursed: Boolean(data.isDisbursed)
+                isDisbursed: Boolean(data.isDisbursed),
+                isClosed: Boolean(data.isClosed),
+                isRejected: Boolean(data.isRejected)
               }}
               submitLabel='Update Stage'
               onSubmitOverride={async payload => {
@@ -185,7 +187,7 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                   {data.description || '-'}
                 </Typography>
               </Box>
-              {(data.isLoggedIn || data.isDisbursed) && (
+              {(data.isLoggedIn || data.isDisbursed || data.isClosed || data.isRejected) && (
                 <Box>
                   <Typography variant='subtitle2' color='text.secondary'>
                     Stage Flags
@@ -193,6 +195,8 @@ const LoanStatusPipelineStageDetails = ({ id }: Props) => {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.75 }}>
                     {data.isLoggedIn ? <Chip label='Logged In' size='small' color='info' variant='outlined' /> : null}
                     {data.isDisbursed ? <Chip label='Disbursed' size='small' color='success' variant='outlined' /> : null}
+                    {data.isClosed ? <Chip label='Closed' size='small' variant='outlined' /> : null}
+                    {data.isRejected ? <Chip label='Rejected' size='small' color='error' variant='outlined' /> : null}
                   </Box>
                 </Box>
               )}

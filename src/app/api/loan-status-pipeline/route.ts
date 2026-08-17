@@ -80,6 +80,8 @@ export async function GET(request: Request) {
         order: 1,
         isLoggedIn: 1,
         isDisbursed: 1,
+        isClosed: 1,
+        isRejected: 1,
         createdBy: 1,
         createdAt: 1
       }
@@ -95,6 +97,8 @@ export async function GET(request: Request) {
     order: Number((r as any).order || 0),
     isLoggedIn: Boolean((r as any).isLoggedIn),
     isDisbursed: Boolean((r as any).isDisbursed),
+    isClosed: Boolean((r as any).isClosed),
+    isRejected: Boolean((r as any).isRejected),
     createdAt: (r as any).createdAt ? new Date((r as any).createdAt).toISOString() : null,
     canManage:
       isSuperAdmin ||
@@ -153,12 +157,14 @@ export async function POST(request: Request) {
   const order = typeof body?.order === 'number' ? body.order : Number(body?.order)
   const isLoggedIn = parseStageFlag(body?.isLoggedIn)
   const isDisbursed = parseStageFlag(body?.isDisbursed)
+  const isClosed = parseStageFlag(body?.isClosed)
+  const isRejected = parseStageFlag(body?.isRejected)
 
   const errors: Record<string, string> = {}
 
   if (!isNonEmptyString(name)) errors.name = 'Stage name is required'
   if (!isPositiveInt(order)) errors.order = 'Stage must be a whole number ≥ 1'
-  Object.assign(errors, validateStageFlags(isLoggedIn, isDisbursed))
+  Object.assign(errors, validateStageFlags({ isLoggedIn, isDisbursed, isClosed, isRejected }))
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
   const safeName = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
@@ -181,6 +187,8 @@ export async function POST(request: Request) {
     order,
     isLoggedIn,
     isDisbursed,
+    isClosed,
+    isRejected,
     createdBy: userId,
     createdAt: now,
     updatedAt: now
@@ -189,7 +197,7 @@ export async function POST(request: Request) {
   try {
     const res = await db.collection('loanStatusPipelineStages').insertOne(doc)
 
-    await enforceUniqueStageFlags(db, tenantIdObj, res.insertedId, { isLoggedIn, isDisbursed })
+    await enforceUniqueStageFlags(db, tenantIdObj, res.insertedId, { isLoggedIn, isDisbursed, isClosed, isRejected })
 
     return NextResponse.json({ id: res.insertedId.toHexString() }, { status: 201 })
   } catch (err: any) {

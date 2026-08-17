@@ -92,6 +92,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     order: Number((row as any).order || 0),
     isLoggedIn: Boolean((row as any).isLoggedIn),
     isDisbursed: Boolean((row as any).isDisbursed),
+    isClosed: Boolean((row as any).isClosed),
+    isRejected: Boolean((row as any).isRejected),
     createdAt: (row as any).createdAt ? new Date((row as any).createdAt).toISOString() : null,
     canManage
   }
@@ -122,6 +124,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (body.order !== undefined) patch.order = typeof body.order === 'number' ? body.order : Number(body.order)
   if (body.isLoggedIn !== undefined) patch.isLoggedIn = parseStageFlag(body.isLoggedIn)
   if (body.isDisbursed !== undefined) patch.isDisbursed = parseStageFlag(body.isDisbursed)
+  if (body.isClosed !== undefined) patch.isClosed = parseStageFlag(body.isClosed)
+  if (body.isRejected !== undefined) patch.isRejected = parseStageFlag(body.isRejected)
   patch.updatedAt = new Date()
 
   const errors: Record<string, string> = {}
@@ -132,15 +136,19 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const stageIdObj = new ObjectId(id)
   const current = await db.collection('loanStatusPipelineStages').findOne(
     { _id: stageIdObj, tenantId: tenantIdObj },
-    { projection: { isLoggedIn: 1, isDisbursed: 1 } }
+    { projection: { isLoggedIn: 1, isDisbursed: 1, isClosed: 1, isRejected: 1 } }
   )
 
   if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  const nextIsLoggedIn = patch.isLoggedIn !== undefined ? patch.isLoggedIn : Boolean((current as any).isLoggedIn)
-  const nextIsDisbursed = patch.isDisbursed !== undefined ? patch.isDisbursed : Boolean((current as any).isDisbursed)
+  const nextFlags = {
+    isLoggedIn: patch.isLoggedIn !== undefined ? patch.isLoggedIn : Boolean((current as any).isLoggedIn),
+    isDisbursed: patch.isDisbursed !== undefined ? patch.isDisbursed : Boolean((current as any).isDisbursed),
+    isClosed: patch.isClosed !== undefined ? patch.isClosed : Boolean((current as any).isClosed),
+    isRejected: patch.isRejected !== undefined ? patch.isRejected : Boolean((current as any).isRejected)
+  }
 
-  Object.assign(errors, validateStageFlags(nextIsLoggedIn, nextIsDisbursed))
+  Object.assign(errors, validateStageFlags(nextFlags))
   if (Object.keys(errors).length > 0) return NextResponse.json({ error: 'validation_error', details: errors }, { status: 400 })
 
   try {
@@ -178,10 +186,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
     if (res.matchedCount === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-    await enforceUniqueStageFlags(db, tenantIdObj, stageIdObj, {
-      isLoggedIn: nextIsLoggedIn,
-      isDisbursed: nextIsDisbursed
-    })
+    await enforceUniqueStageFlags(db, tenantIdObj, stageIdObj, nextFlags)
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

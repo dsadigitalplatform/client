@@ -305,6 +305,225 @@ export function TenantSubscriptionPanel() {
     })
   )
 
+  const changePlanSection = data.canChangePlan ? (
+    <Box className='flex flex-col gap-3'>
+            <Box sx={{ maxWidth: 640 }}>
+              <Typography variant={sub ? 'h6' : 'h5'} sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+                {sub ? 'Change plan' : 'Choose a plan'}
+              </Typography>
+              <Typography variant='body2' color='text.secondary' sx={{ mt: 1, lineHeight: 1.6 }}>
+                {!sub
+                  ? 'Pick a plan to start your trial. Paid access is activated only after Super Admin confirms payment.'
+                  : access.inTrial
+                    ? copy?.trialSwitch
+                    : 'Upgrades apply immediately: remaining days on the current plan expire and a fresh trial starts on the higher plan. Downgrades are scheduled for period end.'}
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                gap: { xs: 2.5, md: 3 },
+                alignItems: 'stretch',
+                mt: 1
+              }}
+            >
+              {(data.availablePlans || []).map(p => {
+                const isCurrent = Boolean(sub) && p.changeKind === 'same'
+                const kindLabel = changeKindLabel(p.changeKind)
+                const pendingThis = Boolean(sub?.pendingPlanId === p._id)
+                const trialBlocked =
+                  (access.inTrial || sub?.status === 'trialing') && p.changeKind === 'downgrade'
+                const busyThis = changingPlanId === p._id
+
+                let actionLabel = 'Choose this plan'
+                let actionVariant: 'contained' | 'outlined' = 'outlined'
+                let actionIcon = <i className='ri-arrow-right-line' />
+
+                if (busyThis) {
+                  actionLabel = 'Updating…'
+                } else if (!sub) {
+                  actionLabel = 'Select plan'
+                  actionVariant = 'contained'
+                } else if (isCurrent) {
+                  actionLabel = 'Current plan'
+                  actionIcon = <i className='ri-check-line' />
+                  actionVariant = 'contained'
+                } else if (pendingThis) {
+                  actionLabel = 'Downgrade scheduled'
+                } else if (p.changeKind === 'upgrade') {
+                  actionLabel = 'Upgrade & start trial'
+                  actionVariant = 'contained'
+                } else if (p.changeKind === 'downgrade') {
+                  actionLabel = 'Schedule downgrade'
+                } else {
+                  actionLabel = 'Switch plan'
+                }
+
+                return (
+                  <SubscriptionPlanCard
+                    key={p._id}
+                    plan={{
+                      _id: p._id,
+                      name: p.name,
+                      description: p.description,
+                      priceMonthly: p.priceMonthly,
+                      priceYearly: p.priceYearly ?? null,
+                      currency: p.currency,
+                      entitlements: p.entitlements,
+                      trialDays: p.trialDays,
+                      trialEnabled: p.trialEnabled,
+                      isDefault: p.isDefault
+                    }}
+                    highlighted={isCurrent}
+                    recommended={Boolean(p.isDefault) && !isCurrent}
+                    badges={
+                      <>
+                        {isCurrent ? <Chip size='small' color='primary' label='Current' sx={{ height: 26 }} /> : null}
+                        {pendingThis ? (
+                          <Chip
+                            size='small'
+                            color='warning'
+                            label={`Downgrade · ${formatDate(sub?.pendingChangeEffectiveAt || sub?.currentPeriodEnd)}`}
+                            sx={{ height: 26 }}
+                          />
+                        ) : null}
+                        {sub && !isCurrent && !pendingThis && kindLabel ? (
+                          <Chip
+                            size='small'
+                            variant='outlined'
+                            color={
+                              p.changeKind === 'upgrade'
+                                ? 'success'
+                                : p.changeKind === 'downgrade'
+                                  ? 'warning'
+                                  : 'default'
+                            }
+                            label={kindLabel}
+                            sx={{ height: 26 }}
+                          />
+                        ) : null}
+                      </>
+                    }
+                    primaryAction={
+                      trialBlocked
+                        ? undefined
+                        : {
+                            label: actionLabel,
+                            variant: actionVariant,
+                            disabled: actionBusy || isCurrent || pendingThis,
+                            startIcon: actionIcon,
+                            onClick: () => {
+                              if (sub && p.changeKind === 'downgrade') {
+                                openDowngradeConfirm({
+                                  _id: p._id,
+                                  name: p.name,
+                                  entitlements: p.entitlements
+                                })
+
+                                return
+                              }
+
+                              setChangingPlanId(p._id)
+                              void postChange({ action: 'change_plan', planId: p._id })
+                            }
+                          }
+                    }
+                    footer={
+                      <>
+                        {trialBlocked ? (
+                          <Typography
+                            variant='caption'
+                            color='text.secondary'
+                            sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}
+                          >
+                            Downgrade not available during trial
+                          </Typography>
+                        ) : null}
+                        {pendingThis && data.canChangePlan ? (
+                          <Button
+                            fullWidth
+                            color='warning'
+                            variant='text'
+                            size='small'
+                            disabled={actionBusy}
+                            sx={{ mt: 0.5 }}
+                            onClick={() =>
+                              setConfirmAction({
+                                type: 'clear_pending',
+                                title: 'Cancel scheduled downgrade?',
+                                description: (
+                                  <>
+                                    You will stay on <strong>{data.plan?.name || 'your current plan'}</strong>. The
+                                    scheduled switch to <strong>{p.name}</strong> will be removed.
+                                  </>
+                                ),
+                                confirmLabel: 'Cancel downgrade',
+                                confirmColor: 'warning'
+                              })
+                            }
+                          >
+                            Cancel this downgrade
+                          </Button>
+                        ) : null}
+                      </>
+                    }
+                  />
+                )
+              })}
+            </Box>
+
+            {(data.availablePlans || []).length === 0 ? (
+              <Alert severity='warning'>
+                No active subscription plans are available. Ask a Super Admin to create plans under Super Admin →
+                Subscription Plans.
+              </Alert>
+            ) : null}
+
+            <Typography variant='caption' color='text.secondary'>
+              {copy?.paymentsPending}
+            </Typography>
+
+            {sub ? (
+              <>
+                <Divider />
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                  {!sub.cancelAtPeriodEnd ? (
+                    <Button
+                      color='error'
+                      variant='outlined'
+                      disabled={actionBusy}
+                      onClick={() =>
+                        setConfirmAction({
+                          type: 'cancel_subscription',
+                          title: 'Cancel subscription at period end?',
+                          description: (
+                            <>
+                              Your organisation will keep access until <strong>{periodEndLabel}</strong>. After that the
+                              subscription expires. No refund is issued for unused time
+                              {sub.billingInterval === 'yearly' ? ' on annual plans' : ''}.
+                            </>
+                          ),
+                          confirmLabel: 'Cancel at period end',
+                          confirmColor: 'error'
+                        })
+                      }
+                    >
+                      Cancel at period end
+                    </Button>
+                  ) : null}
+                </Box>
+              </>
+            ) : null}
+    </Box>
+  ) : (
+    <Alert severity='info'>
+      Only the organisation <strong>Owner</strong> (or a Super Admin) can upgrade or change the plan. Open{' '}
+      <strong>Admin → Subscription &amp; Billing</strong> while signed in as Owner.
+    </Alert>
+  )
+
   return (
     <Box className='flex flex-col gap-4'>
       <Box>
@@ -545,224 +764,7 @@ export function TenantSubscriptionPanel() {
         </CardContent>
       </Card>
 
-      {data.canChangePlan ? (
-        <Box className='flex flex-col gap-3'>
-            <Box sx={{ maxWidth: 640 }}>
-              <Typography variant='h5' sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
-                {sub ? 'Change plan' : 'Choose a plan'}
-              </Typography>
-              <Typography variant='body2' color='text.secondary' sx={{ mt: 1, lineHeight: 1.6 }}>
-                {!sub
-                  ? 'Pick a plan to start your trial. Paid access is activated only after Super Admin confirms payment.'
-                  : access.inTrial
-                    ? copy?.trialSwitch
-                    : 'Upgrades apply immediately: remaining days on the current plan expire and a fresh trial starts on the higher plan. Downgrades are scheduled for period end.'}
-              </Typography>
-            </Box>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
-                gap: { xs: 2.5, md: 3 },
-                alignItems: 'stretch',
-                mt: 1
-              }}
-            >
-              {(data.availablePlans || []).map(p => {
-                const isCurrent = Boolean(sub) && p.changeKind === 'same'
-                const kindLabel = changeKindLabel(p.changeKind)
-                const pendingThis = Boolean(sub?.pendingPlanId === p._id)
-                const trialBlocked =
-                  (access.inTrial || sub?.status === 'trialing') && p.changeKind === 'downgrade'
-                const busyThis = changingPlanId === p._id
-
-                let actionLabel = 'Choose this plan'
-                let actionVariant: 'contained' | 'outlined' = 'outlined'
-                let actionIcon = <i className='ri-arrow-right-line' />
-
-                if (busyThis) {
-                  actionLabel = 'Updating…'
-                } else if (!sub) {
-                  actionLabel = 'Select plan'
-                  actionVariant = 'contained'
-                } else if (isCurrent) {
-                  actionLabel = 'Current plan'
-                  actionIcon = <i className='ri-check-line' />
-                  actionVariant = 'contained'
-                } else if (pendingThis) {
-                  actionLabel = 'Downgrade scheduled'
-                } else if (p.changeKind === 'upgrade') {
-                  actionLabel = 'Upgrade & start trial'
-                  actionVariant = 'contained'
-                } else if (p.changeKind === 'downgrade') {
-                  actionLabel = 'Schedule downgrade'
-                } else {
-                  actionLabel = 'Switch plan'
-                }
-
-                return (
-                  <SubscriptionPlanCard
-                    key={p._id}
-                    plan={{
-                      _id: p._id,
-                      name: p.name,
-                      description: p.description,
-                      priceMonthly: p.priceMonthly,
-                      priceYearly: p.priceYearly ?? null,
-                      currency: p.currency,
-                      entitlements: p.entitlements,
-                      trialDays: p.trialDays,
-                      trialEnabled: p.trialEnabled,
-                      isDefault: p.isDefault
-                    }}
-                    highlighted={isCurrent}
-                    recommended={Boolean(p.isDefault) && !isCurrent}
-                    badges={
-                      <>
-                        {isCurrent ? <Chip size='small' color='primary' label='Current' sx={{ height: 26 }} /> : null}
-                        {pendingThis ? (
-                          <Chip
-                            size='small'
-                            color='warning'
-                            label={`Downgrade · ${formatDate(sub?.pendingChangeEffectiveAt || sub?.currentPeriodEnd)}`}
-                            sx={{ height: 26 }}
-                          />
-                        ) : null}
-                        {sub && !isCurrent && !pendingThis && kindLabel ? (
-                          <Chip
-                            size='small'
-                            variant='outlined'
-                            color={
-                              p.changeKind === 'upgrade'
-                                ? 'success'
-                                : p.changeKind === 'downgrade'
-                                  ? 'warning'
-                                  : 'default'
-                            }
-                            label={kindLabel}
-                            sx={{ height: 26 }}
-                          />
-                        ) : null}
-                      </>
-                    }
-                    primaryAction={
-                      trialBlocked
-                        ? undefined
-                        : {
-                            label: actionLabel,
-                            variant: actionVariant,
-                            disabled: actionBusy || isCurrent || pendingThis,
-                            startIcon: actionIcon,
-                            onClick: () => {
-                              if (sub && p.changeKind === 'downgrade') {
-                                openDowngradeConfirm({
-                                  _id: p._id,
-                                  name: p.name,
-                                  entitlements: p.entitlements
-                                })
-
-                                return
-                              }
-
-                              setChangingPlanId(p._id)
-                              void postChange({ action: 'change_plan', planId: p._id })
-                            }
-                          }
-                    }
-                    footer={
-                      <>
-                        {trialBlocked ? (
-                          <Typography
-                            variant='caption'
-                            color='text.secondary'
-                            sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}
-                          >
-                            Downgrade not available during trial
-                          </Typography>
-                        ) : null}
-                        {pendingThis && data.canChangePlan ? (
-                          <Button
-                            fullWidth
-                            color='warning'
-                            variant='text'
-                            size='small'
-                            disabled={actionBusy}
-                            sx={{ mt: 0.5 }}
-                            onClick={() =>
-                              setConfirmAction({
-                                type: 'clear_pending',
-                                title: 'Cancel scheduled downgrade?',
-                                description: (
-                                  <>
-                                    You will stay on <strong>{data.plan?.name || 'your current plan'}</strong>. The
-                                    scheduled switch to <strong>{p.name}</strong> will be removed.
-                                  </>
-                                ),
-                                confirmLabel: 'Cancel downgrade',
-                                confirmColor: 'warning'
-                              })
-                            }
-                          >
-                            Cancel this downgrade
-                          </Button>
-                        ) : null}
-                      </>
-                    }
-                  />
-                )
-              })}
-            </Box>
-
-            {(data.availablePlans || []).length === 0 ? (
-              <Alert severity='warning'>
-                No active subscription plans are available. Ask a Super Admin to create plans under Super Admin →
-                Subscription Plans.
-              </Alert>
-            ) : null}
-
-            <Typography variant='caption' color='text.secondary'>
-              {copy?.paymentsPending}
-            </Typography>
-
-            {sub ? (
-              <>
-                <Divider />
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                  {!sub.cancelAtPeriodEnd ? (
-                    <Button
-                      color='error'
-                      variant='outlined'
-                      disabled={actionBusy}
-                      onClick={() =>
-                        setConfirmAction({
-                          type: 'cancel_subscription',
-                          title: 'Cancel subscription at period end?',
-                          description: (
-                            <>
-                              Your organisation will keep access until <strong>{periodEndLabel}</strong>. After that the
-                              subscription expires. No refund is issued for unused time
-                              {sub.billingInterval === 'yearly' ? ' on annual plans' : ''}.
-                            </>
-                          ),
-                          confirmLabel: 'Cancel at period end',
-                          confirmColor: 'error'
-                        })
-                      }
-                    >
-                      Cancel at period end
-                    </Button>
-                  ) : null}
-                </Box>
-              </>
-            ) : null}
-          </Box>
-      ) : (
-        <Alert severity='info'>
-          Only the organisation <strong>Owner</strong> (or a Super Admin) can upgrade or change the plan. Open{' '}
-          <strong>Admin → Subscription &amp; Billing</strong> while signed in as Owner.
-        </Alert>
-      )}
+      {!sub ? changePlanSection : null}
 
       {data.canManageBilling && sub ? (
         <Card>
@@ -820,10 +822,6 @@ export function TenantSubscriptionPanel() {
         </Card>
       ) : null}
 
-      <TenantBillingProfileCard />
-
-      <TenantInvoicesPanel refreshKey={invoiceRefreshKey} />
-
       {data.canManageBilling && sub ? (
         <Card>
           <CardContent className='flex flex-col gap-3'>
@@ -873,6 +871,12 @@ export function TenantSubscriptionPanel() {
           </CardContent>
         </Card>
       ) : null}
+
+      <TenantBillingProfileCard />
+
+      <TenantInvoicesPanel refreshKey={invoiceRefreshKey} />
+
+      {sub ? changePlanSection : null}
 
       <Dialog open={Boolean(downgradeConfirm)} onClose={() => !actionBusy && setDowngradeConfirm(null)} fullWidth maxWidth='sm'>
         <DialogTitle>Confirm downgrade</DialogTitle>

@@ -40,6 +40,8 @@ type Props = {
         order: number
         isLoggedIn: boolean
         isDisbursed: boolean
+        isClosed: boolean
+        isRejected: boolean
     }>
     onSubmitOverride?: (payload: any) => Promise<void>
     submitLabel?: string
@@ -69,6 +71,8 @@ const LoanStatusPipelineCreateForm = ({
     const [order, setOrder] = useState('1')
     const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [isDisbursed, setIsDisbursed] = useState(false)
+    const [isClosed, setIsClosed] = useState(false)
+    const [isRejected, setIsRejected] = useState(false)
 
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -85,6 +89,8 @@ const LoanStatusPipelineCreateForm = ({
         if (initialValues.order != null) setOrder(String(initialValues.order))
         if (initialValues.isLoggedIn != null) setIsLoggedIn(Boolean(initialValues.isLoggedIn))
         if (initialValues.isDisbursed != null) setIsDisbursed(Boolean(initialValues.isDisbursed))
+        if (initialValues.isClosed != null) setIsClosed(Boolean(initialValues.isClosed))
+        if (initialValues.isRejected != null) setIsRejected(Boolean(initialValues.isRejected))
     }, [initialValues])
 
     useEffect(() => {
@@ -122,21 +128,19 @@ const LoanStatusPipelineCreateForm = ({
 
         if (name.trim().length < 2) next.name = 'Stage name is required'
         if (parsedOrder == null || parsedOrder < 1) next.order = 'Order must be a whole number ≥ 1'
-        if (isLoggedIn && isDisbursed) next.stageFlags = 'Select either Logged In or Disbursed, not both'
+        if ([isLoggedIn, isDisbursed, isClosed, isRejected].filter(Boolean).length > 1) {
+            next.stageFlags = 'Select only one: Logged In, Disbursed, Closed, or Rejected'
+        }
         setFieldErrors(next)
 
         return Object.keys(next).length === 0
     }
 
-    const handleLoggedInChange = (checked: boolean) => {
-        setIsLoggedIn(checked)
-        if (checked) setIsDisbursed(false)
-        if (fieldErrors.stageFlags) setFieldErrors(prev => ({ ...prev, stageFlags: '' }))
-    }
-
-    const handleDisbursedChange = (checked: boolean) => {
-        setIsDisbursed(checked)
-        if (checked) setIsLoggedIn(false)
+    const selectFlag = (flag: 'loggedIn' | 'disbursed' | 'closed' | 'rejected', checked: boolean) => {
+        setIsLoggedIn(flag === 'loggedIn' && checked)
+        setIsDisbursed(flag === 'disbursed' && checked)
+        setIsClosed(flag === 'closed' && checked)
+        setIsRejected(flag === 'rejected' && checked)
         if (fieldErrors.stageFlags) setFieldErrors(prev => ({ ...prev, stageFlags: '' }))
     }
 
@@ -153,7 +157,9 @@ const LoanStatusPipelineCreateForm = ({
                 description: description.trim().length === 0 ? null : description.trim(),
                 order: parsedOrder as number,
                 isLoggedIn,
-                isDisbursed
+                isDisbursed,
+                isClosed,
+                isRejected
             }
 
             if (onSubmitOverride) {
@@ -285,25 +291,30 @@ const LoanStatusPipelineCreateForm = ({
                     Stage Flags
                 </Typography>
                 <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: -1 }}>
-                    Multiple stages can be marked as Logged In. Only one stage can be Disbursed. A stage cannot be both.
+                    Pick at most one. Several stages can be Logged In. Disbursed, Closed, and Rejected are unique — only
+                    one stage each.
                 </Typography>
                 {fieldErrors.stageFlags ? (
                     <Typography variant='caption' color='error.main'>
                         {fieldErrors.stageFlags}
                     </Typography>
                 ) : null}
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0, sm: 3 } }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, flexWrap: 'wrap', gap: { xs: 0, sm: 2 } }}>
                     <FormControlLabel
-                        control={
-                            <Checkbox checked={isLoggedIn} onChange={e => handleLoggedInChange(e.target.checked)} />
-                        }
+                        control={<Checkbox checked={isLoggedIn} onChange={e => selectFlag('loggedIn', e.target.checked)} />}
                         label='Logged In'
                     />
                     <FormControlLabel
-                        control={
-                            <Checkbox checked={isDisbursed} onChange={e => handleDisbursedChange(e.target.checked)} />
-                        }
+                        control={<Checkbox checked={isDisbursed} onChange={e => selectFlag('disbursed', e.target.checked)} />}
                         label='Disbursed'
+                    />
+                    <FormControlLabel
+                        control={<Checkbox checked={isClosed} onChange={e => selectFlag('closed', e.target.checked)} />}
+                        label='Closed'
+                    />
+                    <FormControlLabel
+                        control={<Checkbox checked={isRejected} onChange={e => selectFlag('rejected', e.target.checked)} />}
+                        label='Rejected'
                     />
                 </Box>
             </Stack>

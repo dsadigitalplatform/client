@@ -5,6 +5,8 @@ export type LoanStatusStage = {
   order: number
   isLoggedIn?: boolean
   isDisbursed?: boolean
+  isClosed?: boolean
+  isRejected?: boolean
   createdAt: string | null
   canManage?: boolean
 }

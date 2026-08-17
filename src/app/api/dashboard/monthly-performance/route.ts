@@ -12,6 +12,7 @@ import { getMergedMonthlyDisbursedSummary } from '@features/reports/server/month
 import {
   findDisbursedStageId,
   findLoggedInStageIds,
+  findRejectedStageIds,
   getCurrentMonthDateRange
 } from '@features/reports/utils/monthlyReportHelpers'
 
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
 
   const stageRows = await db
     .collection('loanStatusPipelineStages')
-    .find({ tenantId: tenantIdObj }, { projection: { name: 1, order: 1, isLoggedIn: 1, isDisbursed: 1 } })
+    .find({ tenantId: tenantIdObj }, { projection: { name: 1, order: 1, isLoggedIn: 1, isDisbursed: 1, isClosed: 1, isRejected: 1 } })
     .sort({ order: 1 })
     .toArray()
 
@@ -88,11 +89,14 @@ export async function GET(request: Request) {
     name: String(s.name || ''),
     order: Number((s as { order?: number }).order || 0),
     isLoggedIn: Boolean((s as { isLoggedIn?: boolean }).isLoggedIn),
-    isDisbursed: Boolean((s as { isDisbursed?: boolean }).isDisbursed)
+    isDisbursed: Boolean((s as { isDisbursed?: boolean }).isDisbursed),
+    isClosed: Boolean((s as { isClosed?: boolean }).isClosed),
+    isRejected: Boolean((s as { isRejected?: boolean }).isRejected)
   }))
 
   const loggedInStageIds = findLoggedInStageIds(stages)
   const disbursedStageId = findDisbursedStageId(stages)
+  const rejectedStageIds = findRejectedStageIds(stages)
 
   const stageNameById = new Map(stages.map(s => [s.id, s.name]))
 
@@ -154,12 +158,53 @@ export async function GET(request: Request) {
     }
   }
 
-  const [loggedIn, disbursed] = await Promise.all([loadLoggedInMetric(), loadDisbursedMetric()])
+  async function loadRejectedMetric(): Promise<StageMetric> {
+    if (rejectedStageIds.length === 0) {
+      return {
+        stageId: null,
+        stageName: null,
+        configured: false,
+        totalCases: 0,
+        totalAmount: 0
+      }
+    }
+
+    const summary = await getHistoricalStageSummary(
+      db,
+      tenantIdObj,
+      tenantIdHex,
+      userId,
+      role,
+      rejectedStageIds,
+      dateFrom,
+      dateTo,
+      assignedAgentId
+    )
+
+    const stageNames = rejectedStageIds
+      .map(id => stageNameById.get(id))
+      .filter((name): name is string => Boolean(name))
+
+    return {
+      stageId: rejectedStageIds.length === 1 ? rejectedStageIds[0] : null,
+      stageName: stageNames.length > 0 ? stageNames.join(', ') : null,
+      configured: true,
+      totalCases: summary.totalCases,
+      totalAmount: summary.totalAmount
+    }
+  }
+
+  const [loggedIn, disbursed, rejected] = await Promise.all([
+    loadLoggedInMetric(),
+    loadDisbursedMetric(),
+    loadRejectedMetric()
+  ])
 
   return NextResponse.json({
     dateFrom,
     dateTo,
     loggedIn,
-    disbursed
+    disbursed,
+    rejected
   })
 }
