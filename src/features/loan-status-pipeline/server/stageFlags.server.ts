@@ -1,28 +1,39 @@
 import type { Db } from 'mongodb'
 import { ObjectId } from 'mongodb'
 
-export function validateStageFlags(isLoggedIn: boolean, isDisbursed: boolean): Record<string, string> {
-  const errors: Record<string, string> = {}
+import { validateStageFlags as validateStageFlagsShared, type StageFlags } from '../stageFlags'
 
-  if (isLoggedIn && isDisbursed) {
-    errors.stageFlags = 'Select either Logged In or Disbursed, not both'
-  }
-
-  return errors
+export function validateStageFlags(flags: StageFlags): Record<string, string> {
+  return validateStageFlagsShared(flags)
 }
 
 export async function enforceUniqueStageFlags(
   db: Db,
   tenantIdObj: ObjectId,
   stageId: ObjectId,
-  flags: { isLoggedIn: boolean; isDisbursed: boolean }
+  flags: StageFlags
 ) {
   const now = new Date()
+  const col = db.collection('loanStatusPipelineStages')
 
   if (flags.isDisbursed) {
-    await db.collection('loanStatusPipelineStages').updateMany(
+    await col.updateMany(
       { tenantId: tenantIdObj, _id: { $ne: stageId }, isDisbursed: true },
       { $set: { isDisbursed: false, updatedAt: now } }
+    )
+  }
+
+  if (flags.isClosed) {
+    await col.updateMany(
+      { tenantId: tenantIdObj, _id: { $ne: stageId }, isClosed: true },
+      { $set: { isClosed: false, updatedAt: now } }
+    )
+  }
+
+  if (flags.isRejected) {
+    await col.updateMany(
+      { tenantId: tenantIdObj, _id: { $ne: stageId }, isRejected: true },
+      { $set: { isRejected: false, updatedAt: now } }
     )
   }
 }

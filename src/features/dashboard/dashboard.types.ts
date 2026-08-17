@@ -22,6 +22,7 @@ export type MonthlyPerformanceData = {
   dateTo: string
   loggedIn: MonthlyStageMetric
   disbursed: MonthlyStageMetric
+  rejected: MonthlyStageMetric
 }
 
 export type DashboardOverview = {

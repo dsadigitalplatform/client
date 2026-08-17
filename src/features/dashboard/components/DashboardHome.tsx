@@ -15,8 +15,6 @@ import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
 import SnackbarContent from '@mui/material/SnackbarContent'
 import IconButton from '@mui/material/IconButton'
-import Avatar from '@mui/material/Avatar'
-import Chip from '@mui/material/Chip'
 import { useSession } from 'next-auth/react'
 
 import { getLoanCases } from '@features/loan-cases/services/loanCasesService'
@@ -24,7 +22,6 @@ import type { LoanCaseListItem } from '@features/loan-cases/loan-cases.types'
 import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/services/loanStatusPipelineService'
 import { getAppointmentById, listAppointments } from '@features/appointments/services/appointments'
 import type { AppointmentListItem } from '@features/appointments/services/appointments'
-import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
 import OrganisationSetupSupportDialog from '@features/support/components/OrganisationSetupSupportDialog'
 import { getTenantUsers } from '@features/loan-cases/services/loanCasesService'
 import type { TenantUserOption } from '@features/loan-cases/loan-cases.types'
@@ -49,94 +46,18 @@ import DashboardAnalyticsSection from '@features/dashboard/components/DashboardA
 import MonthlyPerformanceSection from '@features/dashboard/components/MonthlyPerformanceSection'
 import { useMonthlyPerformance } from '@features/dashboard/hooks/useMonthlyPerformance'
 import { resolveApprovedAmount } from '@features/loan-disbursements/utils/disbursementCalculations'
-
-const DONUT_SIZE = 64
+import AgentWorkQueue from '@features/dashboard/components/AgentWorkQueue'
+import PipelineStagePulse from '@features/dashboard/components/PipelineStagePulse'
+import {
+    findCompletedStageIds,
+    findRejectedStageIds,
+    findTerminalStageIds
+} from '@features/loan-status-pipeline/stageFlags'
 
 const formatINR = (amount: number) => {
     const safe = Number.isFinite(amount) ? amount : 0
 
     return `₹ ${safe.toLocaleString('en-IN')}`
-}
-
-const FOLLOW_UP_COLORS = {
-    CALL: { main: 'var(--mui-palette-info-main)', bg: 'rgb(var(--mui-palette-info-mainChannel) / 0.12)' },
-    WHATSAPP: { main: 'var(--mui-palette-success-main)', bg: 'rgb(var(--mui-palette-success-mainChannel) / 0.12)' },
-    VISIT: { main: 'var(--mui-palette-warning-main)', bg: 'rgb(var(--mui-palette-warning-mainChannel) / 0.12)' },
-    EMAIL: { main: 'var(--mui-palette-secondary-main)', bg: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.12)' },
-    OTHER: { main: 'var(--mui-palette-text-secondary)', bg: 'rgb(var(--mui-palette-dividerChannel) / 0.24)' }
-}
-
-type DonutSegment = {
-    label: string
-    value: number
-    color: string
-}
-
-const SegmentedDonut = ({
-    segments,
-    axisLabel
-}: {
-    segments: DonutSegment[]
-    axisLabel?: string
-}) => {
-    const total = segments.reduce((sum, s) => sum + s.value, 0)
-    const r = 26
-    const c = 2 * Math.PI * r
-    let offset = 0
-    const [hovered, setHovered] = useState<DonutSegment | null>(null)
-    const hoverPct = hovered && total > 0 ? Math.round((hovered.value / total) * 100) : null
-
-    return (
-        <svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox='0 0 64 64' aria-hidden={axisLabel ? undefined : 'true'} aria-label={axisLabel}>
-            {axisLabel ? <title>{axisLabel}</title> : null}
-            <circle cx='32' cy='32' r={r} fill='none' stroke='rgb(var(--mui-palette-dividerChannel) / 0.2)' strokeWidth='8' />
-            {segments
-                .filter(s => s.value > 0)
-                .map((s, idx) => {
-                    const dash = total > 0 ? (s.value / total) * c : 0
-
-                    const circle = (
-                        <circle
-                            key={`${s.label}-${idx}`}
-                            cx='32'
-                            cy='32'
-                            r={r}
-                            fill='none'
-                            stroke={s.color}
-                            strokeWidth='8'
-                            strokeDasharray={`${dash} ${c - dash}`}
-                            strokeDashoffset={-offset}
-                            transform='rotate(-90 32 32)'
-                            onMouseEnter={() => setHovered(s)}
-                            onMouseLeave={() => setHovered(null)}
-                        />
-                    )
-
-                    offset += dash
-
-                    return circle
-                })}
-            {hovered && hoverPct != null ? (
-                <>
-                    <text x='32' y='30' textAnchor='middle' fontSize='12' fontWeight='700' fill='var(--mui-palette-text-primary)'>
-                        {hoverPct}%
-                    </text>
-                    <text x='32' y='42' textAnchor='middle' fontSize='9' fill='var(--mui-palette-text-secondary)'>
-                        {hovered.label}
-                    </text>
-                </>
-            ) : (
-                <>
-                    <text x='32' y='30' textAnchor='middle' fontSize='12' fontWeight='700' fill='var(--mui-palette-text-primary)'>
-                        {total}
-                    </text>
-                    <text x='32' y='42' textAnchor='middle' fontSize='9' fill='var(--mui-palette-text-secondary)'>
-                        Follow-ups
-                    </text>
-                </>
-            )}
-        </svg>
-    )
 }
 
 const sortPipelineBreakdown = (
@@ -181,11 +102,17 @@ const DashboardHome = () => {
     const [currentTenantId, setCurrentTenantId] = useState<string | undefined>(undefined)
     const [myLeads, setMyLeads] = useState<LoanCaseListItem[]>([])
     const [myLeadsLoading, setMyLeadsLoading] = useState(false)
-    const [remindersNextTwoWeeks, setRemindersNextTwoWeeks] = useState(0)
-    const [remindersLoading, setRemindersLoading] = useState(false)
-    const [remindersError, setRemindersError] = useState<string | null>(null)
-    const [reminderTypeCounts, setReminderTypeCounts] = useState<Record<string, number>>({})
-    const [stages, setStages] = useState<Array<{ id: string; name: string; order: number; isLoggedIn: boolean; isDisbursed: boolean }>>([])
+    const [stages, setStages] = useState<
+        Array<{
+            id: string
+            name: string
+            order: number
+            isLoggedIn: boolean
+            isDisbursed: boolean
+            isClosed: boolean
+            isRejected: boolean
+        }>
+    >([])
     const [stagesLoading, setStagesLoading] = useState(false)
     const [stagesError, setStagesError] = useState<string | null>(null)
     const [meetings, setMeetings] = useState<AppointmentListItem[]>([])
@@ -372,77 +299,6 @@ const DashboardHome = () => {
     useEffect(() => {
         let active = true
 
-        if (!currentTenantId) {
-            setRemindersNextTwoWeeks(0)
-            setRemindersLoading(false)
-            setRemindersError(null)
-
-            return () => {
-                active = false
-            }
-        }
-
-        const loadReminders = async () => {
-            setRemindersLoading(true)
-            setRemindersError(null)
-
-            try {
-                const now = new Date()
-                const endOfTwoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
-
-                const items = await listAppointments({
-                    ...(effectiveAssignedAgentId ? { organizerId: effectiveAssignedAgentId } : {}),
-                    dateFrom: now,
-                    dateTo: endOfTwoWeeks
-                })
-
-                const filtered = items.filter(a => {
-                    if (!a?.scheduledAt) return false
-                    const dt = new Date(a.scheduledAt)
-
-                    return Number.isFinite(dt.getTime()) && dt.getTime() >= now.getTime() && dt.getTime() <= endOfTwoWeeks.getTime()
-                })
-
-                const counts: Record<string, number> = { CALL: 0, WHATSAPP: 0, VISIT: 0, EMAIL: 0, OTHER: 0 }
-
-                filtered.forEach(a => {
-                    const raw = String(a?.followUpType || '').toUpperCase()
-
-                    if (raw === 'CALL' || raw === 'WHATSAPP' || raw === 'VISIT' || raw === 'EMAIL') counts[raw] += 1
-                    else counts.OTHER += 1
-                })
-
-                if (active) setRemindersNextTwoWeeks(filtered.length)
-                if (active) setReminderTypeCounts(counts)
-            } catch (e: any) {
-                if (active) setRemindersError(e?.message || 'Failed to load reminders')
-            } finally {
-                if (active) setRemindersLoading(false)
-            }
-        }
-
-        void loadReminders()
-
-        return () => {
-            active = false
-        }
-    }, [currentTenantId, effectiveAssignedAgentId, sessionUserId])
-
-    const reminderTypeSegments = useMemo(() => {
-        const meta: Array<DonutSegment & { key: string }> = [
-            { key: 'CALL', label: 'Call', value: 0, color: FOLLOW_UP_COLORS.CALL.main },
-            { key: 'WHATSAPP', label: 'WhatsApp', value: 0, color: FOLLOW_UP_COLORS.WHATSAPP.main },
-            { key: 'VISIT', label: 'Visit', value: 0, color: FOLLOW_UP_COLORS.VISIT.main },
-            { key: 'EMAIL', label: 'Email', value: 0, color: FOLLOW_UP_COLORS.EMAIL.main },
-            { key: 'OTHER', label: 'Other', value: 0, color: FOLLOW_UP_COLORS.OTHER.main }
-        ]
-
-        return meta.map(m => ({ ...m, value: reminderTypeCounts[m.key] ?? 0 }))
-    }, [reminderTypeCounts])
-
-    useEffect(() => {
-        let active = true
-
         if (!currentTenantId || !sessionUserId) {
             setMeetings([])
             setMeetingsLoading(false)
@@ -459,26 +315,29 @@ const DashboardHome = () => {
 
             try {
                 const now = new Date()
+                const from = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000)
                 const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
                 const items = await listAppointments({
                     ...(effectiveAssignedAgentId ? { organizerId: effectiveAssignedAgentId } : {}),
-                    dateFrom: now,
+                    dateFrom: from,
                     dateTo: end
                 })
 
-                const upcoming = items
+                const open = items
                     .filter(a => {
+                        const status = String(a?.status || 'PENDING').toUpperCase()
+
+                        if (status !== 'PENDING' && status !== 'SCHEDULED') return false
                         if (!a.scheduledAt) return false
                         const dt = new Date(a.scheduledAt)
 
-                        return Number.isFinite(dt.getTime()) && dt.getTime() >= now.getTime()
+                        return Number.isFinite(dt.getTime())
                     })
                     .sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')))
-                    .slice(0, 6)
 
-                if (active) setMeetings(upcoming)
+                if (active) setMeetings(open)
             } catch (e: any) {
-                if (active) setMeetingsError(e?.message || 'Failed to load meetings')
+                if (active) setMeetingsError(e?.message || 'Failed to load follow-ups')
             } finally {
                 if (active) setMeetingsLoading(false)
             }
@@ -517,7 +376,9 @@ const DashboardHome = () => {
                         name: String(s?.name || ''),
                         order: Number(s?.order || 0),
                         isLoggedIn: Boolean(s?.isLoggedIn),
-                        isDisbursed: Boolean(s?.isDisbursed)
+                        isDisbursed: Boolean(s?.isDisbursed),
+                        isClosed: Boolean(s?.isClosed),
+                        isRejected: Boolean(s?.isRejected)
                     }))
                     .filter(s => s.id.length > 0 && s.name.length > 0)
 
@@ -569,20 +430,9 @@ const DashboardHome = () => {
         return ids
     }, [stages])
 
-    const closedStageIds = useMemo(() => {
-        const flagged = stages.filter(s => s.isDisbursed).map(s => s.id)
-
-        if (flagged.length > 0) return new Set(flagged)
-
-        const finalStage = stages.reduce<{ id: string; name: string; order: number } | null>((max, s) => {
-            if (!max) return s
-            if ((s.order || 0) > (max.order || 0)) return s
-
-            return max
-        }, null)
-
-        return finalStage ? new Set([finalStage.id]) : new Set<string>()
-    }, [stages])
+    const terminalStageIds = useMemo(() => findTerminalStageIds(stages), [stages])
+    const completedStageIds = useMemo(() => findCompletedStageIds(stages), [stages])
+    const rejectedStageIds = useMemo(() => new Set(findRejectedStageIds(stages)), [stages])
 
     const periodFilteredLeads = useMemo(
         () =>
@@ -595,32 +445,38 @@ const DashboardHome = () => {
     const widgetMetrics = useMemo(() => {
         const totalLeads = periodFilteredLeads.length
         const disbursements = Array.from(periodFilteredLeads).filter(c => disbursementStageIds.has(c.stageId)).length
-        const activeCases = closedStageIds.size
-            ? periodFilteredLeads.filter(c => !closedStageIds.has(c.stageId)).length
+        const activeCases = terminalStageIds.size
+            ? periodFilteredLeads.filter(c => !terminalStageIds.has(c.stageId)).length
             : totalLeads
 
         return { totalLeads, activeCases, disbursements }
-    }, [periodFilteredLeads, disbursementStageIds, closedStageIds])
+    }, [periodFilteredLeads, disbursementStageIds, terminalStageIds])
 
     const activeCases = useMemo(() => {
-        if (closedStageIds.size === 0) return periodFilteredLeads
+        if (terminalStageIds.size === 0) return periodFilteredLeads
 
-        return periodFilteredLeads.filter(c => !closedStageIds.has(c.stageId))
-    }, [periodFilteredLeads, closedStageIds])
+        return periodFilteredLeads.filter(c => !terminalStageIds.has(c.stageId))
+    }, [periodFilteredLeads, terminalStageIds])
 
     const activeCasesValue = useMemo(() => {
         return activeCases.reduce((acc, c) => acc + (resolveApprovedAmount(c) ?? 0), 0)
     }, [activeCases])
 
     const closedCases = useMemo(() => {
-        if (closedStageIds.size === 0) return []
+        if (completedStageIds.size === 0) return []
 
-        return periodFilteredLeads.filter(c => closedStageIds.has(c.stageId))
-    }, [periodFilteredLeads, closedStageIds])
+        return periodFilteredLeads.filter(c => completedStageIds.has(c.stageId))
+    }, [periodFilteredLeads, completedStageIds])
 
     const closedCasesValue = useMemo(() => {
         return closedCases.reduce((acc, c) => acc + (resolveApprovedAmount(c) ?? 0), 0)
     }, [closedCases])
+
+    const rejectedCases = useMemo(() => {
+        if (rejectedStageIds.size === 0) return []
+
+        return periodFilteredLeads.filter(c => rejectedStageIds.has(c.stageId))
+    }, [periodFilteredLeads, rejectedStageIds])
 
     const activeCustomersCount = useMemo(() => {
         const ids = new Set<string>()
@@ -696,26 +552,13 @@ const DashboardHome = () => {
         [pipelineBreakdownRows, pipelineMetric, pipelineTop, pipelineSort]
     )
 
+    const liveActiveCases = useMemo(() => {
+        if (terminalStageIds.size === 0) return myLeads
+
+        return myLeads.filter(c => !terminalStageIds.has(c.stageId))
+    }, [myLeads, terminalStageIds])
+
     const pipelineLeadingStage = pipelineDisplay[0]
-
-    const meetingTitle = (m: AppointmentListItem) => {
-        if (m?.customerName) return m.customerName
-        if (m?.leadTitle) return m.leadTitle
-        if (m?.followUpType) return `${String(m.followUpType).toLowerCase()} follow-up`
-
-        return 'Meeting'
-    }
-
-    const meetingTypeMeta = (m: AppointmentListItem) => {
-        const t = String(m?.followUpType || '').toUpperCase()
-
-        if (t === 'CALL') return { label: 'Call', icon: 'ri-phone-line', color: FOLLOW_UP_COLORS.CALL.bg, text: FOLLOW_UP_COLORS.CALL.main }
-        if (t === 'WHATSAPP') return { label: 'WhatsApp', icon: 'ri-whatsapp-line', color: FOLLOW_UP_COLORS.WHATSAPP.bg, text: FOLLOW_UP_COLORS.WHATSAPP.main }
-        if (t === 'VISIT') return { label: 'Visit', icon: 'ri-map-pin-line', color: FOLLOW_UP_COLORS.VISIT.bg, text: FOLLOW_UP_COLORS.VISIT.main }
-        if (t === 'EMAIL') return { label: 'Email', icon: 'ri-mail-line', color: FOLLOW_UP_COLORS.EMAIL.bg, text: FOLLOW_UP_COLORS.EMAIL.main }
-
-        return { label: 'Meeting', icon: 'ri-calendar-event-line', color: FOLLOW_UP_COLORS.OTHER.bg, text: FOLLOW_UP_COLORS.OTHER.main }
-    }
 
     const normalizeDigits = (value: string | null | undefined) => String(value || '').replace(/\D/g, '')
 
@@ -753,27 +596,6 @@ const DashboardHome = () => {
         } catch (e: any) {
             setActionToast({ open: true, message: e?.message || 'Unable to open contact action' })
         }
-    }
-
-    const formatMeetingTime = (m: AppointmentListItem) => {
-        if (!m?.scheduledAt) return 'To be scheduled'
-        const start = new Date(m.scheduledAt)
-
-        if (!Number.isFinite(start.getTime())) return 'To be scheduled'
-        const minutes = Number(m.durationMinutes || 30)
-        const end = new Date(start.getTime() + Math.max(10, minutes) * 60 * 1000)
-        const dateFmt = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' })
-        const timeFmt = new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit' })
-
-        return `${dateFmt.format(start)} | ${timeFmt.format(start)}-${timeFmt.format(end)}`
-    }
-
-    const initials = (value: string) => {
-        const parts = value.trim().split(/\s+/).filter(Boolean)
-        const first = parts[0]?.[0] || ''
-        const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : ''
-
-        return `${first}${last}`.toUpperCase()
     }
 
     return (
@@ -861,25 +683,6 @@ const DashboardHome = () => {
                 }}
             >
                 <DashboardStatCard
-                    label='Follow-ups (2 weeks)'
-                    value={hasTenant ? (remindersLoading ? '…' : remindersNextTwoWeeks) : '—'}
-                    hint={
-                        !hasTenant
-                            ? 'Select an organisation'
-                            : remindersError || 'Scheduled touchpoints'
-                    }
-                    icon='ri-calendar-schedule-line'
-                    accent='info'
-                    loading={hasTenant && remindersLoading}
-                    footer={
-                        hasTenant && !remindersError ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <SegmentedDonut segments={reminderTypeSegments} axisLabel='Follow-ups by type' />
-                            </Box>
-                        ) : undefined
-                    }
-                />
-                <DashboardStatCard
                     label='Active customers'
                     value={hasTenant ? (myLeadsLoading ? '…' : activeCustomersCount.toLocaleString()) : '—'}
                     hint='Unique borrowers in open cases'
@@ -899,9 +702,21 @@ const DashboardHome = () => {
                 <DashboardStatCard
                     label='Closed approved value'
                     value={hasTenant ? (myLeadsLoading ? '…' : formatINR(closedCasesValue)) : '—'}
-                    hint={`${hasTenant && !myLeadsLoading ? closedCases.length : '—'} closed cases`}
+                    hint={`${hasTenant && !myLeadsLoading ? closedCases.length : '—'} disbursed / closed`}
                     icon='ri-checkbox-circle-line'
                     accent='info'
+                    loading={hasTenant && myLeadsLoading}
+                />
+                <DashboardStatCard
+                    label='Rejected'
+                    value={hasTenant ? (myLeadsLoading ? '…' : rejectedCases.length.toLocaleString()) : '—'}
+                    hint={
+                        rejectedStageIds.size === 0
+                            ? 'Mark a Rejected stage in pipeline'
+                            : 'Files tagged rejected'
+                    }
+                    icon='ri-close-circle-line'
+                    accent='error'
                     loading={hasTenant && myLeadsLoading}
                 />
                 <DashboardStatCard
@@ -914,152 +729,27 @@ const DashboardHome = () => {
                 />
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.4fr 1fr', lg: '2fr 1fr' }, gap: 2 }}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                            <Box>
-                                <Typography variant='h6' sx={{ fontWeight: 700 }}>
-                                    Upcoming follow-ups
-                                </Typography>
-                                <Typography variant='body2' color='text.secondary'>
-                                    Next two weeks · tap Call or WhatsApp to connect
-                                </Typography>
-                            </Box>
-                            <IconButton size='small' aria-label='more'>
-                                <i className='ri-more-2-fill' />
-                            </IconButton>
-                        </Box>
-                        {meetingsLoading ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Loading meetings…
-                            </Typography>
-                        ) : meetingsError ? (
-                            <Typography variant='body2' color='error'>
-                                {meetingsError}
-                            </Typography>
-                        ) : !hasTenant ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                Select an organization to view your schedule.
-                            </Typography>
-                        ) : meetings.length === 0 ? (
-                            <Typography variant='body2' color='text.secondary'>
-                                No upcoming meetings yet.
-                            </Typography>
-                        ) : (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                                {meetings.map(m => {
-                                    const title = meetingTitle(m)
-                                    const tag = meetingTypeMeta(m)
-                                    const label = m.customerName || m.leadTitle || 'Meeting'
-                                    const followUpType = String(m?.followUpType || '').toUpperCase()
-                                    const canOpenContact = followUpType === 'CALL' || followUpType === 'WHATSAPP'
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.05fr) minmax(0, 0.95fr)' },
+                    gap: 2,
+                    alignItems: 'stretch'
+                }}
+            >
+                <AgentWorkQueue
+                    panel='queue'
+                    hasTenant={hasTenant}
+                    followUpsLoading={meetingsLoading}
+                    casesLoading={myLeadsLoading}
+                    error={meetingsError}
+                    followUps={meetings}
+                    activeCases={liveActiveCases}
+                    onOpenContact={meeting => void openFollowUpContact(meeting)}
+                />
 
-                                    return (
-                                        <Box
-                                            key={m.id}
-                                            sx={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 1.5,
-                                                px: 0.75,
-                                                py: 0.75,
-                                                borderRadius: 2,
-                                                backgroundColor: 'transparent',
-                                                transition: 'background-color 120ms ease',
-                                                '&:hover': { backgroundColor: 'action.hover' }
-                                            }}
-                                        >
-                                            <Avatar
-                                                sx={{
-                                                    width: 36,
-                                                    height: 36,
-                                                    bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.12)',
-                                                    color: 'var(--mui-palette-primary-main)',
-                                                    fontSize: '0.85rem',
-                                                    fontWeight: 700
-                                                }}
-                                            >
-                                                {initials(label)}
-                                            </Avatar>
-                                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, minWidth: 0, flexWrap: 'wrap' }}>
-                                                    <Typography variant='subtitle2' sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>
-                                                        {title}
-                                                    </Typography>
-                                                    {m?.leadCode ? <LeadCodeChip code={m.leadCode} variant='outlined' color='default' /> : null}
-                                                    {m?.customerIsNRI ? (
-                                                        <Chip
-                                                            size='small'
-                                                            label='NRI'
-                                                            variant='outlined'
-                                                            icon={<i className='ri-global-line' />}
-                                                            sx={{
-                                                                boxShadow: 'none',
-                                                                borderColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.5)',
-                                                                color: 'warning.main',
-                                                                backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)'
-                                                            }}
-                                                        />
-                                                    ) : null}
-                                                </Box>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mt: 0.25 }}>
-                                                    <Box
-                                                        component='span'
-                                                        sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', '& i': { fontSize: '0.95rem' } }}
-                                                    >
-                                                        <i className='ri-calendar-event-line' />
-                                                    </Box>
-                                                    <Typography variant='caption' color='text.secondary' noWrap sx={{ lineHeight: 1.2 }}>
-                                                        {formatMeetingTime(m)}
-                                                    </Typography>
-                                                </Box>
-                                            </Box>
-                                            <Box
-                                                role={canOpenContact ? 'button' : undefined}
-                                                tabIndex={canOpenContact ? 0 : undefined}
-                                                onClick={canOpenContact ? () => void openFollowUpContact(m) : undefined}
-                                                onKeyDown={
-                                                    canOpenContact
-                                                        ? e => {
-                                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                                e.preventDefault()
-                                                                void openFollowUpContact(m)
-                                                            }
-                                                        }
-                                                        : undefined
-                                                }
-                                                sx={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 0.5,
-                                                    px: 1,
-                                                    height: 24,
-                                                    borderRadius: 999,
-                                                    backgroundColor: tag.color,
-                                                    color: tag.text,
-                                                    fontSize: '0.72rem',
-                                                    fontWeight: 600,
-                                                    whiteSpace: 'nowrap',
-                                                    cursor: canOpenContact ? 'pointer' : 'default',
-                                                    border: 'none',
-                                                    '& i': { fontSize: '0.95rem' }
-                                                }}
-                                            >
-                                                <i className={tag.icon} />
-                                                <Box component='span' sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                                                    {tag.label}
-                                                </Box>
-                                            </Box>
-                                        </Box>
-                                    )
-                                })}
-                            </Box>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', minWidth: 0 }}>
+                    <CardContent sx={{ p: { xs: 2, sm: 2.5 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <Box
                             sx={{
                                 display: 'flex',
@@ -1075,9 +765,7 @@ const DashboardHome = () => {
                                     Pipeline by stage
                                 </Typography>
                                 <Typography variant='body2' color='text.secondary'>
-                                    {hasTenant && !myLeadsLoading
-                                        ? `${widgetMetrics.activeCases} active cases · ${formatINR(activeCasesValue)}`
-                                        : 'Open cases across your loan status pipeline'}
+                                    Mix of live files by loan status
                                 </Typography>
                             </Box>
                             <Button
@@ -1085,7 +773,7 @@ const DashboardHome = () => {
                                 href='/loan-cases/pipeline'
                                 size='small'
                                 variant='outlined'
-                                sx={{ alignSelf: { xs: 'flex-start', sm: 'flex-start' }, flexShrink: 0 }}
+                                sx={{ alignSelf: 'flex-start', flexShrink: 0 }}
                             >
                                 Pipeline view
                             </Button>
@@ -1132,7 +820,7 @@ const DashboardHome = () => {
                                 />
                                 {pipelineLeadingStage ? (
                                     <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
-                                        Leading: {pipelineLeadingStage.label} ·{' '}
+                                        Largest slice: {pipelineLeadingStage.label} ·{' '}
                                         {pipelineMetric === 'amount'
                                             ? formatINR(pipelineLeadingStage.value)
                                             : `${pipelineLeadingStage.count} cases`}
@@ -1145,6 +833,33 @@ const DashboardHome = () => {
                         )}
                     </CardContent>
                 </Card>
+            </Box>
+
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.05fr) minmax(0, 0.95fr)' },
+                    gap: 2,
+                    alignItems: 'stretch'
+                }}
+            >
+                <AgentWorkQueue
+                    panel='attention'
+                    hasTenant={hasTenant}
+                    followUpsLoading={meetingsLoading}
+                    casesLoading={myLeadsLoading}
+                    error={meetingsError}
+                    followUps={meetings}
+                    activeCases={liveActiveCases}
+                    onOpenContact={meeting => void openFollowUpContact(meeting)}
+                />
+
+                <PipelineStagePulse
+                    hasTenant={hasTenant}
+                    loading={myLeadsLoading || stagesLoading}
+                    cases={activeCases}
+                    stages={stages}
+                />
             </Box>
             <MonthlyPerformanceSection
                 enabled={hasTenant}

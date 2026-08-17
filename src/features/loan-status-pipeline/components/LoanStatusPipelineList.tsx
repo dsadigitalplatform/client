@@ -36,7 +36,7 @@ import { deleteLoanStatusPipelineStage } from '@features/loan-status-pipeline/se
 import type { LoanStatusStage } from '@features/loan-status-pipeline/loan-status-pipeline.types'
 
 function StageFlagChips({ stage }: { stage: LoanStatusStage }) {
-  if (!stage.isLoggedIn && !stage.isDisbursed) return null
+  if (!stage.isLoggedIn && !stage.isDisbursed && !stage.isClosed && !stage.isRejected) return null
 
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
@@ -45,6 +45,12 @@ function StageFlagChips({ stage }: { stage: LoanStatusStage }) {
       ) : null}
       {stage.isDisbursed ? (
         <Chip label='Disbursed' size='small' color='success' variant='outlined' sx={{ boxShadow: 'none' }} />
+      ) : null}
+      {stage.isClosed ? (
+        <Chip label='Closed' size='small' color='default' variant='outlined' sx={{ boxShadow: 'none' }} />
+      ) : null}
+      {stage.isRejected ? (
+        <Chip label='Rejected' size='small' color='error' variant='outlined' sx={{ boxShadow: 'none' }} />
       ) : null}
     </Box>
   )

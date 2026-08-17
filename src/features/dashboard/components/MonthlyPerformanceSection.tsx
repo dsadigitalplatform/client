@@ -41,7 +41,7 @@ type MetricPanelProps = {
   title: string
   subtitle: string
   icon: string
-  accent: 'info' | 'success'
+  accent: 'info' | 'success' | 'error'
   totalCases: number
   totalAmount: number
   configured: boolean
@@ -61,7 +61,7 @@ function MetricPanel({
   missingMessage
 }: MetricPanelProps) {
   const theme = useTheme()
-  const palette = accent === 'info' ? theme.palette.info : theme.palette.success
+  const palette = accent === 'info' ? theme.palette.info : accent === 'error' ? theme.palette.error : theme.palette.success
   const bg = alpha(palette.main, theme.palette.mode === 'dark' ? 0.16 : 0.08)
   const border = alpha(palette.main, 0.28)
 
@@ -124,7 +124,7 @@ function MetricPanel({
             {formatINR(totalAmount)}
           </Typography>
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-            Approved loan volume
+            {accent === 'error' ? 'Loan volume in rejected files' : 'Approved loan volume'}
           </Typography>
         </>
       )}
@@ -147,7 +147,7 @@ export default function MonthlyPerformanceSection({ enabled, loading, error, dat
 
   const body = !enabled ? (
     <Typography variant='body2' color='text.secondary'>
-      Select an organization to view monthly logged-in and disbursed metrics.
+      Select an organization to view monthly logged-in, disbursed, and rejected metrics.
     </Typography>
   ) : loading ? (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: compact ? 2 : 4 }}>
@@ -175,7 +175,7 @@ export default function MonthlyPerformanceSection({ enabled, loading, error, dat
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
         gap: 2
       }}
     >
@@ -200,6 +200,17 @@ export default function MonthlyPerformanceSection({ enabled, loading, error, dat
         configured={data.disbursed.configured}
         stageName={data.disbursed.stageName}
         missingMessage='No disbursed stage or disbursement activity found this month.'
+      />
+      <MetricPanel
+        title='Monthly Rejected'
+        subtitle='Stage history this month'
+        icon='ri-close-circle-line'
+        accent='error'
+        totalCases={data.rejected?.totalCases || 0}
+        totalAmount={data.rejected?.totalAmount || 0}
+        configured={Boolean(data.rejected?.configured)}
+        stageName={data.rejected?.stageName || null}
+        missingMessage='No Rejected stage is configured. Mark a stage under Loan Status Pipeline.'
       />
     </Box>
   )
@@ -233,7 +244,7 @@ export default function MonthlyPerformanceSection({ enabled, loading, error, dat
               Monthly performance
             </Typography>
             <Typography variant='body2' color='text.secondary'>
-              Logged-in and disbursed cases from stage audit history · {rangeLabel}
+              Logged-in, disbursed, and rejected cases from stage audit history · {rangeLabel}
             </Typography>
           </Box>
           <Button
