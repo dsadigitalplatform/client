@@ -157,6 +157,9 @@ export function toSubscriptionStatusSummary(input: {
 /** Show header countdown when due within this many days (or already expired / overdue). */
 export const SUBSCRIPTION_REMINDER_DAYS = 7
 
+/** Show post-login trial expiry dialog when trial ends within this many days. */
+export const SUBSCRIPTION_TRIAL_DIALOG_DAYS = 3
+
 export type SubscriptionRenewalReminderKind = 'trial' | 'renewal' | 'access_end' | 'overdue' | 'expired'
 
 export type SubscriptionRenewalReminder = {

@@ -24,6 +24,7 @@ import ModeDropdown from '@components/layout/shared/ModeDropdown'
 import UserDropdown from '@components/layout/shared/UserDropdown'
 import SubscriptionPlanChip from '@components/layout/shared/SubscriptionPlanChip'
 import SubscriptionRenewalReminder from '@components/layout/shared/SubscriptionRenewalReminder'
+import TrialExpiryReminderDialog from '@features/subscriptions/components/TrialExpiryReminderDialog'
 import useHorizontalNav from '@menu/hooks/useHorizontalNav'
 import { horizontalLayoutClasses } from '@layouts/utils/layoutClasses'
 import { getCustomers } from '@features/customers/services/customersService'
@@ -339,6 +340,7 @@ const NavbarContent = ({
           />
         </Box>
       </div>
+      {tenantName ? <TrialExpiryReminderDialog canManage={canManageSubscription} /> : null}
     </div>
   )
 }
