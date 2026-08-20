@@ -23,6 +23,7 @@ import ModeDropdown from '@components/layout/shared/ModeDropdown'
 import UserDropdown from '@components/layout/shared/UserDropdown'
 import SubscriptionPlanChip from '@components/layout/shared/SubscriptionPlanChip'
 import SubscriptionRenewalReminder from '@components/layout/shared/SubscriptionRenewalReminder'
+import TrialExpiryReminderDialog from '@features/subscriptions/components/TrialExpiryReminderDialog'
 import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
 import { TenantSelectionGate } from '@features/tenants'
 import { getCustomers } from '@features/customers/services/customersService'
@@ -337,6 +338,7 @@ const NavbarContent = ({
         </Box>
       </div>
       <TenantSelectionGate />
+      {tenantName ? <TrialExpiryReminderDialog canManage={canManageSubscription} /> : null}
     </div>
   )
 }
