@@ -1,7 +1,6 @@
 import { ObjectId, type Db } from 'mongodb'
 
-import { buildRoleScopedLeadFilter } from '@features/reports/server/reportContext.server'
-import { endOfDayIso, startOfDayIso } from '@features/reports/server/reportContext.server'
+import { buildRoleScopedLeadFilter, endOfDayIso, startOfDayIso } from '@features/reports/server/reportContext.server'
 import { buildDisbursementTrackerDetailsLookupStages } from '@features/loan-cases/utils/progressivePaymentListFilter'
 import { resolveReportLeadAmount } from '@features/reports/utils/reportLeadAmount'
 
@@ -13,6 +12,7 @@ export type DisbursementActivityLeadRow = {
   bankName: string | null
   leadCode: string | null
   customerName: string | null
+  customerPhone: string | null
   loanTypeName: string | null
   stageName: string | null
   agentName: string | null
@@ -42,15 +42,19 @@ function buildLeadDimensionFilter(
   }
 
   if (!options.showInactive) filter.isActive = { $ne: false }
+
   if (options.assignedAgentId && ObjectId.isValid(options.assignedAgentId)) {
     filter.assignedAgentId = new ObjectId(options.assignedAgentId)
   }
+
   if (options.customerId && ObjectId.isValid(options.customerId)) {
     filter.customerId = new ObjectId(options.customerId)
   }
+
   if (options.loanTypeId && ObjectId.isValid(options.loanTypeId)) {
     filter.loanTypeId = new ObjectId(options.loanTypeId)
   }
+
   if (options.bankName) filter.bankName = options.bankName
 
   return filter
@@ -117,7 +121,7 @@ export async function getDisbursementActivityLeadsInRange(
           from: 'customers',
           localField: 'customerId',
           foreignField: '_id',
-          pipeline: [{ $project: { fullName: 1 } }],
+          pipeline: [{ $project: { fullName: 1, countryCode: 1, mobile: 1 } }],
           as: 'customer'
         }
       },
@@ -162,6 +166,8 @@ export async function getDisbursementActivityLeadsInRange(
           bankName: 1,
           leadCode: '$code',
           customerName: '$customer.fullName',
+          customerCountryCode: '$customer.countryCode',
+          customerMobile: '$customer.mobile',
           loanTypeName: '$loanType.name',
           stageName: '$stage.name',
           agentName: '$agent.name',
@@ -185,6 +191,7 @@ export async function getDisbursementActivityLeadsInRange(
     bankName: row.bankName != null ? String(row.bankName) : null,
     leadCode: row.leadCode ? String(row.leadCode) : null,
     customerName: row.customerName ? String(row.customerName) : null,
+    customerPhone: [row.customerCountryCode, row.customerMobile].filter(Boolean).join(' ') || null,
     loanTypeName: row.loanTypeName ? String(row.loanTypeName) : null,
     stageName: row.stageName ? String(row.stageName) : null,
     agentName: row.agentName ? String(row.agentName) : null,

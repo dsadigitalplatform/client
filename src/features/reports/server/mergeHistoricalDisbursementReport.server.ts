@@ -27,6 +27,7 @@ function buildDetailFromDisbursement(row: DisbursementActivityLeadRow): ReportDe
     leadId: row.leadId,
     leadCode: row.leadCode,
     customerName: row.customerName,
+    customerPhone: row.customerPhone,
     loanTypeName: row.loanTypeName,
     bankName: row.bankName,
     stageName: row.stageName,
@@ -34,7 +35,7 @@ function buildDetailFromDisbursement(row: DisbursementActivityLeadRow): ReportDe
     requestedAmount: resolveMergedLeadAmount(row.periodDisbursedAmount, leadAmount),
     createdAt: row.createdAt,
     auditStagedDate: row.lastDisbursedDate || null,
-    auditStageName: row.stageName ? `${row.stageName} (disbursement)` : 'Progressive disbursement',
+    auditStageName: 'Disbursed (payment)',
     ...mapReportDisbursementFields(row.disbursementTracker)
   }
 }
@@ -61,6 +62,7 @@ function mergeDetailRows(
 
   for (const disbursementLead of disbursementLeads) {
     const existing = byLead.get(disbursementLead.leadId)
+
     const leadAmount = resolveReportLeadAmount({
       approvedAmount: disbursementLead.approvedAmount,
       requestedAmount: disbursementLead.requestedAmount
@@ -70,6 +72,7 @@ function mergeDetailRows(
       byLead.set(disbursementLead.leadId, {
         ...existing,
         requestedAmount: resolveMergedLeadAmount(disbursementLead.periodDisbursedAmount, leadAmount),
+        customerPhone: existing.customerPhone || disbursementLead.customerPhone,
         stageName: existing.stageName || disbursementLead.stageName,
         ...mapReportDisbursementFields(disbursementLead.disbursementTracker)
       })

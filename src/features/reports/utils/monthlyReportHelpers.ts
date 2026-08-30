@@ -115,6 +115,29 @@ export function findRejectedStageId(stages: ReportFilterOptions['stages']) {
   return findRejectedStageIds(stages)[0] ?? null
 }
 
+/** Header wording for the historical staged-date column, based on the stages being reported on. */
+export function resolveStagedDateLabel(
+  filters: Partial<ReportFilters>,
+  stages: ReportFilterOptions['stages']
+) {
+  const activeStageIds =
+    filters.stageIds && filters.stageIds.length > 0 ? filters.stageIds : filters.stageId ? [filters.stageId] : []
+
+  const disbursedStageId = findDisbursedStageId(stages)
+  const loggedInStageIds = findLoggedInStageIds(stages)
+  const rejectedStageIds = findRejectedStageIds(stages)
+
+  if (disbursedStageId && activeStageIds.includes(disbursedStageId)) return 'Disbursed date'
+  if (activeStageIds.length === 0 && filters.includeDisbursementActivityInRange) return 'Disbursed date'
+
+  if (activeStageIds.length > 0) {
+    if (activeStageIds.every(id => loggedInStageIds.includes(id))) return 'Logged in date'
+    if (activeStageIds.every(id => rejectedStageIds.includes(id))) return 'Rejected date'
+  }
+
+  return 'Staged date'
+}
+
 function sameSortedIds(a: string[], b: string[]) {
   if (a.length !== b.length) return false
 

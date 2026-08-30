@@ -1,8 +1,10 @@
 'use client'
 
-import Link from 'next/link'
 import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 
+import Link from 'next/link'
+
+import Avatar from '@mui/material/Avatar'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
@@ -27,7 +29,6 @@ import {
   type ReportDetailRow,
   type ReportQueryResponse
 } from '../reports.types'
-import { LeadIdentity } from '@features/loan-cases/components/LeadCodeDisplay'
 import { buildDetailGroups } from '../utils/buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from '../utils/exportReport'
 import {
@@ -39,6 +40,7 @@ import {
 type Props = {
   data: ReportQueryResponse
   groupBySecondary: ReportDetailGroupDimension | null
+  stagedDateLabel?: string
 }
 
 function groupRowId(level: 'primary' | 'secondary', parentKey: string, key: string) {
@@ -112,6 +114,161 @@ function DisbursementBalanceCell({ row }: { row: ReportDetailRow }) {
   )
 }
 
+const CUSTOMER_AVATAR_TONES = ['primary', 'success', 'warning', 'info', 'secondary', 'error'] as const
+
+function customerInitials(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean)
+
+  if (parts.length === 0) return '?'
+
+  const first = parts[0]?.[0] ?? ''
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
+
+  return `${first}${last}`.toUpperCase() || '?'
+}
+
+/** Stable per-customer colour so the same person keeps the same avatar tone across runs. */
+function customerAvatarTone(name: string) {
+  let hash = 0
+
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 9973
+
+  return CUSTOMER_AVATAR_TONES[hash % CUSTOMER_AVATAR_TONES.length]
+}
+
+function ReportCustomerCell({ row, size = 'default' }: { row: ReportDetailRow; size?: 'default' | 'large' }) {
+  const theme = useTheme()
+  const name = (row.customerName ?? '').trim() || 'Unknown customer'
+  const tone = theme.palette[customerAvatarTone(name)]
+  const avatarSize = size === 'large' ? 38 : 32
+  const phone = row.customerPhone?.trim() || null
+  const dialable = phone ? phone.replace(/[^\d+]/g, '') : null
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+      <Avatar
+        sx={{
+          width: avatarSize,
+          height: avatarSize,
+          flexShrink: 0,
+          fontSize: size === 'large' ? '0.85rem' : '0.75rem',
+          fontWeight: 800,
+          letterSpacing: 0.3,
+          bgcolor: alpha(tone.main, 0.12),
+          color: tone.main,
+          border: `1px solid ${alpha(tone.main, 0.28)}`
+        }}
+      >
+        {customerInitials(name)}
+      </Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <MuiLink
+          component={Link}
+          href={`/loan-cases/${row.leadId}`}
+          underline='hover'
+          color='text.primary'
+          title={name}
+          sx={{
+            display: 'block',
+            fontWeight: 800,
+            fontSize: size === 'large' ? '0.95rem' : '0.875rem',
+            lineHeight: 1.35,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {name}
+        </MuiLink>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mt: 0.15, minWidth: 0 }}>
+          {row.leadCode ? (
+            <Typography
+              variant='caption'
+              color='text.secondary'
+              title={row.leadCode}
+              sx={{
+                fontFamily: 'monospace',
+                fontWeight: 600,
+                letterSpacing: 0.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {row.leadCode}
+            </Typography>
+          ) : null}
+          {row.leadCode && phone ? (
+            <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'text.disabled', flexShrink: 0 }} />
+          ) : null}
+          {phone ? (
+            <MuiLink
+              href={`tel:${dialable}`}
+              underline='none'
+              variant='caption'
+              color='text.secondary'
+              title={`Call ${phone}`}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.35,
+                whiteSpace: 'nowrap',
+                '&:hover': { color: 'primary.main' }
+              }}
+            >
+              <Box component='i' className='ri-phone-line' sx={{ fontSize: '0.85rem', lineHeight: 1 }} />
+              {phone}
+            </MuiLink>
+          ) : null}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+function HistoricalStageSummary({ row }: { row: ReportDetailRow }) {
+  const eventStage = row.auditStageName ?? row.stageName ?? '—'
+  const currentStage = row.stageName ?? null
+  const hasMovedOn = Boolean(currentStage && currentStage !== eventStage)
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, minWidth: 0 }}>
+      <Chip
+        size='small'
+        color='warning'
+        variant='outlined'
+        label={eventStage}
+        title={hasMovedOn ? `${eventStage} in this period` : eventStage}
+        sx={{ maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+      />
+      {hasMovedOn ? (
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 }}
+          title={`Now in ${currentStage}`}
+        >
+          <Box
+            component='i'
+            className='ri-arrow-right-line'
+            sx={{ color: 'text.disabled', fontSize: '0.95rem', lineHeight: 1 }}
+          />
+          <Typography
+            variant='caption'
+            sx={{
+              fontWeight: 700,
+              color: 'info.main',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {currentStage}
+          </Typography>
+        </Box>
+      ) : null}
+    </Box>
+  )
+}
+
 function DetailRowCells({
   row,
   isHistorical,
@@ -127,18 +284,12 @@ function DetailRowCells({
 }) {
   return (
     <>
-      <TableCell sx={{ pl: 2 + indent * 3 }}>
-        <LeadIdentity customerName={row.customerName ?? '—'} code={row.leadCode} />
+      <TableCell sx={{ pl: 2 + indent * 3, minWidth: 230 }}>
+        <ReportCustomerCell row={row} />
       </TableCell>
       {showLoanType ? <TableCell>{row.loanTypeName ?? '—'}</TableCell> : null}
       <TableCell>{row.bankName ?? '—'}</TableCell>
-      <TableCell>
-        {isHistorical ? (
-          <Chip size='small' color='warning' variant='outlined' label={row.auditStageName ?? row.stageName ?? '—'} />
-        ) : (
-          row.stageName ?? '—'
-        )}
-      </TableCell>
+      <TableCell>{isHistorical ? <HistoricalStageSummary row={row} /> : row.stageName ?? '—'}</TableCell>
       {isHistorical ? <TableCell>{row.auditStagedDate ?? '—'}</TableCell> : null}
       <TableCell>{row.agentName ?? '—'}</TableCell>
       <TableCell align='right'>
@@ -155,11 +306,6 @@ function DetailRowCells({
         </>
       ) : null}
       {!isHistorical ? <TableCell>{formatDate(row.createdAt)}</TableCell> : null}
-      <TableCell align='right'>
-        <MuiLink component={Link} href={`/loan-cases/${row.leadId}`} underline='hover'>
-          Open
-        </MuiLink>
-      </TableCell>
     </>
   )
 }
@@ -333,10 +479,10 @@ function MobileGroupHeader({
 function MobileDetailField({ label, value }: { label: string; value: ReactNode }) {
   return (
     <>
-      <Typography variant='caption' color='text.secondary' sx={{ pt: 0.25 }}>
+      <Typography variant='caption' color='text.secondary' sx={{ pt: 0.25, minWidth: 0 }}>
         {label}
       </Typography>
-      <Typography variant='body2' sx={{ wordBreak: 'break-word' }}>
+      <Typography component='div' variant='body2' sx={{ minWidth: 0, display: 'flex', alignItems: 'center', wordBreak: 'break-word' }}>
         {value}
       </Typography>
     </>
@@ -384,35 +530,22 @@ function MobileDetailCard({
   row,
   isHistorical,
   showDisbursement,
-  showLoanType
+  showLoanType,
+  stagedDateLabel
 }: {
   row: ReportDetailRow
   isHistorical: boolean
   showDisbursement: boolean
   showLoanType: boolean
+  stagedDateLabel: string
 }) {
-  const stageValue = isHistorical ? (
-    <Chip size='small' color='warning' variant='outlined' label={row.auditStageName ?? row.stageName ?? '—'} sx={{ height: 22 }} />
-  ) : (
-    (row.stageName ?? '—')
-  )
+  const stageValue = isHistorical ? <HistoricalStageSummary row={row} /> : row.stageName ?? '—'
 
   return (
     <Card variant='outlined' sx={{ borderColor: 'divider' }}>
       <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1.25 }}>
-          <Box sx={{ minWidth: 0 }}>
-            <LeadIdentity customerName={row.customerName ?? 'Unknown customer'} code={row.leadCode} />
-          </Box>
-          <MuiLink
-            component={Link}
-            href={`/loan-cases/${row.leadId}`}
-            underline='hover'
-            variant='body2'
-            sx={{ flexShrink: 0, fontWeight: 600 }}
-          >
-            View
-          </MuiLink>
+        <Box sx={{ mb: 1.25, pb: 1.25, borderBottom: '1px dashed', borderColor: 'divider' }}>
+          <ReportCustomerCell row={row} size='large' />
         </Box>
         <Box
           sx={{
@@ -425,7 +558,7 @@ function MobileDetailCard({
         >
           {showLoanType ? <MobileDetailField label='Loan type' value={row.loanTypeName ?? '—'} /> : null}
           <MobileDetailField label='Bank' value={row.bankName ?? '—'} />
-          <MobileDetailField label={isHistorical ? 'Stage (audit)' : 'Stage'} value={stageValue} />
+          <MobileDetailField label={isHistorical ? 'Stage → current' : 'Stage'} value={stageValue} />
           <MobileDetailField label='Agent' value={row.agentName ?? '—'} />
           <MobileDetailField
             label='Amount'
@@ -436,7 +569,7 @@ function MobileDetailCard({
             }
           />
           <MobileDetailField
-            label={isHistorical ? 'Staged' : 'Created'}
+            label={isHistorical ? stagedDateLabel : 'Created'}
             value={isHistorical ? (row.auditStagedDate ?? '—') : formatDate(row.createdAt)}
           />
         </Box>
@@ -446,14 +579,30 @@ function MobileDetailCard({
   )
 }
 
-export default function ReportsTableSection({ data, groupBySecondary }: Props) {
+export default function ReportsTableSection({ data, groupBySecondary, stagedDateLabel = 'Staged date' }: Props) {
   const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const isCompact = useMediaQuery(theme.breakpoints.down('lg'))
   const isHistorical = data.dataMode === 'historical'
   const hasSecondary = Boolean(groupBySecondary && groupBySecondary !== data.groupBy)
   const showDisbursement = useMemo(() => hasReportDisbursementData(data.details), [data.details])
   const showLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
   const groupBannerColSpan = (isHistorical ? 5 : 4) + (showLoanType ? 1 : 0)
+
+  const tableMinWidth = isHistorical
+    ? showDisbursement
+      ? showLoanType
+        ? 1180
+        : 1080
+      : showLoanType
+        ? 980
+        : 900
+    : showDisbursement
+      ? showLoanType
+        ? 980
+        : 900
+      : showLoanType
+        ? 780
+        : 700
 
   const groups = useMemo(
     () =>
@@ -525,7 +674,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
     '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.18) }
   }
 
-  if (isMobile) {
+  if (isCompact) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
@@ -594,6 +743,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                     isHistorical={isHistorical}
                                     showDisbursement={showDisbursement}
                                     showLoanType={showLoanType}
+                                    stagedDateLabel={stagedDateLabel}
                                   />
                                 ))}
                               </Box>
@@ -608,6 +758,7 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                           isHistorical={isHistorical}
                           showDisbursement={showDisbursement}
                           showLoanType={showLoanType}
+                          stagedDateLabel={stagedDateLabel}
                         />
                       ))}
                 </Box>
@@ -664,15 +815,15 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
         </Box>
 
         <TableContainer sx={{ overflowX: 'auto' }}>
-          <Table size='small' sx={{ tableLayout: 'fixed', minWidth: showDisbursement ? (showLoanType ? 980 : 900) : showLoanType ? 780 : 700 }}>
+          <Table size='small' sx={{ width: '100%', tableLayout: 'fixed', minWidth: tableMinWidth }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 44, px: 0.5, textAlign: 'center' }} aria-label='Row level' />
                 <TableCell sx={{ minWidth: 200 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
                 {showLoanType ? <TableCell>Loan type</TableCell> : null}
                 <TableCell>Bank</TableCell>
-                <TableCell>{isHistorical ? 'Stage (audit)' : 'Stage'}</TableCell>
-                {isHistorical ? <TableCell>Staged date</TableCell> : null}
+                <TableCell>{isHistorical ? 'Stage → current' : 'Stage'}</TableCell>
+                {isHistorical ? <TableCell>{stagedDateLabel}</TableCell> : null}
                 <TableCell>Agent</TableCell>
                 <TableCell align='right' sx={{ width: 120 }}>
                   Amount
@@ -686,7 +837,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                   </>
                 ) : null}
                 {!isHistorical ? <TableCell>Created</TableCell> : null}
-                <TableCell sx={{ width: 64 }} />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -722,7 +872,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                         </>
                       ) : null}
                       {!isHistorical ? <TableCell /> : null}
-                      <TableCell />
                     </TableRow>
 
                     {!primaryCollapsed && hasSecondary
@@ -759,7 +908,6 @@ export default function ReportsTableSection({ data, groupBySecondary }: Props) {
                                   </>
                                 ) : null}
                                 {!isHistorical ? <TableCell /> : null}
-                                <TableCell />
                               </TableRow>
 
                               {!secondaryCollapsed

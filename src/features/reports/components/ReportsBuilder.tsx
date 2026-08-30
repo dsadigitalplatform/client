@@ -228,7 +228,7 @@ export default function ReportsBuilder({ filters, filterOptions, loading, disabl
                 fullWidth
                 size='small'
                 type='date'
-                label='Created from'
+                label={filters.dataMode === 'historical' ? 'Staged from' : 'Created from'}
                 InputLabelProps={{ shrink: true }}
                 value={filters.dateFrom ?? ''}
                 onChange={e => onChange('dateFrom', e.target.value || null)}
@@ -240,7 +240,7 @@ export default function ReportsBuilder({ filters, filterOptions, loading, disabl
                 fullWidth
                 size='small'
                 type='date'
-                label='Created to'
+                label={filters.dataMode === 'historical' ? 'Staged to' : 'Created to'}
                 InputLabelProps={{ shrink: true }}
                 value={filters.dateTo ?? ''}
                 onChange={e => onChange('dateTo', e.target.value || null)}
