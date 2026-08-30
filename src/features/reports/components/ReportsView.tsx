@@ -17,6 +17,7 @@ import { useTenantModuleAccess } from '@features/subscriptions/hooks/useTenantMo
 
 import { useReports } from '../hooks/useReports'
 import type { ReportPreset } from '../reports.types'
+import { resolveStagedDateLabel } from '../utils/monthlyReportHelpers'
 import ReportsBuilder from './ReportsBuilder'
 import ReportsChartSection from './ReportsChartSection'
 import ReportsExportActions from './ReportsExportActions'
@@ -50,6 +51,12 @@ export default function ReportsView() {
   }
 
   const showResults = useMemo(() => Boolean(data && !loading && !locked), [data, loading, locked])
+
+  const stagedDateLabel = useMemo(
+    () => resolveStagedDateLabel(data?.filtersApplied ?? {}, filterOptions?.stages ?? []),
+    [data?.filtersApplied, filterOptions?.stages]
+  )
+
   const actionsDisabled = locked || loading || optionsLoading
 
   return (
@@ -174,7 +181,11 @@ export default function ReportsView() {
         <Box id='report-output' sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <ReportsSummarySection summary={data.summary} />
           <ReportsChartSection data={data} />
-          <ReportsTableSection data={data} groupBySecondary={filters.groupBySecondary} />
+          <ReportsTableSection
+            data={data}
+            groupBySecondary={filters.groupBySecondary}
+            stagedDateLabel={stagedDateLabel}
+          />
           <Typography variant='caption' color='text.secondary'>
             Generated at {new Date(data.generatedAt).toLocaleString()}
           </Typography>

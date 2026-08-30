@@ -364,7 +364,7 @@ async function runSnapshotReport(
             from: 'customers',
             localField: 'customerId',
             foreignField: '_id',
-            pipeline: [{ $project: { fullName: 1 } }],
+            pipeline: [{ $project: { fullName: 1, countryCode: 1, mobile: 1 } }],
             as: 'customer'
           }
         },
@@ -405,6 +405,8 @@ async function runSnapshotReport(
             leadId: { $toString: '$_id' },
             leadCode: '$code',
             customerName: '$customer.fullName',
+            customerCountryCode: '$customer.countryCode',
+            customerMobile: '$customer.mobile',
             loanTypeName: '$loanType.name',
             bankName: 1,
             stageName: '$stage.name',
@@ -422,6 +424,7 @@ async function runSnapshotReport(
       leadId: String(r.leadId),
       leadCode: r.leadCode ? String(r.leadCode) : null,
       customerName: r.customerName ? String(r.customerName) : null,
+      customerPhone: [r.customerCountryCode, r.customerMobile].filter(Boolean).join(' ') || null,
       loanTypeName: r.loanTypeName ? String(r.loanTypeName) : null,
       bankName: r.bankName != null ? String(r.bankName) : null,
       stageName: r.stageName ? String(r.stageName) : null,
@@ -476,6 +479,7 @@ async function runHistoricalReport(
       trend: [] as ReportTrendRow[],
       details: [] as ReportDetailRow[]
     }
+
     const merged = mergeHistoricalWithDisbursementActivity(emptyHistorical, disbursementLeads, groupBy)
 
     return {
@@ -518,8 +522,10 @@ async function runHistoricalReport(
     { $ne: ['$effectiveStagedDate', ''] }
   ]
 
-  if (filters.dateFrom) stagedDateConditions.push({ $gte: ['$effectiveStagedDate', filters.dateFrom] })
-  if (filters.dateTo) stagedDateConditions.push({ $lte: ['$effectiveStagedDate', filters.dateTo] })
+  const stagedDateRangeConditions: Record<string, unknown>[] = [...stagedDateConditions]
+
+  if (filters.dateFrom) stagedDateRangeConditions.push({ $gte: ['$effectiveStagedDate', filters.dateFrom] })
+  if (filters.dateTo) stagedDateRangeConditions.push({ $lte: ['$effectiveStagedDate', filters.dateTo] })
 
   const leadRoleFilter =
     role !== 'ADMIN' && role !== 'OWNER'
@@ -540,7 +546,6 @@ async function runHistoricalReport(
   const basePipeline: Record<string, unknown>[] = [
     { $match: { $expr: { $and: auditMatchConditions } } },
     { $addFields: { effectiveStagedDate: effectiveStagedDateExpression() } },
-    { $match: { $expr: { $and: stagedDateConditions } } },
     {
       $addFields: {
         leadIdObj: {
@@ -572,10 +577,20 @@ async function runHistoricalReport(
         }
       }
     },
+    { $sort: { createdAt: -1, _id: -1 } },
+    {
+      $group: {
+        _id: '$leadIdObj',
+        effectiveStagedDate: { $first: '$effectiveStagedDate' },
+        matchedStageId: { $first: '$matchedStageId' },
+        matchedStageName: { $first: '$matchedStageName' }
+      }
+    },
+    { $match: { $expr: { $and: stagedDateRangeConditions } } },
     {
       $lookup: {
         from: 'loanCases',
-        localField: 'leadIdObj',
+        localField: '_id',
         foreignField: '_id',
         as: 'lead'
       }
@@ -774,7 +789,7 @@ async function runHistoricalReport(
             from: 'customers',
             localField: 'customerId',
             foreignField: '_id',
-            pipeline: [{ $project: { fullName: 1 } }],
+            pipeline: [{ $project: { fullName: 1, countryCode: 1, mobile: 1 } }],
             as: 'customer'
           }
         },
@@ -799,14 +814,27 @@ async function runHistoricalReport(
           }
         },
         { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: 'loanStatusPipelineStages',
+            localField: 'stageId',
+            foreignField: '_id',
+            pipeline: [{ $project: { name: 1 } }],
+            as: 'currentStage'
+          }
+        },
+        { $unwind: { path: '$currentStage', preserveNullAndEmptyArrays: true } },
         ...buildDisbursementTrackerDetailsLookupStages(tenantIdObj, tenantIdHex),
         {
           $project: {
             leadId: { $toString: '$_id' },
             leadCode: '$code',
             customerName: '$customer.fullName',
+            customerCountryCode: '$customer.countryCode',
+            customerMobile: '$customer.mobile',
             loanTypeName: '$loanType.name',
             bankName: 1,
+            stageName: '$currentStage.name',
             agentName: '$agent.name',
             approvedAmount: 1,
             requestedAmount: 1,
@@ -823,9 +851,10 @@ async function runHistoricalReport(
       leadId: String(r.leadId),
       leadCode: r.leadCode ? String(r.leadCode) : null,
       customerName: r.customerName ? String(r.customerName) : null,
+      customerPhone: [r.customerCountryCode, r.customerMobile].filter(Boolean).join(' ') || null,
       loanTypeName: r.loanTypeName ? String(r.loanTypeName) : null,
       bankName: r.bankName != null ? String(r.bankName) : null,
-      stageName: r.auditStageName ? String(r.auditStageName) : null,
+      stageName: r.stageName ? String(r.stageName) : null,
       agentName: r.agentName ? String(r.agentName) : null,
       requestedAmount: resolveReportLeadAmount({
         approvedAmount: r.approvedAmount != null ? Number(r.approvedAmount) : null,
@@ -895,8 +924,8 @@ export async function GET(request: Request) {
   const disclaimer =
     filters.dataMode === 'historical'
       ? filters.includeDisbursementActivityInRange
-        ? 'Historical report: includes leads that reached the Disbursed stage and leads with progressive disbursement payments recorded during the selected period. Amounts for disbursement activity reflect payments in the period; stage entries use approved/requested loan amounts. Current pipeline position may differ.'
-        : 'Historical report: counts reflect stage movements recorded in audit logs during the selected period. A lead may appear multiple times if it moved through multiple stages. Current pipeline position may differ.'
+        ? 'Historical report: uses the latest matching stage update for each lead and includes leads that reached the Disbursed stage or had progressive disbursement payments during the selected period. Amounts for disbursement activity reflect payments in the period; stage entries use approved/requested loan amounts. Current pipeline position may differ.'
+        : 'Historical report: uses the latest matching stage update for each lead; only leads whose latest submitted stage date falls in the selected period are included. Current pipeline position may differ.'
       : null
 
   let result: { summary: ReportSummary; breakdown: ReportBreakdownRow[]; trend: ReportTrendRow[]; details: ReportDetailRow[] }

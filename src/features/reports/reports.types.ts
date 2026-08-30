@@ -17,6 +17,7 @@ export type ReportProgressivePaymentFilter = 'ready_to_track' | 'tracking_active
 export type ReportFilters = {
   dataMode: ReportDataMode
   groupBy: ReportGroupBy
+
   /** Second nesting level for the detailed table (e.g. agent → stage). */
   groupBySecondary: ReportDetailGroupDimension | null
   view: ReportViewType
@@ -25,6 +26,7 @@ export type ReportFilters = {
   dateFrom: string | null
   dateTo: string | null
   stageId: string | null
+
   /** When set, historical reports include audit records for all listed stages. */
   stageIds: string[] | null
   assignedAgentId: string | null
@@ -33,6 +35,7 @@ export type ReportFilters = {
   bankName: string | null
   showInactive: boolean
   progressivePaymentFilter: ReportProgressivePaymentFilter | null
+
   /** Include leads with progressive disbursement line items in the date range. */
   includeDisbursementActivityInRange: boolean
 }
@@ -58,6 +61,7 @@ export type ReportDetailRow = {
   leadId: string
   leadCode: string | null
   customerName: string | null
+  customerPhone?: string | null
   loanTypeName: string | null
   bankName: string | null
   stageName: string | null

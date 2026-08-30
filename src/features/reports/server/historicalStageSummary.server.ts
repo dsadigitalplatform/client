@@ -61,7 +61,11 @@ export async function getHistoricalStageSummary(
 
   const stagedDateConditions: Record<string, unknown>[] = [
     { $ne: ['$effectiveStagedDate', null] },
-    { $ne: ['$effectiveStagedDate', ''] },
+    { $ne: ['$effectiveStagedDate', ''] }
+  ]
+
+  const stagedDateRangeConditions: Record<string, unknown>[] = [
+    ...stagedDateConditions,
     { $gte: ['$effectiveStagedDate', dateFrom] },
     { $lte: ['$effectiveStagedDate', dateTo] }
   ]
@@ -90,10 +94,18 @@ export async function getHistoricalStageSummary(
           }
         }
       },
+      { $sort: { createdAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: '$leadIdObj',
+          effectiveStagedDate: { $first: '$effectiveStagedDate' }
+        }
+      },
+      { $match: { $expr: { $and: stagedDateRangeConditions } } },
       {
         $lookup: {
           from: 'loanCases',
-          localField: 'leadIdObj',
+          localField: '_id',
           foreignField: '_id',
           as: 'lead'
         }
@@ -147,7 +159,11 @@ export async function getHistoricalStageLeadAmountsInRange(
 
   const stagedDateConditions: Record<string, unknown>[] = [
     { $ne: ['$effectiveStagedDate', null] },
-    { $ne: ['$effectiveStagedDate', ''] },
+    { $ne: ['$effectiveStagedDate', ''] }
+  ]
+
+  const stagedDateRangeConditions: Record<string, unknown>[] = [
+    ...stagedDateConditions,
     { $gte: ['$effectiveStagedDate', dateFrom] },
     { $lte: ['$effectiveStagedDate', dateTo] }
   ]
@@ -176,10 +192,18 @@ export async function getHistoricalStageLeadAmountsInRange(
           }
         }
       },
+      { $sort: { createdAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: '$leadIdObj',
+          effectiveStagedDate: { $first: '$effectiveStagedDate' }
+        }
+      },
+      { $match: { $expr: { $and: stagedDateRangeConditions } } },
       {
         $lookup: {
           from: 'loanCases',
-          localField: 'leadIdObj',
+          localField: '_id',
           foreignField: '_id',
           as: 'lead'
         }
