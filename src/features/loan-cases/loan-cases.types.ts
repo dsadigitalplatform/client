@@ -65,6 +65,8 @@ export type LoanCaseDetails = {
   id: string
   customerId: string
   customerName: string
+  customerCountryCode: string | null
+  customerMobile: string | null
   loanTypeId: string
   loanTypeName: string
   bankName: string | null
