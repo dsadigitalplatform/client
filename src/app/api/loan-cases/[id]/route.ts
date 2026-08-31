@@ -13,6 +13,7 @@ import { parseStageSubmittedDate } from '@features/loan-cases/utils/stageSubmitt
 import { fetchLeadCurrentStageSubmittedDate } from '@features/loan-cases/utils/stageAuditDate'
 
 import { authOptions } from '@/lib/auth'
+import { isValidCountryCode } from '@/lib/countryCodes'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 import { resolveBankForLead } from '@/app/api/banks/_helpers'
@@ -248,7 +249,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
 
   const customer = await db
     .collection('customers')
-    .findOne({ _id: (row as any).customerId, tenantId: tenantIdObj }, { projection: { fullName: 1 } })
+    .findOne(
+      { _id: (row as any).customerId, tenantId: tenantIdObj },
+      { projection: { fullName: 1, countryCode: 1, mobile: 1 } }
+    )
 
   const loanType = await db
     .collection('loanTypes')
@@ -333,6 +337,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     id: String((row as any)._id),
     customerId: String((row as any).customerId),
     customerName: customer ? String((customer as any).fullName || '') : '',
+    customerCountryCode: customer
+      ? isValidCountryCode((customer as any).countryCode)
+        ? String((customer as any).countryCode)
+        : '+91'
+      : null,
+    customerMobile: customer ? String((customer as any).mobile || '') || null : null,
     loanTypeId: String((row as any).loanTypeId),
     loanTypeName: loanType ? String((loanType as any).name || '') : '',
     bankId: bank ? String(bank._id) : (row as any).bankId ? String((row as any).bankId) : null,

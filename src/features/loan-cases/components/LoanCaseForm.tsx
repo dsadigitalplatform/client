@@ -37,6 +37,7 @@ import Grid from '@mui/material/Grid'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import InputLabel from '@mui/material/InputLabel'
+import MuiLink from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
@@ -141,6 +142,23 @@ const CREATE_CUSTOMER_OPTION: Customer = {
   source: 'OTHER',
   requestedLeadAmountTotal: 0,
   createdAt: null
+}
+
+function formatCustomerPhone(customer: Pick<Customer, 'countryCode' | 'mobile'> | null | undefined) {
+  const mobile = customer?.mobile?.trim() || ''
+
+  if (!mobile) return ''
+
+  const digits = mobile.replace(/\D/g, '')
+  const formattedMobile = digits.length === 10 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : mobile
+
+  return [customer?.countryCode?.trim(), formattedMobile].filter(Boolean).join(' ')
+}
+
+function getCustomerPhoneHref(phone: string) {
+  const dialable = phone.replace(/[^\d+]/g, '')
+
+  return dialable ? `tel:${dialable}` : null
 }
 
 type LeadFormSectionProps = {
@@ -699,7 +717,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
     if (customerValue?.id !== customerId) setCustomerValue(found)
 
     if (customerInputValue.trim().length === 0) {
-      setCustomerInputValue(`${found.fullName}${found.mobile ? ` (${found.mobile})` : ''}`)
+      setCustomerInputValue(found.fullName)
     }
   }, [customerId, customerInputValue, customerValue?.id, customers])
 
@@ -785,8 +803,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
           id: data.customerId,
           code: null,
           fullName: data.customerName || '',
-          countryCode: '+91',
-          mobile: '',
+          countryCode: data.customerCountryCode || '+91',
+          mobile: data.customerMobile || '',
           isNRI: false,
           email: null,
           remarks: null,
@@ -797,6 +815,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
           requestedLeadAmountTotal: 0,
           createdAt: null
         })
+
         setCustomerInputValue(data.customerName || '')
         setLoanTypeId(data.loanTypeId)
         setStageId(data.stageId)
@@ -1300,6 +1319,8 @@ const LoanCaseForm = ({ caseId }: Props) => {
   }
 
   const saveLabel = submitting ? 'Saving...' : 'Save'
+  const selectedCustomerPhone = formatCustomerPhone(customerValue)
+  const selectedCustomerPhoneHref = getCustomerPhoneHref(selectedCustomerPhone)
 
   return (
     <Box sx={{ pb: isMobile ? 10 : 0 }}>
@@ -1395,6 +1416,22 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       Customer
                     </Typography>
                     <Typography variant='body1'>{customerValue?.fullName || 'N/A'}</Typography>
+                    {selectedCustomerPhoneHref ? (
+                      <MuiLink
+                        component='a'
+                        href={selectedCustomerPhoneHref}
+                        underline='hover'
+                        color='primary.main'
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, mt: 0.5, fontWeight: 600 }}
+                      >
+                        <i className='ri-phone-line' />
+                        {selectedCustomerPhone}
+                      </MuiLink>
+                    ) : selectedCustomerPhone ? (
+                      <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                        {selectedCustomerPhone}
+                      </Typography>
+                    ) : null}
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <Typography variant='body2' fontWeight={600} color='text.secondary'>
@@ -1655,11 +1692,31 @@ const LoanCaseForm = ({ caseId }: Props) => {
                     options={customerOptions}
                     value={customerValue}
                     loading={customersLoading}
-                    getOptionLabel={o =>
-                      o.id === CREATE_CUSTOMER_OPTION_ID ? o.fullName : `${o.fullName}${o.mobile ? ` (${o.mobile})` : ''}`
-                    }
+                    readOnly={isLocked || !isActive}
+                    disableClearable={isLocked || !isActive}
+                    forcePopupIcon={!(isLocked || !isActive)}
+                    noOptionsText={customerInputValue ? 'No customers found' : 'Start typing to search customers'}
+                    getOptionLabel={o => o.fullName}
+                    filterOptions={(options, state) => {
+                      const query = state.inputValue.trim().toLowerCase()
+
+                      return options.filter(option => {
+                        if (option.id === CREATE_CUSTOMER_OPTION_ID) return true
+                        if (!query) return true
+
+                        const phone = formatCustomerPhone(option).toLowerCase()
+
+                        return (
+                          option.fullName.toLowerCase().includes(query) ||
+                          phone.includes(query) ||
+                          option.mobile.toLowerCase().includes(query)
+                        )
+                      })
+                    }}
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     onChange={(_, v) => {
+                      if (isLocked || !isActive) return
+
                       if (v?.id === CREATE_CUSTOMER_OPTION_ID) {
                         if (createCustomerLocked) return
                         setOpenAddCustomer(true)
@@ -1669,23 +1726,23 @@ const LoanCaseForm = ({ caseId }: Props) => {
 
                       setCustomerValue(v)
                       setCustomerId(v?.id || '')
-                      setCustomerInputValue(v ? `${v.fullName}${v.mobile ? ` (${v.mobile})` : ''}` : '')
+                      setCustomerInputValue(v?.fullName || '')
                       if (!v) setSearch('')
                     }}
                     inputValue={customerInputValue}
                     onInputChange={(_, v, reason) => {
+                      if (isLocked || !isActive) return
                       setCustomerInputValue(v)
                       if (reason === 'input') setSearch(v)
                       if (reason === 'clear') setSearch('')
                     }}
-                    disabled={isLocked || !isActive}
-                    renderOption={(props, option) => (
-                      <Box
-                        component='li'
-                        {...props}
-                        sx={
-                          option.id === CREATE_CUSTOMER_OPTION_ID
-                            ? {
+                    renderOption={(props, option) => {
+                      if (option.id === CREATE_CUSTOMER_OPTION_ID) {
+                        return (
+                          <Box
+                            component='li'
+                            {...props}
+                            sx={{
                               position: 'sticky',
                               bottom: 0,
                               zIndex: 1,
@@ -1699,29 +1756,134 @@ const LoanCaseForm = ({ caseId }: Props) => {
                               justifyContent: 'center',
                               gap: 1,
                               py: 1.25
-                            }
-                            : undefined
-                        }
-                      >
-                        {option.id === CREATE_CUSTOMER_OPTION_ID ? <i className='ri-user-add-line' /> : null}
-                        {option.id === CREATE_CUSTOMER_OPTION_ID
-                          ? 'Add New Customer'
-                          : `${option.fullName}${option.mobile ? ` (${option.mobile})` : ''}`}
-                      </Box>
-                    )}
+                            }}
+                          >
+                            <i className='ri-user-add-line' />
+                            Add New Customer
+                          </Box>
+                        )
+                      }
+
+                      const phone = formatCustomerPhone(option)
+                      const phoneHref = getCustomerPhoneHref(phone)
+
+                      return (
+                        <Box component='li' {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: '0.875rem' }}>
+                            {option.fullName
+                              .split(' ')
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map(part => part[0]?.toUpperCase())
+                              .join('')}
+                          </Avatar>
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography variant='body2' sx={{ fontWeight: 600 }} noWrap>
+                              {option.fullName}
+                            </Typography>
+                            {phoneHref ? (
+                              <MuiLink
+                                component='a'
+                                href={phoneHref}
+                                underline='hover'
+                                color='text.secondary'
+                                variant='caption'
+                                onMouseDown={event => event.stopPropagation()}
+                                onClick={event => event.stopPropagation()}
+                                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                              >
+                                <i className='ri-phone-line' />
+                                {phone}
+                              </MuiLink>
+                            ) : (
+                              <Typography variant='caption' color='text.disabled'>
+                                Phone number unavailable
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      )
+                    }}
                     renderInput={params => (
                       <TextField
                         {...params}
                         label='Customer'
+                        placeholder='Search by name or phone'
                         error={!!fieldErrors.customerId}
                         helperText={fieldErrors.customerId}
+                        inputProps={{
+                          ...params.inputProps,
+                          readOnly: isLocked || !isActive
+                        }}
                         InputProps={{
                           ...params.InputProps,
                           startAdornment: (
                             <InputAdornment position='start'>
-                              <i className='ri-user-line' />
+                              <Avatar
+                                sx={{
+                                  width: 34,
+                                  height: 34,
+                                  bgcolor: customerValue ? 'primary.main' : 'action.hover',
+                                  color: customerValue ? 'primary.contrastText' : 'text.secondary',
+                                  fontSize: '0.8rem'
+                                }}
+                              >
+                                {customerValue ? (
+                                  customerValue.fullName
+                                    .split(' ')
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .map(part => part[0]?.toUpperCase())
+                                    .join('')
+                                ) : (
+                                  <i className='ri-search-line' />
+                                )}
+                              </Avatar>
                             </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.25 }}>
+                              {customerValue && selectedCustomerPhoneHref ? (
+                                <Chip
+                                  component='a'
+                                  href={selectedCustomerPhoneHref}
+                                  clickable
+                                  size='small'
+                                  color='primary'
+                                  variant='outlined'
+                                  icon={<i className='ri-phone-line' />}
+                                  label={isLocked || !isActive ? 'Call' : selectedCustomerPhone}
+                                  aria-label={`Call ${customerValue.fullName} at ${selectedCustomerPhone}`}
+                                  onMouseDown={event => event.stopPropagation()}
+                                  onClick={event => event.stopPropagation()}
+                                  sx={{
+                                    height: 28,
+                                    maxWidth: { xs: 92, sm: 220 },
+                                    pointerEvents: 'auto',
+                                    fontWeight: 700,
+                                    '& .MuiChip-label': {
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis'
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              {params.InputProps.endAdornment}
+                            </Box>
                           )
+                        }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 2.5,
+                            bgcolor: customerValue
+                              ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.06)'
+                              : 'background.paper',
+                            '&.Mui-disabled': {
+                              bgcolor: customerValue
+                                ? 'rgb(var(--mui-palette-primary-mainChannel) / 0.06)'
+                                : 'action.hover'
+                            }
+                          }
                         }}
                       />
                     )}
