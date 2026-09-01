@@ -1688,6 +1688,111 @@ const LoanCaseForm = ({ caseId }: Props) => {
                 accent='primary'
               >
                 <Grid size={{ xs: 12 }}>
+                  {isLocked || !isActive ? (
+                    <Box sx={{ position: 'relative', pt: 0.75 }}>
+                      <Typography
+                        component='label'
+                        variant='caption'
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 12,
+                          zIndex: 1,
+                          px: 0.5,
+                          lineHeight: 1,
+                          color: 'text.secondary',
+                          bgcolor: 'background.paper'
+                        }}
+                      >
+                        Customer
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.5,
+                          minHeight: 76,
+                          px: 1.75,
+                          py: 1.5,
+                          border: '1px solid',
+                          borderColor: fieldErrors.customerId ? 'error.main' : 'divider',
+                          borderRadius: 2.5,
+                          bgcolor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.06)'
+                        }}
+                      >
+                        <Avatar
+                          sx={{
+                            width: 40,
+                            height: 40,
+                            flexShrink: 0,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          {(customerValue?.fullName || '')
+                            .split(' ')
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map(part => part[0]?.toUpperCase())
+                            .join('') || <i className='ri-user-line' />}
+                        </Avatar>
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography
+                            variant='body1'
+                            sx={{ fontWeight: 700, lineHeight: 1.35, color: 'text.primary' }}
+                            noWrap
+                          >
+                            {customerValue?.fullName || 'N/A'}
+                          </Typography>
+                          {selectedCustomerPhoneHref ? (
+                            <MuiLink
+                              href={selectedCustomerPhoneHref}
+                              underline='none'
+                              variant='body2'
+                              color='text.secondary'
+                              title={`Call ${selectedCustomerPhone}`}
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                                mt: 0.5,
+                                fontWeight: 600,
+                                lineHeight: 1.4,
+                                '&:hover': { color: 'primary.main' }
+                              }}
+                            >
+                              <Box component='i' className='ri-phone-line' sx={{ fontSize: '1rem', lineHeight: 1 }} />
+                              {selectedCustomerPhone}
+                            </MuiLink>
+                          ) : (
+                            <Typography variant='body2' color='text.disabled' sx={{ mt: 0.5 }}>
+                              Phone number unavailable
+                            </Typography>
+                          )}
+                        </Box>
+                        {selectedCustomerPhoneHref ? (
+                          <Chip
+                            component='a'
+                            href={selectedCustomerPhoneHref}
+                            clickable
+                            size='small'
+                            color='primary'
+                            variant='outlined'
+                            icon={<i className='ri-phone-line' />}
+                            label='Call'
+                            aria-label={`Call ${customerValue?.fullName || 'customer'} at ${selectedCustomerPhone}`}
+                            sx={{ height: 32, ml: 'auto', flexShrink: 0, fontWeight: 700 }}
+                          />
+                        ) : null}
+                      </Box>
+                      {fieldErrors.customerId ? (
+                        <Typography variant='caption' color='error' sx={{ display: 'block', mt: 0.75 }}>
+                          {fieldErrors.customerId}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  ) : (
                   <Autocomplete
                     options={customerOptions}
                     value={customerValue}
@@ -1888,6 +1993,7 @@ const LoanCaseForm = ({ caseId }: Props) => {
                       />
                     )}
                   />
+                  )}
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
