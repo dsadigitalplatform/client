@@ -151,7 +151,7 @@ export function toSubscriptionStatusSummary(input: {
     cancelAtPeriodEnd: Boolean(input.cancelAtPeriodEnd),
     daysLeftInTrial: input.daysLeftInTrial ?? null,
     inTrial: input.inTrial ?? input.status === 'trialing',
-    isUsable: input.isUsable ?? null,
+    isUsable: typeof input.isUsable === 'boolean' ? input.isUsable : undefined,
     pendingPlanName: input.pendingPlanName || null,
     pendingChangeEffectiveAt: input.pendingChangeEffectiveAt || null
   }

@@ -297,25 +297,25 @@ export function SuperAdminTenantsManager() {
               <Typography>Loading subscription…</Typography>
             ) : liveDetail ? (
               <>
-                <Typography variant='h6'>{detail.tenant.name}</Typography>
+                <Typography variant='h6'>{liveDetail.tenant.name}</Typography>
                 <Box className='flex flex-wrap gap-1'>
-                  {detail.plan ? (
-                    <Chip color='primary' label={detail.plan.name} icon={<i className='ri-vip-crown-line' />} />
+                  {liveDetail.plan ? (
+                    <Chip color='primary' label={liveDetail.plan.name} icon={<i className='ri-vip-crown-line' />} />
                   ) : (
                     <Chip label='No plan' />
                   )}
-                  {detail.subscription ? (
+                  {liveDetail.subscription ? (
                     <Chip
-                      label={detail.subscription.status}
-                      color={detail.subscription.status === 'trialing' ? 'info' : 'default'}
+                      label={liveDetail.subscription.status}
+                      color={liveDetail.subscription.status === 'trialing' ? 'info' : 'default'}
                     />
                   ) : null}
-                  {detail.subscription?.cancelAtPeriodEnd ? (
+                  {liveDetail.subscription?.cancelAtPeriodEnd ? (
                     <Chip color='warning' label='Cancels at period end' />
                   ) : null}
                 </Box>
 
-                {detail.pricing?.discount ? (
+                {liveDetail.pricing?.discount ? (
                   <Box
                     sx={{
                       p: 1.5,
@@ -325,39 +325,39 @@ export function SuperAdminTenantsManager() {
                       bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
                     }}
                   >
-                    <PayAmountDisplay pricing={detail.pricing} align='left' />
+                    <PayAmountDisplay pricing={liveDetail.pricing} align='left' />
                   </Box>
-                ) : detail.plan ? (
+                ) : liveDetail.plan ? (
                   <Typography variant='body2' color='text.secondary'>
                     {formatPlanMoney(
-                      detail.subscription?.billingInterval === 'yearly' && detail.plan.priceYearly
-                        ? detail.plan.priceYearly
-                        : detail.plan.priceMonthly,
-                      detail.plan.currency
+                      liveDetail.subscription?.billingInterval === 'yearly' && liveDetail.plan.priceYearly
+                        ? liveDetail.plan.priceYearly
+                        : liveDetail.plan.priceMonthly,
+                      liveDetail.plan.currency
                     )}{' '}
-                    / {detail.subscription?.billingInterval === 'yearly' ? 'year' : 'month'}
+                    / {liveDetail.subscription?.billingInterval === 'yearly' ? 'year' : 'month'}
                   </Typography>
                 ) : null}
 
                 <Typography variant='body2' color='text.secondary'>
-                  Period {fmtDate(detail.subscription?.currentPeriodStart)} →{' '}
-                  {fmtDate(detail.subscription?.currentPeriodEnd)}
-                  {detail.subscription?.trialEndsAt
-                    ? ` · Trial ends ${fmtDate(detail.subscription.trialEndsAt)}`
+                  Period {fmtDate(liveDetail.subscription?.currentPeriodStart)} →{' '}
+                  {fmtDate(liveDetail.subscription?.currentPeriodEnd)}
+                  {liveDetail.subscription?.trialEndsAt
+                    ? ` · Trial ends ${fmtDate(liveDetail.subscription.trialEndsAt)}`
                     : ''}
                 </Typography>
-                {detail.subscription?.lastPaymentStatus === 'succeeded' ? (
+                {liveDetail.subscription?.lastPaymentStatus === 'succeeded' ? (
                   <Typography variant='body2' color='text.secondary'>
-                    Last payment: {detail.subscription.lastPaymentMethod || 'manual'} on{' '}
-                    {fmtDate(detail.subscription.lastPaymentAt)}
-                    {detail.subscription.lastPaymentNote ? ` — ${detail.subscription.lastPaymentNote}` : ''}
+                    Last payment: {liveDetail.subscription.lastPaymentMethod || 'manual'} on{' '}
+                    {fmtDate(liveDetail.subscription.lastPaymentAt)}
+                    {liveDetail.subscription.lastPaymentNote ? ` — ${liveDetail.subscription.lastPaymentNote}` : ''}
                   </Typography>
                 ) : null}
 
-                {detail.pendingPlan ? (
+                {liveDetail.pendingPlan ? (
                   <Alert severity='info'>
-                    Pending switch to <strong>{detail.pendingPlan.name}</strong> on{' '}
-                    {fmtDate(detail.subscription?.pendingChangeEffectiveAt)}.
+                    Pending switch to <strong>{liveDetail.pendingPlan.name}</strong> on{' '}
+                    {fmtDate(liveDetail.subscription?.pendingChangeEffectiveAt)}.
                     <Button
                       size='small'
                       sx={{ ml: 1 }}
@@ -375,7 +375,7 @@ export function SuperAdminTenantsManager() {
                 <FormControl fullWidth size='small'>
                   <InputLabel>Plan</InputLabel>
                   <Select label='Plan' value={planId} onChange={e => setPlanId(String(e.target.value))}>
-                    {(detail.availablePlans || []).map((p: any) => (
+                    {(liveDetail.availablePlans || []).map((p: any) => (
                       <MenuItem key={p._id} value={p._id}>
                         {p.name} · {formatPlanMoney(p.priceMonthly, p.currency)}
                         {p.changeKind && p.changeKind !== 'same' ? ` (${p.changeKind})` : ''}
@@ -452,7 +452,7 @@ export function SuperAdminTenantsManager() {
                     <Typography variant='subtitle2'>Extend plan (this organisation only)</Typography>
                     <Typography variant='caption' color='text.secondary'>
                       Adds days to the current paid plan and restores access. Does not convert the org to a trial.
-                      {detail.subscription?.status === 'past_due' || detail.subscription?.status === 'expired'
+                      {liveDetail.subscription?.status === 'past_due' || liveDetail.subscription?.status === 'expired'
                         ? ' Lapsed orgs start a fresh window from today.'
                         : ' Remaining days on the current period are kept, then extra days are added.'}
                     </Typography>
@@ -467,7 +467,7 @@ export function SuperAdminTenantsManager() {
                       />
                       <Button
                         variant='outlined'
-                        disabled={busy || !detail.subscription}
+                        disabled={busy || !liveDetail.subscription}
                         onClick={() =>
                           void postAction({ action: 'extend_plan', days: Number(planDays) })
                         }
@@ -493,7 +493,7 @@ export function SuperAdminTenantsManager() {
                   >
                     Mark as paid
                   </Button>
-                  {detail.subscription?.cancelAtPeriodEnd ? (
+                  {liveDetail.subscription?.cancelAtPeriodEnd ? (
                     <Button
                       variant='outlined'
                       color='success'
@@ -506,7 +506,7 @@ export function SuperAdminTenantsManager() {
                     <Button
                       variant='outlined'
                       color='warning'
-                      disabled={busy || !detail.subscription}
+                      disabled={busy || !liveDetail.subscription}
                       onClick={() => void postAction({ action: 'cancel', forceImmediate })}
                     >
                       Cancel{forceImmediate ? ' now' : ' at period end'}
@@ -535,8 +535,8 @@ export function SuperAdminTenantsManager() {
                 p: 1.5,
                 borderRadius: 2,
                 border: '1px solid',
-                borderColor: detail.pricing.discount ? 'success.light' : 'divider',
-                bgcolor: detail.pricing.discount
+                borderColor: detail.pricing?.discount ? 'success.light' : 'divider',
+                bgcolor: detail.pricing?.discount
                   ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
                   : 'action.hover'
               }}
