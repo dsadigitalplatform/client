@@ -495,6 +495,11 @@ export async function applyDueSubscriptionChanges(db: Db, tenantId: ObjectIdType
     return subDoc
   }
 
+  // Already waiting for payment — keep the lapsed period dates so the reminder stays accurate.
+  if (subDoc.status === 'past_due') {
+    return subDoc
+  }
+
   // Cancelled at period end → expire
   if (subDoc.cancelAtPeriodEnd) {
     await db.collection('tenantSubscriptions').updateOne(
@@ -502,11 +507,10 @@ export async function applyDueSubscriptionChanges(db: Db, tenantId: ObjectIdType
       { $set: { status: 'expired', updatedAt: now } }
     )
 
-    return null
+    return db.collection('tenantSubscriptions').findOne({ _id: subDoc._id })
   }
 
   const interval = ((subDoc.pendingBillingInterval || subDoc.billingInterval || 'monthly') as BillingInterval)
-  const bounds = nextPeriodBounds(now, interval)
 
   // Trial ended without Super Admin mark-paid — expire (never auto-activate).
   if (subDoc.status === 'trialing') {
@@ -530,13 +534,12 @@ export async function applyDueSubscriptionChanges(db: Db, tenantId: ObjectIdType
 
     await db.collection('tenantSubscriptions').updateOne({ _id: subDoc._id }, { $set: expireUpdate })
 
-    return null
+    return db.collection('tenantSubscriptions').findOne({ _id: subDoc._id })
   }
 
-  // Paid period ended — roll forward as past_due until Super Admin marks paid.
+  // Paid period ended without Super Admin mark-paid — lock access. Keep the original
+  // period dates so the UI can say when access ended (do not roll a new paid window).
   const update: Record<string, unknown> = {
-    currentPeriodStart: bounds.start,
-    currentPeriodEnd: bounds.end,
     updatedAt: now,
     status: 'past_due',
     lastPaymentStatus: 'pending',
@@ -663,6 +666,77 @@ export async function extendTenantTrial(params: {
     subscription: serializeTenantSubscription(updated as any),
     prorationNote: null,
     message: `Trial extended by ${days} day${days === 1 ? '' : 's'} for this organisation (until ${newEnd.toISOString().slice(0, 10)}).`
+  }
+}
+
+/**
+ * Super Admin: add N days to the current paid plan without converting the org to a trial.
+ * Lapsed (past_due / expired / period already ended) orgs get a fresh window from now and status active.
+ */
+export async function extendTenantPlan(params: {
+  db: Db
+  tenantId: ObjectIdType
+  days: number
+}): Promise<ChangePlanResult> {
+  const { db, tenantId } = params
+  const days = Math.trunc(params.days)
+
+  if (!Number.isFinite(days) || days < 1 || days > 365) {
+    return { ok: false, error: 'invalid_days', message: 'Plan extension must be between 1 and 365 days' }
+  }
+
+  const now = new Date()
+  const sub = await db.collection('tenantSubscriptions').findOne(
+    { tenantId, status: { $in: ['trialing', 'active', 'past_due', 'expired'] } },
+    { sort: { updatedAt: -1 } }
+  )
+
+  if (!sub) {
+    return { ok: false, error: 'no_subscription', message: 'No subscription found to extend' }
+  }
+
+  if (sub.status === 'trialing') {
+    return {
+      ok: false,
+      error: 'on_trial',
+      message: 'This organisation is on a trial. Use Extend trial instead of Extend plan.'
+    }
+  }
+
+  const periodEnd = sub.currentPeriodEnd instanceof Date ? sub.currentPeriodEnd : new Date(sub.currentPeriodEnd)
+  const periodEndValid = Number.isFinite(periodEnd.getTime())
+  const lapsed =
+    sub.status === 'past_due' ||
+    sub.status === 'expired' ||
+    !periodEndValid ||
+    periodEnd.getTime() <= now.getTime()
+  const base = lapsed ? now : periodEnd
+  const newEnd = new Date(base.getTime() + days * 24 * 60 * 60 * 1000)
+
+  await db.collection('tenantSubscriptions').updateOne(
+    { _id: sub._id },
+    {
+      $set: {
+        status: 'active',
+        currentPeriodStart: lapsed ? now : sub.currentPeriodStart,
+        currentPeriodEnd: newEnd,
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        updatedAt: now
+      }
+    }
+  )
+
+  const updated = await db.collection('tenantSubscriptions').findOne({ _id: sub._id })
+  const planDoc = await db.collection('subscriptionPlans').findOne({ _id: sub.planId }, { projection: { name: 1 } })
+  const label = typeof planDoc?.name === 'string' && planDoc.name ? planDoc.name : 'plan'
+
+  return {
+    ok: true,
+    mode: 'immediate',
+    subscription: serializeTenantSubscription(updated as any),
+    prorationNote: null,
+    message: `${label} extended by ${days} day${days === 1 ? '' : 's'} for this organisation (until ${newEnd.toISOString().slice(0, 10)}).`
   }
 }
 

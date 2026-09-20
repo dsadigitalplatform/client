@@ -69,6 +69,10 @@ function fmtDate(iso: string | null | undefined) {
   return iso.slice(0, 10)
 }
 
+function isOnTrial(status: string | null | undefined, inTrial?: boolean | null) {
+  return status === 'trialing' || inTrial === true
+}
+
 export function SuperAdminTenantsManager() {
   const [tenants, setTenants] = useState<TenantRow[]>([])
   const [q, setQ] = useState('')
@@ -84,6 +88,7 @@ export function SuperAdminTenantsManager() {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly')
   const [forceImmediate, setForceImmediate] = useState(false)
   const [trialDays, setTrialDays] = useState('14')
+  const [planDays, setPlanDays] = useState('3')
   const [payMethod, setPayMethod] = useState<ManualPaymentMethod>('cash')
   const [payNote, setPayNote] = useState('')
   const [payOpen, setPayOpen] = useState(false)
@@ -128,6 +133,11 @@ export function SuperAdminTenantsManager() {
       setDetail(data)
       setPlanId(data.plan?._id || data.availablePlans?.[0]?._id || '')
       setBillingInterval(data.subscription?.billingInterval === 'yearly' ? 'yearly' : 'monthly')
+      if (data.subscription?.status === 'trialing' || data.access?.inTrial === true) {
+        setTrialDays(prev => prev || '14')
+      } else {
+        setPlanDays(prev => prev || '3')
+      }
     } catch (e: any) {
       setError(e?.message || 'Failed to load subscription')
       setDetail(null)
@@ -138,6 +148,8 @@ export function SuperAdminTenantsManager() {
 
   const openTenant = (id: string) => {
     setSelectedId(id)
+    setDetail(null)
+    setInfo(null)
     void loadDetail(id)
   }
 
@@ -174,13 +186,23 @@ export function SuperAdminTenantsManager() {
     return `${tenants.length} organisation${tenants.length === 1 ? '' : 's'}`
   }, [loading, tenants.length])
 
+  const selectedRow = useMemo(
+    () => tenants.find(t => t._id === selectedId) || null,
+    [tenants, selectedId]
+  )
+  const liveDetail = detail?.tenant?._id === selectedId ? detail : null
+  const onTrial = isOnTrial(
+    liveDetail?.subscription?.status || selectedRow?.subscription?.status,
+    liveDetail?.access?.inTrial
+  )
+
   return (
     <Box className='flex flex-col gap-4'>
       <Box className='flex flex-col sm:flex-row sm:items-end justify-between gap-2'>
         <Box>
           <Typography variant='h5'>Organisations</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Assign plans, extend trials, cancel, and record offline payments for any organisation.
+            Assign plans, extend paid access or trials, cancel, and record offline payments for any organisation.
           </Typography>
         </Box>
         <Box className='flex gap-2 items-center'>
@@ -271,29 +293,29 @@ export function SuperAdminTenantsManager() {
           <CardContent className='flex flex-col gap-3'>
             {!selectedId ? (
               <Typography color='text.secondary'>Select an organisation to manage its subscription.</Typography>
-            ) : detailLoading && !detail ? (
+            ) : detailLoading && !liveDetail ? (
               <Typography>Loading subscription…</Typography>
-            ) : detail ? (
+            ) : liveDetail ? (
               <>
-                <Typography variant='h6'>{detail.tenant.name}</Typography>
+                <Typography variant='h6'>{liveDetail.tenant.name}</Typography>
                 <Box className='flex flex-wrap gap-1'>
-                  {detail.plan ? (
-                    <Chip color='primary' label={detail.plan.name} icon={<i className='ri-vip-crown-line' />} />
+                  {liveDetail.plan ? (
+                    <Chip color='primary' label={liveDetail.plan.name} icon={<i className='ri-vip-crown-line' />} />
                   ) : (
                     <Chip label='No plan' />
                   )}
-                  {detail.subscription ? (
+                  {liveDetail.subscription ? (
                     <Chip
-                      label={detail.subscription.status}
-                      color={detail.subscription.status === 'trialing' ? 'info' : 'default'}
+                      label={liveDetail.subscription.status}
+                      color={liveDetail.subscription.status === 'trialing' ? 'info' : 'default'}
                     />
                   ) : null}
-                  {detail.subscription?.cancelAtPeriodEnd ? (
+                  {liveDetail.subscription?.cancelAtPeriodEnd ? (
                     <Chip color='warning' label='Cancels at period end' />
                   ) : null}
                 </Box>
 
-                {detail.pricing?.discount ? (
+                {liveDetail.pricing?.discount ? (
                   <Box
                     sx={{
                       p: 1.5,
@@ -303,39 +325,39 @@ export function SuperAdminTenantsManager() {
                       bgcolor: 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
                     }}
                   >
-                    <PayAmountDisplay pricing={detail.pricing} align='left' />
+                    <PayAmountDisplay pricing={liveDetail.pricing} align='left' />
                   </Box>
-                ) : detail.plan ? (
+                ) : liveDetail.plan ? (
                   <Typography variant='body2' color='text.secondary'>
                     {formatPlanMoney(
-                      detail.subscription?.billingInterval === 'yearly' && detail.plan.priceYearly
-                        ? detail.plan.priceYearly
-                        : detail.plan.priceMonthly,
-                      detail.plan.currency
+                      liveDetail.subscription?.billingInterval === 'yearly' && liveDetail.plan.priceYearly
+                        ? liveDetail.plan.priceYearly
+                        : liveDetail.plan.priceMonthly,
+                      liveDetail.plan.currency
                     )}{' '}
-                    / {detail.subscription?.billingInterval === 'yearly' ? 'year' : 'month'}
+                    / {liveDetail.subscription?.billingInterval === 'yearly' ? 'year' : 'month'}
                   </Typography>
                 ) : null}
 
                 <Typography variant='body2' color='text.secondary'>
-                  Period {fmtDate(detail.subscription?.currentPeriodStart)} →{' '}
-                  {fmtDate(detail.subscription?.currentPeriodEnd)}
-                  {detail.subscription?.trialEndsAt
-                    ? ` · Trial ends ${fmtDate(detail.subscription.trialEndsAt)}`
+                  Period {fmtDate(liveDetail.subscription?.currentPeriodStart)} →{' '}
+                  {fmtDate(liveDetail.subscription?.currentPeriodEnd)}
+                  {liveDetail.subscription?.trialEndsAt
+                    ? ` · Trial ends ${fmtDate(liveDetail.subscription.trialEndsAt)}`
                     : ''}
                 </Typography>
-                {detail.subscription?.lastPaymentStatus === 'succeeded' ? (
+                {liveDetail.subscription?.lastPaymentStatus === 'succeeded' ? (
                   <Typography variant='body2' color='text.secondary'>
-                    Last payment: {detail.subscription.lastPaymentMethod || 'manual'} on{' '}
-                    {fmtDate(detail.subscription.lastPaymentAt)}
-                    {detail.subscription.lastPaymentNote ? ` — ${detail.subscription.lastPaymentNote}` : ''}
+                    Last payment: {liveDetail.subscription.lastPaymentMethod || 'manual'} on{' '}
+                    {fmtDate(liveDetail.subscription.lastPaymentAt)}
+                    {liveDetail.subscription.lastPaymentNote ? ` — ${liveDetail.subscription.lastPaymentNote}` : ''}
                   </Typography>
                 ) : null}
 
-                {detail.pendingPlan ? (
+                {liveDetail.pendingPlan ? (
                   <Alert severity='info'>
-                    Pending switch to <strong>{detail.pendingPlan.name}</strong> on{' '}
-                    {fmtDate(detail.subscription?.pendingChangeEffectiveAt)}.
+                    Pending switch to <strong>{liveDetail.pendingPlan.name}</strong> on{' '}
+                    {fmtDate(liveDetail.subscription?.pendingChangeEffectiveAt)}.
                     <Button
                       size='small'
                       sx={{ ml: 1 }}
@@ -353,7 +375,7 @@ export function SuperAdminTenantsManager() {
                 <FormControl fullWidth size='small'>
                   <InputLabel>Plan</InputLabel>
                   <Select label='Plan' value={planId} onChange={e => setPlanId(String(e.target.value))}>
-                    {(detail.availablePlans || []).map((p: any) => (
+                    {(liveDetail.availablePlans || []).map((p: any) => (
                       <MenuItem key={p._id} value={p._id}>
                         {p.name} · {formatPlanMoney(p.priceMonthly, p.currency)}
                         {p.changeKind && p.changeKind !== 'same' ? ` (${p.changeKind})` : ''}
@@ -398,29 +420,63 @@ export function SuperAdminTenantsManager() {
 
                 <Divider />
 
-                <Typography variant='subtitle2'>Extend trial (this organisation only)</Typography>
-                <Typography variant='caption' color='text.secondary'>
-                  Does not change the plan catalog trial days — only this org’s trial end date.
-                </Typography>
-                <Box className='flex gap-2 items-center'>
-                  <TextField
-                    size='small'
-                    type='number'
-                    label='Days'
-                    value={trialDays}
-                    onChange={e => setTrialDays(e.target.value)}
-                    sx={{ width: 120 }}
-                  />
-                  <Button
-                    variant='outlined'
-                    disabled={busy}
-                    onClick={() =>
-                      void postAction({ action: 'extend_trial', days: Number(trialDays) })
-                    }
-                  >
-                    Extend trial
-                  </Button>
-                </Box>
+                {onTrial ? (
+                  <>
+                    <Typography variant='subtitle2'>Extend trial (this organisation only)</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      Keeps this org on trial. Does not change the plan catalog trial days — only this org’s trial end
+                      date.
+                    </Typography>
+                    <Box className='flex gap-2 items-center'>
+                      <TextField
+                        size='small'
+                        type='number'
+                        label='Days'
+                        value={trialDays}
+                        onChange={e => setTrialDays(e.target.value)}
+                        sx={{ width: 120 }}
+                      />
+                      <Button
+                        variant='outlined'
+                        disabled={busy}
+                        onClick={() =>
+                          void postAction({ action: 'extend_trial', days: Number(trialDays) })
+                        }
+                      >
+                        Extend trial
+                      </Button>
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    <Typography variant='subtitle2'>Extend plan (this organisation only)</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      Adds days to the current paid plan and restores access. Does not convert the org to a trial.
+                      {liveDetail.subscription?.status === 'past_due' || liveDetail.subscription?.status === 'expired'
+                        ? ' Lapsed orgs start a fresh window from today.'
+                        : ' Remaining days on the current period are kept, then extra days are added.'}
+                    </Typography>
+                    <Box className='flex gap-2 items-center'>
+                      <TextField
+                        size='small'
+                        type='number'
+                        label='Days'
+                        value={planDays}
+                        onChange={e => setPlanDays(e.target.value)}
+                        sx={{ width: 120 }}
+                      />
+                      <Button
+                        variant='outlined'
+                        disabled={busy || !liveDetail.subscription}
+                        onClick={() =>
+                          void postAction({ action: 'extend_plan', days: Number(planDays) })
+                        }
+                      >
+                        Extend plan
+                      </Button>
+                    </Box>
+                  </>
+                )}
 
                 <Divider />
 
@@ -437,7 +493,7 @@ export function SuperAdminTenantsManager() {
                   >
                     Mark as paid
                   </Button>
-                  {detail.subscription?.cancelAtPeriodEnd ? (
+                  {liveDetail.subscription?.cancelAtPeriodEnd ? (
                     <Button
                       variant='outlined'
                       color='success'
@@ -450,7 +506,7 @@ export function SuperAdminTenantsManager() {
                     <Button
                       variant='outlined'
                       color='warning'
-                      disabled={busy || !detail.subscription}
+                      disabled={busy || !liveDetail.subscription}
                       onClick={() => void postAction({ action: 'cancel', forceImmediate })}
                     >
                       Cancel{forceImmediate ? ' now' : ' at period end'}
@@ -479,8 +535,8 @@ export function SuperAdminTenantsManager() {
                 p: 1.5,
                 borderRadius: 2,
                 border: '1px solid',
-                borderColor: detail.pricing.discount ? 'success.light' : 'divider',
-                bgcolor: detail.pricing.discount
+                borderColor: detail.pricing?.discount ? 'success.light' : 'divider',
+                bgcolor: detail.pricing?.discount
                   ? 'rgb(var(--mui-palette-success-mainChannel) / 0.08)'
                   : 'action.hover'
               }}

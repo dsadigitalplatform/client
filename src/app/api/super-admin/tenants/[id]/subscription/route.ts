@@ -24,6 +24,7 @@ import { buildSubscriptionPricing, planPriceForInterval } from '@features/subscr
 import {
   assignTenantPlan,
   clearPendingPlanChange,
+  extendTenantPlan,
   extendTenantTrial,
   recordManualPayment,
   resumeTenantSubscription,
@@ -260,6 +261,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (action === 'extend_trial') {
     const days = typeof body?.days === 'number' ? body.days : Number(body?.days)
     const result = await extendTenantTrial({ db, tenantId, days })
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error, message: result.message }, { status: 400 })
+    }
+
+    return NextResponse.json(result)
+  }
+
+  if (action === 'extend_plan') {
+    const days = typeof body?.days === 'number' ? body.days : Number(body?.days)
+    const result = await extendTenantPlan({ db, tenantId, days })
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error, message: result.message }, { status: 400 })

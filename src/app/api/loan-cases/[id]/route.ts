@@ -17,7 +17,7 @@ import { isValidCountryCode } from '@/lib/countryCodes'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 import { resolveBankForLead } from '@/app/api/banks/_helpers'
-import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
+import { assertModuleEnabled, assertSubscriptionUsable } from '@features/subscriptions/services/entitlements.server'
 
 const DOCUMENT_STATUS_VALUES = ['COLLECTED', 'SUBMITTED_TO_BANK', 'APPROVED', 'PENDING'] as const
 const LEAD_SOURCE_VALUES = ['DIRECT', 'ASSOCIATE', 'ADVOCATE'] as const
@@ -406,6 +406,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if ('error' in tenantCtx) return tenantCtx.error
 
   const { db, tenantIdObj, userId, role } = tenantCtx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const inactive = await assertSubscriptionUsable(db, tenantIdObj, { bypass: bypassEntitlements })
+
+  if (inactive) {
+    return NextResponse.json({ error: inactive.error, message: inactive.message }, { status: 403 })
+  }
 
   const existing = await db.collection('loanCases').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
 
@@ -1040,6 +1047,13 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
   if ('error' in tenantCtx) return tenantCtx.error
 
   const { db, tenantIdObj, userId, role } = tenantCtx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const inactive = await assertSubscriptionUsable(db, tenantIdObj, { bypass: bypassEntitlements })
+
+  if (inactive) {
+    return NextResponse.json({ error: inactive.error, message: inactive.message }, { status: 403 })
+  }
 
   // Check if user has permission to delete (admin/owner or creator/assigned agent)
   const existing = await db.collection('loanCases').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })

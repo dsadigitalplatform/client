@@ -10,58 +10,40 @@ import { getDemoTenantIdOrNull, isDemoLoginEnabled } from '@/lib/demoLogin'
 import { getDb } from '@/lib/mongodb'
 import { resolveCurrentTenantId } from '@/lib/tenantSession'
 import { resolveSubscriptionPlan } from '@features/subscription-plans/services/resolveSubscriptionPlan.server'
-import { getCurrentTenantSubscriptionDoc } from '@features/subscriptions/services/entitlements.server'
-import type { RenewalMode, SubscriptionStatus } from '@features/subscriptions/subscriptions.types'
-import type { SubscriptionStatusSummary } from '@features/subscriptions/subscriptionStatusMessage'
-
-function toIso(d: unknown): string | null {
-  if (!d) return null
-  const date = d instanceof Date ? d : new Date(String(d))
-
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null
-}
+import { resolveTenantEntitlements } from '@features/subscriptions/services/entitlements.server'
+import {
+  toSubscriptionStatusSummary,
+  type SubscriptionStatusSummary
+} from '@features/subscriptions/subscriptionStatusMessage'
 
 async function resolveSubscriptionSummary(db: any, tenantId: ObjectId): Promise<SubscriptionStatusSummary | null> {
-  let subDoc = await getCurrentTenantSubscriptionDoc(db, tenantId)
+  const resolved = await resolveTenantEntitlements(db, tenantId)
+  const sub = resolved.subscription
 
-  if (!subDoc) {
-    subDoc = await db.collection('tenantSubscriptions').findOne({ tenantId }, { sort: { updatedAt: -1 } })
-  }
-
-  if (!subDoc) return null
-
-  const now = new Date()
-  const status = subDoc.status as SubscriptionStatus
-  const trialEndsAt = toIso(subDoc.trialEndsAt)
-  const currentPeriodEnd = toIso(subDoc.currentPeriodEnd)
-  const inTrial = status === 'trialing'
-  let daysLeftInTrial: number | null = null
-
-  if (inTrial && trialEndsAt) {
-    daysLeftInTrial = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-  }
+  if (!sub) return null
 
   let pendingPlanName: string | null = null
 
-  if (subDoc.pendingPlanId) {
+  if (sub.pendingPlanId && ObjectId.isValid(sub.pendingPlanId)) {
     const pendingPlan = await db
       .collection('subscriptionPlans')
-      .findOne({ _id: subDoc.pendingPlanId }, { projection: { name: 1 } })
+      .findOne({ _id: new ObjectId(sub.pendingPlanId) }, { projection: { name: 1 } })
 
     pendingPlanName = (pendingPlan?.name as string | undefined) || null
   }
 
-  return {
-    status,
-    renewalMode: ((subDoc.renewalMode as RenewalMode) || 'manual') as RenewalMode,
-    currentPeriodEnd,
-    trialEndsAt,
-    cancelAtPeriodEnd: Boolean(subDoc.cancelAtPeriodEnd),
-    daysLeftInTrial,
-    inTrial,
+  return toSubscriptionStatusSummary({
+    status: sub.status,
+    renewalMode: sub.renewalMode,
+    currentPeriodEnd: sub.currentPeriodEnd,
+    trialEndsAt: resolved.access.trialEndsAt || sub.trialEndsAt,
+    cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+    daysLeftInTrial: resolved.access.daysLeftInTrial,
+    inTrial: resolved.access.inTrial,
+    isUsable: resolved.access.isUsable,
     pendingPlanName,
-    pendingChangeEffectiveAt: toIso(subDoc.pendingChangeEffectiveAt)
-  }
+    pendingChangeEffectiveAt: sub.pendingChangeEffectiveAt
+  })
 }
 
 export async function POST(request: Request) {

@@ -11,6 +11,7 @@ import { fetchLeadCurrentStageSubmittedDate } from '@features/loan-cases/utils/s
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { assertSubscriptionUsable } from '@features/subscriptions/services/entitlements.server'
 
 const AUDIT_ACTIONS = {
   leadStatusChanged: 'LEAD_STATUS_CHANGED'
@@ -135,6 +136,13 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if ('error' in tenantCtx) return tenantCtx.error
 
   const { db, tenantIdObj, userId, role } = tenantCtx
+
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const inactive = await assertSubscriptionUsable(db, tenantIdObj, { bypass: bypassEntitlements })
+
+  if (inactive) {
+    return NextResponse.json({ error: inactive.error, message: inactive.message }, { status: 403 })
+  }
 
   const existing = await db.collection('loanCases').findOne({ _id: new ObjectId(id), tenantId: tenantIdObj })
 

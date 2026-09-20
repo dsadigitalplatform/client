@@ -11,7 +11,10 @@ import { getSupportRecipientEmails } from '@/lib/env'
 import { sendMail } from '@/lib/mailer'
 import { getDb } from '@/lib/mongodb'
 import { resolveCurrentTenantId } from '@/lib/tenantSession'
-import { getCurrentTenantSubscriptionDoc } from '@features/subscriptions/services/entitlements.server'
+import {
+  getCurrentTenantSubscriptionDoc,
+  getLatestTenantSubscriptionDoc
+} from '@features/subscriptions/services/entitlements.server'
 import { ensureEligibleDiscountOnSubscription } from '@features/subscriptions/services/discountCodes.server'
 import { buildSubscriptionPricing, planPriceForInterval } from '@features/subscriptions/services/discountPricing'
 
@@ -65,7 +68,8 @@ export async function POST(request: Request) {
   )
 
   const role = (membership?.role as string | undefined) || null
-  const sub = await getCurrentTenantSubscriptionDoc(db, tenantId)
+  const sub =
+    (await getCurrentTenantSubscriptionDoc(db, tenantId)) || (await getLatestTenantSubscriptionDoc(db, tenantId))
 
   const isOwner = role === 'OWNER' || isSuperAdmin
   const isBillingContact =
