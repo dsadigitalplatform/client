@@ -26,11 +26,17 @@ import type {
 
 const ACTIVE_STATUSES: SubscriptionStatus[] = ['trialing', 'active', 'past_due']
 
-function toIso(d: unknown): string | null {
+function toDate(d: unknown): Date | null {
   if (!d) return null
   const date = d instanceof Date ? d : new Date(String(d))
 
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+  return Number.isFinite(date.getTime()) ? date : null
+}
+
+function toIso(d: unknown): string | null {
+  const date = toDate(d)
+
+  return date ? date.toISOString() : null
 }
 
 function daysBetween(from: Date, to: Date): number {
@@ -125,6 +131,10 @@ export async function getCurrentTenantSubscriptionDoc(db: Db, tenantId: ObjectId
   )
 }
 
+export async function getLatestTenantSubscriptionDoc(db: Db, tenantId: ObjectId) {
+  return db.collection('tenantSubscriptions').findOne({ tenantId }, { sort: { updatedAt: -1 } })
+}
+
 export async function resolvePlanEntitlements(db: Db, planId: ObjectId | string | null | undefined): Promise<{
   planId: string | null
   planName: string | null
@@ -171,16 +181,21 @@ export async function resolveTenantEntitlements(db: Db, tenantId: ObjectId): Pro
     const { applyDueSubscriptionChanges } = await import('./subscriptionChange.server')
     const afterDue = await applyDueSubscriptionChanges(db, tenantId, subDoc as any)
 
-    subDoc = afterDue as typeof subDoc
+    subDoc = (afterDue as typeof subDoc) || (await getLatestTenantSubscriptionDoc(db, tenantId))
+  } else {
+    // Already expired/canceled still need the row so we don't treat the org as a legacy plan-only tenant.
+    subDoc = await getLatestTenantSubscriptionDoc(db, tenantId)
   }
 
   // Soft-expire trials that have passed (belt-and-suspenders if period end wasn't set)
-  if (subDoc?.status === 'trialing' && subDoc.trialEndsAt instanceof Date && subDoc.trialEndsAt.getTime() < now.getTime()) {
+  const trialEnd = toDate(subDoc?.trialEndsAt)
+
+  if (subDoc?.status === 'trialing' && trialEnd && trialEnd.getTime() < now.getTime()) {
     await db.collection('tenantSubscriptions').updateOne(
       { _id: subDoc._id },
       { $set: { status: 'expired', updatedAt: now } }
     )
-    subDoc = null
+    subDoc = { ...subDoc, status: 'expired', updatedAt: now }
   }
 
   const tenant = await db
@@ -200,7 +215,7 @@ export async function resolveTenantEntitlements(db: Db, tenantId: ObjectId): Pro
 
   if (subscription?.entitlementsSnapshot) {
     entitlements = mergeEntitlementsPreferHigher(subscription.entitlementsSnapshot, liveEntitlements)
-  } else if (subDoc && liveEntitlements && planId) {
+  } else if (subDoc && liveEntitlements && planId && ACTIVE_STATUSES.includes(subDoc.status as SubscriptionStatus)) {
     // Backfill snapshot for subscriptions created before hybrid catalog edits.
     try {
       await db.collection('tenantSubscriptions').updateOne(
@@ -227,15 +242,18 @@ export async function resolveTenantEntitlements(db: Db, tenantId: ObjectId): Pro
     daysLeftInTrial = Math.max(0, daysBetween(now, new Date(trialEndsAt)))
   }
 
-  const usableStatuses: SubscriptionStatus[] = ['trialing', 'active', 'past_due']
+  const usableStatuses: SubscriptionStatus[] = ['trialing', 'active']
   const hasUsableSub = Boolean(subscription && usableStatuses.includes(subscription.status))
-  // Legacy tenants with plan FK but no subscription row still get plan entitlements
+  // Legacy tenants with a plan FK but no subscription row still get plan entitlements.
+  // Lapsed trials/paid plans keep their subscription row, so they must not fall through to that bypass.
   const isUsable = hasUsableSub || Boolean(planId && !subscription)
 
   let reason: string | null = null
 
   if (!isUsable) {
-    reason = subscription?.status === 'expired' ? 'subscription_expired' : 'no_active_subscription'
+    if (subscription?.status === 'expired') reason = 'subscription_expired'
+    else if (subscription?.status === 'past_due') reason = 'subscription_past_due'
+    else reason = 'no_active_subscription'
   }
 
   return {
@@ -260,6 +278,23 @@ export type EntitlementDenial = {
   limit?: number
   used?: number
   feature?: string
+}
+
+export async function assertSubscriptionUsable(
+  db: Db,
+  tenantId: ObjectId,
+  options?: { bypass?: boolean }
+): Promise<EntitlementDenial | null> {
+  if (options?.bypass) return null
+
+  const resolved = await resolveTenantEntitlements(db, tenantId)
+
+  if (resolved.access.isUsable) return null
+
+  return {
+    error: 'subscription_inactive',
+    message: 'Organisation subscription is inactive. Renew to continue.'
+  }
 }
 
 export async function assertWithinLimit(

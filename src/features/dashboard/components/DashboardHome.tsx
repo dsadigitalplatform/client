@@ -53,6 +53,7 @@ import {
     findRejectedStageIds,
     findTerminalStageIds
 } from '@features/loan-status-pipeline/stageFlags'
+import { SubscriptionGateAlert } from '@features/subscriptions'
 
 const formatINR = (amount: number) => {
     const safe = Number.isFinite(amount) ? amount : 0
@@ -100,6 +101,7 @@ const DashboardHome = () => {
     const [welcomeName, setWelcomeName] = useState<string | undefined>(undefined)
     const [tenantName, setTenantName] = useState<string | undefined>(undefined)
     const [currentTenantId, setCurrentTenantId] = useState<string | undefined>(undefined)
+    const [subscriptionExpired, setSubscriptionExpired] = useState(false)
     const [myLeads, setMyLeads] = useState<LoanCaseListItem[]>([])
     const [myLeadsLoading, setMyLeadsLoading] = useState(false)
     const [stages, setStages] = useState<
@@ -186,6 +188,16 @@ const DashboardHome = () => {
 
                     if (active && tn) setTenantName(tn)
                     if (active && tenantIdValue) setCurrentTenantId(tenantIdValue)
+                    if (active) {
+                        const summary = s?.subscriptionSummary
+                        const status = String(summary?.status || '')
+                        setSubscriptionExpired(
+                            summary?.isUsable === false ||
+                                status === 'expired' ||
+                                status === 'canceled' ||
+                                status === 'past_due'
+                        )
+                    }
                 } catch { }
             })()
 
@@ -210,6 +222,14 @@ const DashboardHome = () => {
                 setTenantUsers(Array.isArray(usersData) ? usersData : [])
                 setTenantRole(
                     typeof tenantData?.role === 'string' ? (tenantData.role as 'OWNER' | 'ADMIN' | 'USER') : undefined
+                )
+                const summary = tenantData?.subscriptionSummary
+                const status = String(summary?.status || '')
+                setSubscriptionExpired(
+                    summary?.isUsable === false ||
+                        status === 'expired' ||
+                        status === 'canceled' ||
+                        status === 'past_due'
                 )
             } catch {
                 // ignore
@@ -675,6 +695,12 @@ const DashboardHome = () => {
                     )}
                 </Box>
             )}
+            {subscriptionExpired ? (
+                <SubscriptionGateAlert
+                    title='Plan expired'
+                    message="This organisation's plan has ended. Renew to restore access."
+                />
+            ) : null}
             <Box
                 sx={{
                     display: 'grid',

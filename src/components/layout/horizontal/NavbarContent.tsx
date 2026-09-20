@@ -340,7 +340,7 @@ const NavbarContent = ({
           />
         </Box>
       </div>
-      {tenantName ? <TrialExpiryReminderDialog canManage={canManageSubscription} /> : null}
+      <TrialExpiryReminderDialog canManage={canManageSubscription} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ export type SubscriptionStatusSummary = {
   cancelAtPeriodEnd: boolean
   daysLeftInTrial?: number | null
   inTrial?: boolean
+  isUsable?: boolean
   pendingPlanName?: string | null
   pendingChangeEffectiveAt?: string | null
 }
@@ -118,7 +119,7 @@ export function getSubscriptionStatusMessage(
   }
 
   if (summary.status === 'canceled' || summary.status === 'expired') {
-    return 'Subscription expired'
+    return summary.trialEndsAt ? 'Trial expired' : 'Subscription expired'
   }
 
   if (summary.status === 'incomplete') {
@@ -136,6 +137,7 @@ export function toSubscriptionStatusSummary(input: {
   cancelAtPeriodEnd?: boolean | null
   daysLeftInTrial?: number | null
   inTrial?: boolean | null
+  isUsable?: boolean | null
   pendingPlanName?: string | null
   pendingChangeEffectiveAt?: string | null
 }): SubscriptionStatusSummary | null {
@@ -149,6 +151,7 @@ export function toSubscriptionStatusSummary(input: {
     cancelAtPeriodEnd: Boolean(input.cancelAtPeriodEnd),
     daysLeftInTrial: input.daysLeftInTrial ?? null,
     inTrial: input.inTrial ?? input.status === 'trialing',
+    isUsable: input.isUsable ?? null,
     pendingPlanName: input.pendingPlanName || null,
     pendingChangeEffectiveAt: input.pendingChangeEffectiveAt || null
   }
@@ -157,7 +160,7 @@ export function toSubscriptionStatusSummary(input: {
 /** Show header countdown when due within this many days (or already expired / overdue). */
 export const SUBSCRIPTION_REMINDER_DAYS = 7
 
-/** Show post-login trial expiry dialog when trial ends within this many days. */
+/** Show post-login plan/trial reminder dialog when due within this many days. */
 export const SUBSCRIPTION_TRIAL_DIALOG_DAYS = 3
 
 export type SubscriptionRenewalReminderKind = 'trial' | 'renewal' | 'access_end' | 'overdue' | 'expired'
@@ -182,13 +185,14 @@ export function getSubscriptionRenewalReminder(
   if (!summary?.status) return null
 
   if (summary.status === 'canceled' || summary.status === 'expired') {
-    const daysLeft = daysUntil(summary.currentPeriodEnd, now) ?? 0
+    const dueAt = summary.trialEndsAt || summary.currentPeriodEnd
+    const daysLeft = daysUntil(dueAt, now) ?? 0
 
     return {
       daysLeft: Math.min(daysLeft, 0),
       severity: 'error',
       kind: 'expired',
-      dueAt: summary.currentPeriodEnd
+      dueAt
     }
   }
 
@@ -210,10 +214,19 @@ export function getSubscriptionRenewalReminder(
     const daysLeft =
       typeof summary.daysLeftInTrial === 'number' ? summary.daysLeftInTrial : (daysUntil(trialEnd, now) ?? 0)
 
+    if (daysLeft < 0) {
+      return {
+        daysLeft,
+        severity: 'error',
+        kind: 'expired',
+        dueAt: trialEnd
+      }
+    }
+
     if (daysLeft > withinDays) return null
 
     return {
-      daysLeft: Math.max(0, daysLeft),
+      daysLeft,
       severity: daysLeft <= 1 ? 'error' : 'warning',
       kind: 'trial',
       dueAt: trialEnd
@@ -224,12 +237,23 @@ export function getSubscriptionRenewalReminder(
 
   const daysLeft = daysUntil(summary.currentPeriodEnd, now)
 
-  if (daysLeft == null || daysLeft > withinDays) return null
+  if (daysLeft == null) return null
+
+  if (daysLeft < 0) {
+    return {
+      daysLeft,
+      severity: 'error',
+      kind: 'expired',
+      dueAt: summary.currentPeriodEnd
+    }
+  }
+
+  if (daysLeft > withinDays) return null
 
   const kind: SubscriptionRenewalReminderKind = summary.cancelAtPeriodEnd ? 'access_end' : 'renewal'
 
   return {
-    daysLeft: Math.max(0, daysLeft),
+    daysLeft,
     severity: daysLeft <= 1 || summary.cancelAtPeriodEnd ? 'error' : 'warning',
     kind,
     dueAt: summary.currentPeriodEnd

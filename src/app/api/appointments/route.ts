@@ -9,6 +9,7 @@ import { upsertAppointmentReminder } from '@features/reminders/services/reminder
 
 import { authOptions } from '@/lib/auth'
 import { getDb } from '@/lib/mongodb'
+import { assertSubscriptionUsable } from '@features/subscriptions/services/entitlements.server'
 
 type Role = 'OWNER' | 'ADMIN' | 'USER'
 
@@ -60,6 +61,13 @@ export async function POST(request: Request) {
   if ('error' in ctx) return ctx.error
 
   const { db, tenantIdObj, userId } = ctx
+  const bypassEntitlements = Boolean((session as any)?.isSuperAdmin || (session as any)?.user?.isSuperAdmin)
+  const inactive = await assertSubscriptionUsable(db, tenantIdObj, { bypass: bypassEntitlements })
+
+  if (inactive) {
+    return NextResponse.json({ error: inactive.error, message: inactive.message }, { status: 403 })
+  }
+
   const body = await request.json().catch(() => ({}))
 
   const leadId = String(body.leadId || '').trim()

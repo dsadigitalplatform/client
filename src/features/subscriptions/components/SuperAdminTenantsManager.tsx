@@ -69,6 +69,10 @@ function fmtDate(iso: string | null | undefined) {
   return iso.slice(0, 10)
 }
 
+function isOnTrial(status: string | null | undefined, inTrial?: boolean | null) {
+  return status === 'trialing' || inTrial === true
+}
+
 export function SuperAdminTenantsManager() {
   const [tenants, setTenants] = useState<TenantRow[]>([])
   const [q, setQ] = useState('')
@@ -84,6 +88,7 @@ export function SuperAdminTenantsManager() {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly')
   const [forceImmediate, setForceImmediate] = useState(false)
   const [trialDays, setTrialDays] = useState('14')
+  const [planDays, setPlanDays] = useState('3')
   const [payMethod, setPayMethod] = useState<ManualPaymentMethod>('cash')
   const [payNote, setPayNote] = useState('')
   const [payOpen, setPayOpen] = useState(false)
@@ -128,6 +133,11 @@ export function SuperAdminTenantsManager() {
       setDetail(data)
       setPlanId(data.plan?._id || data.availablePlans?.[0]?._id || '')
       setBillingInterval(data.subscription?.billingInterval === 'yearly' ? 'yearly' : 'monthly')
+      if (data.subscription?.status === 'trialing' || data.access?.inTrial === true) {
+        setTrialDays(prev => prev || '14')
+      } else {
+        setPlanDays(prev => prev || '3')
+      }
     } catch (e: any) {
       setError(e?.message || 'Failed to load subscription')
       setDetail(null)
@@ -138,6 +148,8 @@ export function SuperAdminTenantsManager() {
 
   const openTenant = (id: string) => {
     setSelectedId(id)
+    setDetail(null)
+    setInfo(null)
     void loadDetail(id)
   }
 
@@ -174,13 +186,23 @@ export function SuperAdminTenantsManager() {
     return `${tenants.length} organisation${tenants.length === 1 ? '' : 's'}`
   }, [loading, tenants.length])
 
+  const selectedRow = useMemo(
+    () => tenants.find(t => t._id === selectedId) || null,
+    [tenants, selectedId]
+  )
+  const liveDetail = detail?.tenant?._id === selectedId ? detail : null
+  const onTrial = isOnTrial(
+    liveDetail?.subscription?.status || selectedRow?.subscription?.status,
+    liveDetail?.access?.inTrial
+  )
+
   return (
     <Box className='flex flex-col gap-4'>
       <Box className='flex flex-col sm:flex-row sm:items-end justify-between gap-2'>
         <Box>
           <Typography variant='h5'>Organisations</Typography>
           <Typography variant='body2' color='text.secondary'>
-            Assign plans, extend trials, cancel, and record offline payments for any organisation.
+            Assign plans, extend paid access or trials, cancel, and record offline payments for any organisation.
           </Typography>
         </Box>
         <Box className='flex gap-2 items-center'>
@@ -271,9 +293,9 @@ export function SuperAdminTenantsManager() {
           <CardContent className='flex flex-col gap-3'>
             {!selectedId ? (
               <Typography color='text.secondary'>Select an organisation to manage its subscription.</Typography>
-            ) : detailLoading && !detail ? (
+            ) : detailLoading && !liveDetail ? (
               <Typography>Loading subscription…</Typography>
-            ) : detail ? (
+            ) : liveDetail ? (
               <>
                 <Typography variant='h6'>{detail.tenant.name}</Typography>
                 <Box className='flex flex-wrap gap-1'>
@@ -398,29 +420,63 @@ export function SuperAdminTenantsManager() {
 
                 <Divider />
 
-                <Typography variant='subtitle2'>Extend trial (this organisation only)</Typography>
-                <Typography variant='caption' color='text.secondary'>
-                  Does not change the plan catalog trial days — only this org’s trial end date.
-                </Typography>
-                <Box className='flex gap-2 items-center'>
-                  <TextField
-                    size='small'
-                    type='number'
-                    label='Days'
-                    value={trialDays}
-                    onChange={e => setTrialDays(e.target.value)}
-                    sx={{ width: 120 }}
-                  />
-                  <Button
-                    variant='outlined'
-                    disabled={busy}
-                    onClick={() =>
-                      void postAction({ action: 'extend_trial', days: Number(trialDays) })
-                    }
-                  >
-                    Extend trial
-                  </Button>
-                </Box>
+                {onTrial ? (
+                  <>
+                    <Typography variant='subtitle2'>Extend trial (this organisation only)</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      Keeps this org on trial. Does not change the plan catalog trial days — only this org’s trial end
+                      date.
+                    </Typography>
+                    <Box className='flex gap-2 items-center'>
+                      <TextField
+                        size='small'
+                        type='number'
+                        label='Days'
+                        value={trialDays}
+                        onChange={e => setTrialDays(e.target.value)}
+                        sx={{ width: 120 }}
+                      />
+                      <Button
+                        variant='outlined'
+                        disabled={busy}
+                        onClick={() =>
+                          void postAction({ action: 'extend_trial', days: Number(trialDays) })
+                        }
+                      >
+                        Extend trial
+                      </Button>
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    <Typography variant='subtitle2'>Extend plan (this organisation only)</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      Adds days to the current paid plan and restores access. Does not convert the org to a trial.
+                      {detail.subscription?.status === 'past_due' || detail.subscription?.status === 'expired'
+                        ? ' Lapsed orgs start a fresh window from today.'
+                        : ' Remaining days on the current period are kept, then extra days are added.'}
+                    </Typography>
+                    <Box className='flex gap-2 items-center'>
+                      <TextField
+                        size='small'
+                        type='number'
+                        label='Days'
+                        value={planDays}
+                        onChange={e => setPlanDays(e.target.value)}
+                        sx={{ width: 120 }}
+                      />
+                      <Button
+                        variant='outlined'
+                        disabled={busy || !detail.subscription}
+                        onClick={() =>
+                          void postAction({ action: 'extend_plan', days: Number(planDays) })
+                        }
+                      >
+                        Extend plan
+                      </Button>
+                    </Box>
+                  </>
+                )}
 
                 <Divider />
 
