@@ -192,7 +192,9 @@ function ReportCustomerCell({ row, size = 'default' }: { row: ReportDetailRow; s
                 letterSpacing: 0.3,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                flex: '1 1 4rem',
+                minWidth: 0
               }}
             >
               {row.leadCode}
@@ -213,6 +215,7 @@ function ReportCustomerCell({ row, size = 'default' }: { row: ReportDetailRow; s
                 alignItems: 'center',
                 gap: 0.35,
                 whiteSpace: 'nowrap',
+                flexShrink: 0,
                 '&:hover': { color: 'primary.main' }
               }}
             >
@@ -269,22 +272,92 @@ function HistoricalStageSummary({ row }: { row: ReportDetailRow }) {
   )
 }
 
+const CUSTOMER_COLUMN_WIDTH = 300
+const LEVEL_COLUMN_WIDTH = 44
+const AMOUNT_COLUMN_WIDTH = 128
+
+function stickyLevelCellSx(bgcolor: string, zIndex = 2) {
+  return {
+    position: 'sticky' as const,
+    left: 0,
+    zIndex,
+    bgcolor,
+    width: LEVEL_COLUMN_WIDTH,
+    minWidth: LEVEL_COLUMN_WIDTH,
+    maxWidth: LEVEL_COLUMN_WIDTH,
+    px: 0.5,
+    verticalAlign: 'middle' as const
+  }
+}
+
+function stickyCustomerCellSx(bgcolor: string, indent = 0, zIndex = 2) {
+  return {
+    position: 'sticky' as const,
+    left: LEVEL_COLUMN_WIDTH,
+    zIndex,
+    bgcolor,
+    pl: 2 + indent * 3,
+    width: CUSTOMER_COLUMN_WIDTH,
+    minWidth: CUSTOMER_COLUMN_WIDTH,
+    maxWidth: CUSTOMER_COLUMN_WIDTH,
+    boxShadow: `4px 0 12px -6px ${alpha('#000', 0.18)}`
+  }
+}
+
+function stickyAmountCellSx(bgcolor: string, zIndex = 2) {
+  return {
+    position: 'sticky' as const,
+    right: 0,
+    zIndex,
+    bgcolor,
+    width: AMOUNT_COLUMN_WIDTH,
+    minWidth: AMOUNT_COLUMN_WIDTH,
+    maxWidth: AMOUNT_COLUMN_WIDTH,
+    whiteSpace: 'nowrap' as const,
+    textAlign: 'right' as const,
+    boxShadow: `-4px 0 12px -6px ${alpha('#000', 0.18)}`
+  }
+}
+
+const themedTableScrollSx = {
+  overflowX: 'auto' as const,
+  scrollbarWidth: 'thin' as const,
+  scrollbarColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.35) transparent',
+  '&::-webkit-scrollbar': {
+    height: 10
+  },
+  '&::-webkit-scrollbar-track': {
+    backgroundColor: 'transparent'
+  },
+  '&::-webkit-scrollbar-thumb': {
+    backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.3)',
+    borderRadius: 999,
+    border: '3px solid transparent',
+    backgroundClip: 'content-box'
+  },
+  '&::-webkit-scrollbar-thumb:hover': {
+    backgroundColor: 'rgb(var(--mui-palette-primary-mainChannel) / 0.45)'
+  }
+}
+
 function DetailRowCells({
   row,
   isHistorical,
   showDisbursement,
   showLoanType,
-  indent = 0
+  indent = 0,
+  stickyBgcolor
 }: {
   row: ReportDetailRow
   isHistorical: boolean
   showDisbursement: boolean
   showLoanType: boolean
   indent?: number
+  stickyBgcolor: string
 }) {
   return (
     <>
-      <TableCell sx={{ pl: 2 + indent * 3, minWidth: 230 }}>
+      <TableCell data-sticky sx={stickyCustomerCellSx(stickyBgcolor, indent)}>
         <ReportCustomerCell row={row} />
       </TableCell>
       {showLoanType ? <TableCell>{row.loanTypeName ?? '—'}</TableCell> : null}
@@ -292,7 +365,7 @@ function DetailRowCells({
       <TableCell>{isHistorical ? <HistoricalStageSummary row={row} /> : row.stageName ?? '—'}</TableCell>
       {isHistorical ? <TableCell>{row.auditStagedDate ?? '—'}</TableCell> : null}
       <TableCell>{row.agentName ?? '—'}</TableCell>
-      <TableCell align='right'>
+      <TableCell data-sticky align='right' sx={stickyAmountCellSx(stickyBgcolor)}>
         <Typography variant='body2'>{formatINR(row.requestedAmount)}</Typography>
       </TableCell>
       {showDisbursement ? (
@@ -348,9 +421,19 @@ function GroupLevelMarker({ level }: { level: 'primary' | 'secondary' | 'detail'
   )
 }
 
-function GroupAmountCell({ amount, label }: { amount: number; label: string }) {
+function GroupAmountCell({
+  amount,
+  label,
+  stickyBgcolor,
+  zIndex = 2
+}: {
+  amount: number
+  label: string
+  stickyBgcolor: string
+  zIndex?: number
+}) {
   return (
-    <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
+    <TableCell data-sticky align='right' sx={stickyAmountCellSx(stickyBgcolor, zIndex)}>
       <Typography variant='subtitle2' fontWeight={800} color='inherit'>
         {formatINR(amount)}
       </Typography>
@@ -588,21 +671,24 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
   const showLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
   const groupBannerColSpan = (isHistorical ? 5 : 4) + (showLoanType ? 1 : 0)
 
-  const tableMinWidth = isHistorical
-    ? showDisbursement
-      ? showLoanType
-        ? 1180
-        : 1080
-      : showLoanType
-        ? 980
-        : 900
-    : showDisbursement
-      ? showLoanType
-        ? 980
-        : 900
-      : showLoanType
-        ? 780
-        : 700
+  const tableMinWidth = (() => {
+    let width = LEVEL_COLUMN_WIDTH + CUSTOMER_COLUMN_WIDTH + AMOUNT_COLUMN_WIDTH
+    width += 140 // stage
+    width += 110 // bank
+    width += 140 // agent
+    if (showLoanType) width += 110
+    if (isHistorical) width += 120 // staged date
+    else width += 110 // created
+    if (showDisbursement) width += 250
+
+    return width
+  })()
+
+  const stickyPrimary = alpha(theme.palette.primary.main, 0.14)
+  const stickySecondary = alpha(theme.palette.secondary.main, 0.1)
+  const stickyHeader = theme.palette.background.paper
+  const stickyDetail = theme.palette.background.paper
+  const stickyDetailHover = theme.palette.action.hover
 
   const groups = useMemo(
     () =>
@@ -657,21 +743,23 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
     : groupByLabel(data.groupBy)
 
   const primaryStyles = {
-    bgcolor: alpha(theme.palette.primary.main, 0.14),
+    bgcolor: stickyPrimary,
     borderLeft: `4px solid ${theme.palette.primary.main}`,
     '& > td': { borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.25)}` },
     cursor: 'pointer',
     transition: 'background-color 0.15s ease',
-    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.22) }
+    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.22) },
+    '&:hover > td[data-sticky]': { bgcolor: alpha(theme.palette.primary.main, 0.22) }
   }
 
   const secondaryStyles = {
-    bgcolor: alpha(theme.palette.secondary.main, 0.1),
+    bgcolor: stickySecondary,
     borderLeft: `4px solid ${theme.palette.secondary.main}`,
     '& > td': { borderBottom: `1px solid ${alpha(theme.palette.secondary.main, 0.2)}` },
     cursor: 'pointer',
     transition: 'background-color 0.15s ease',
-    '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.18) }
+    '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.18) },
+    '&:hover > td[data-sticky]': { bgcolor: alpha(theme.palette.secondary.main, 0.18) }
   }
 
   if (isCompact) {
@@ -814,18 +902,20 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
           </Box>
         </Box>
 
-        <TableContainer sx={{ overflowX: 'auto' }}>
+        <TableContainer sx={themedTableScrollSx}>
           <Table size='small' sx={{ width: '100%', tableLayout: 'fixed', minWidth: tableMinWidth }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: 44, px: 0.5, textAlign: 'center' }} aria-label='Row level' />
-                <TableCell sx={{ minWidth: 200 }}>{groupByLabel(data.groupBy)} / Customer</TableCell>
+                <TableCell sx={{ ...stickyLevelCellSx(stickyHeader, 4), textAlign: 'center' }} aria-label='Row level' />
+                <TableCell sx={stickyCustomerCellSx(stickyHeader, 0, 4)}>
+                  {groupByLabel(data.groupBy)} / Customer
+                </TableCell>
                 {showLoanType ? <TableCell>Loan type</TableCell> : null}
                 <TableCell>Bank</TableCell>
                 <TableCell>{isHistorical ? 'Stage → current' : 'Stage'}</TableCell>
                 {isHistorical ? <TableCell>{stagedDateLabel}</TableCell> : null}
                 <TableCell>Agent</TableCell>
-                <TableCell align='right' sx={{ width: 120 }}>
+                <TableCell data-sticky align='right' sx={stickyAmountCellSx(stickyHeader, 4)}>
                   Amount
                 </TableCell>
                 {showDisbursement ? (
@@ -854,7 +944,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                       onClick={() => toggleGroup(primaryId)}
                       onKeyDown={event => toggleGroupOnKeyDown(event, () => toggleGroup(primaryId))}
                     >
-                      <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
+                      <TableCell data-sticky sx={stickyLevelCellSx(stickyPrimary)}>
                         <GroupLevelMarker level='primary' />
                       </TableCell>
                       <GroupRowBannerCell
@@ -864,7 +954,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                         count={group.count}
                         colSpan={groupBannerColSpan}
                       />
-                      <GroupAmountCell amount={group.amount} label='Group total' />
+                      <GroupAmountCell amount={group.amount} label='Group total' stickyBgcolor={stickyPrimary} />
                       {showDisbursement ? (
                         <>
                           <TableCell />
@@ -889,7 +979,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                 onClick={() => toggleGroup(secondaryId)}
                                 onKeyDown={event => toggleGroupOnKeyDown(event, () => toggleGroup(secondaryId))}
                               >
-                                <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
+                                <TableCell data-sticky sx={stickyLevelCellSx(stickySecondary)}>
                                   <GroupLevelMarker level='secondary' />
                                 </TableCell>
                                 <GroupRowBannerCell
@@ -900,7 +990,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                   count={subgroup.count}
                                   colSpan={groupBannerColSpan}
                                 />
-                                <GroupAmountCell amount={subgroup.amount} label='Subtotal' />
+                                <GroupAmountCell amount={subgroup.amount} label='Subtotal' stickyBgcolor={stickySecondary} />
                                 {showDisbursement ? (
                                   <>
                                     <TableCell />
@@ -912,8 +1002,14 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
 
                               {!secondaryCollapsed
                                 ? subgroup.rows.map(row => (
-                                    <TableRow key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`} hover>
-                                      <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
+                                    <TableRow
+                                      key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
+                                      hover
+                                      sx={{
+                                        '&:hover > td[data-sticky]': { bgcolor: stickyDetailHover }
+                                      }}
+                                    >
+                                      <TableCell data-sticky sx={stickyLevelCellSx(stickyDetail)}>
                                         <GroupLevelMarker level='detail' />
                                       </TableCell>
                                       <DetailRowCells
@@ -922,6 +1018,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                         showDisbursement={showDisbursement}
                                         showLoanType={showLoanType}
                                         indent={2}
+                                        stickyBgcolor={stickyDetail}
                                       />
                                     </TableRow>
                                   ))
@@ -933,8 +1030,14 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
 
                     {!primaryCollapsed && !hasSecondary
                       ? group.rows.map(row => (
-                          <TableRow key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`} hover>
-                            <TableCell sx={{ width: 44, px: 0.5, verticalAlign: 'middle' }}>
+                          <TableRow
+                            key={`${row.leadId}-${row.auditStagedDate ?? row.createdAt}`}
+                            hover
+                            sx={{
+                              '&:hover > td[data-sticky]': { bgcolor: stickyDetailHover }
+                            }}
+                          >
+                            <TableCell data-sticky sx={stickyLevelCellSx(stickyDetail)}>
                               <GroupLevelMarker level='detail' />
                             </TableCell>
                             <DetailRowCells
@@ -943,6 +1046,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                               showDisbursement={showDisbursement}
                               showLoanType={showLoanType}
                               indent={1}
+                              stickyBgcolor={stickyDetail}
                             />
                           </TableRow>
                         ))
