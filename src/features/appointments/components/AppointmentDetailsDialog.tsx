@@ -19,12 +19,9 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import dayjs from 'dayjs'
-import type { Dayjs } from 'dayjs'
 
+import AppointmentDateTimeField from '@features/appointments/components/AppointmentDateTimeField'
 import { createFollowUpAppointment, getAppointmentById, updateAppointment } from '@features/appointments/services/appointments'
 import type { AppointmentStatus, AppointmentFollowUpType } from '@features/appointments/appointments.types'
 import { LeadCodeChip } from '@features/loan-cases/components/LeadCodeDisplay'
@@ -315,26 +312,14 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                   <Typography variant='subtitle2' sx={{ fontWeight: 800 }}>
                     Appointment
                   </Typography>
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <DateTimePicker
-                      label='Appointment Date & Time'
-                      value={scheduledAtValue}
-                      onChange={(v: Dayjs | null) => setScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
-                      format='YYYY-MM-DD HH:mm'
-                      minutesStep={30}
-                      disablePast
-                      slotProps={{
-                        textField: {
-                          size: 'small',
-                          fullWidth: true,
-                          sx: {
-                            mt: 0.75,
-                            minWidth: 0
-                          }
-                        }
-                      }}
-                    />
-                  </LocalizationProvider>
+                  <AppointmentDateTimeField
+                    label='Appointment Date & Time'
+                    value={scheduledAtValue}
+                    onChange={v => setScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                    minutesStep={30}
+                    disablePast
+                    sx={{ mt: 0.75, minWidth: 0 }}
+                  />
                 </Box>
               </Box>
 
@@ -421,25 +406,14 @@ export default function AppointmentDetailsDialog({ open, appointmentId, initialT
                   </Select>
                 </FormControl>
 
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <DateTimePicker
-                    label='Date & Time'
-                    value={followUpScheduledAtValue}
-                    onChange={(v: Dayjs | null) => setFollowUpScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
-                    format='YYYY-MM-DD HH:mm'
-                    minutesStep={30}
-                    disablePast
-                    slotProps={{
-                      textField: {
-                        size: 'small',
-                        fullWidth: true,
-                        sx: {
-                          minWidth: 0
-                        }
-                      }
-                    }}
-                  />
-                </LocalizationProvider>
+                <AppointmentDateTimeField
+                  label='Date & Time'
+                  value={followUpScheduledAtValue}
+                  onChange={v => setFollowUpScheduledAtLocal(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                  minutesStep={30}
+                  disablePast
+                  sx={{ minWidth: 0 }}
+                />
               </Box>
               <TextField
                 size='small'

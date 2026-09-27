@@ -10,7 +10,6 @@ import dayjs, { type Dayjs } from 'dayjs'
 
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
@@ -67,6 +66,7 @@ import { getLoanStatusPipelineStages } from '@features/loan-status-pipeline/serv
 import type { LoanType } from '@features/loan-types/loan-types.types'
 import type { AppointmentFollowUpType } from '@features/appointments/appointments.types'
 import { createAppointment } from '@features/appointments/services/appointments'
+import AppointmentDateTimeField from '@features/appointments/components/AppointmentDateTimeField'
 import LeadAppointmentsDashboard from '@features/appointments/components/LeadAppointmentsDashboard'
 import { getAssociates } from '@features/associates/services/associatesService'
 import type { Associate } from '@features/associates/associates.types'
@@ -3166,33 +3166,16 @@ const LoanCaseForm = ({ caseId }: Props) => {
               />
             </Grid>
             <Grid size={{ xs: 12 }}>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DateTimePicker
-                  label='Date & Time'
-                  value={apptScheduledAtValue}
-                  onChange={(v: Dayjs | null) => setApptScheduledAt(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
-                  format='YYYY-MM-DD HH:mm'
-                  minutesStep={30}
-                  disablePast
-                  slotProps={{
-                    textField: {
-                      size: 'small',
-                      fullWidth: true,
-                      error: !!apptErrors.scheduledAt,
-                      helperText: apptErrors.scheduledAt,
-                      disabled: appointmentUiLocked,
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2,
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                            borderWidth: 2
-                          }
-                        }
-                      }
-                    }
-                  }}
-                />
-              </LocalizationProvider>
+              <AppointmentDateTimeField
+                label='Date & Time'
+                value={apptScheduledAtValue}
+                onChange={(v: Dayjs | null) => setApptScheduledAt(v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '')}
+                minutesStep={30}
+                disablePast
+                disabled={appointmentUiLocked}
+                error={!!apptErrors.scheduledAt}
+                helperText={apptErrors.scheduledAt}
+              />
             </Grid>
             <Grid size={{ xs: 12 }}>
               <FormControl size='small' fullWidth error={!!apptErrors.followUpType}>
