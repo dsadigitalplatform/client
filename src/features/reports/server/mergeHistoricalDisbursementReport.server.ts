@@ -73,6 +73,7 @@ function mergeDetailRows(
         ...existing,
         requestedAmount: resolveMergedLeadAmount(disbursementLead.periodDisbursedAmount, leadAmount),
         customerPhone: existing.customerPhone || disbursementLead.customerPhone,
+        bankName: existing.bankName || disbursementLead.bankName,
         stageName: existing.stageName || disbursementLead.stageName,
         ...mapReportDisbursementFields(disbursementLead.disbursementTracker)
       })

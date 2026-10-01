@@ -40,6 +40,11 @@ import { buildStageAuditMatchCondition } from '@features/reports/server/stageAud
 import { getDisbursementActivityLeadsInRange } from '@features/reports/server/disbursementActivityReport.server'
 import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 import { mergeHistoricalWithDisbursementActivity } from '@features/reports/server/mergeHistoricalDisbursementReport.server'
+import {
+  applyLeadBankMatch,
+  buildLeadBankNameMatch,
+  leadBankResolutionStages
+} from '@features/reports/server/leadBankReport.server'
 
 type ReportDb = Db
 
@@ -126,7 +131,8 @@ function buildSnapshotMatch(
   tenantIdObj: ObjectId,
   userId: ObjectId,
   role: 'OWNER' | 'ADMIN' | 'USER',
-  filters: ReturnType<typeof parseQueryParams>
+  filters: ReturnType<typeof parseQueryParams>,
+  bankMatch: Record<string, unknown> | null
 ) {
   const match: Record<string, unknown> = buildRoleScopedLeadFilter(tenantIdObj, userId, role)
 
@@ -136,7 +142,7 @@ function buildSnapshotMatch(
     match.assignedAgentId = new ObjectId(filters.assignedAgentId)
   if (filters.customerId && ObjectId.isValid(filters.customerId)) match.customerId = new ObjectId(filters.customerId)
   if (filters.loanTypeId && ObjectId.isValid(filters.loanTypeId)) match.loanTypeId = new ObjectId(filters.loanTypeId)
-  if (filters.bankName) match.bankName = filters.bankName
+  applyLeadBankMatch(match, bankMatch)
 
   if (filters.dateFrom || filters.dateTo) {
     const createdAt: Record<string, Date> = {}
@@ -163,7 +169,7 @@ function snapshotGroupId(groupBy: ReportGroupBy) {
     case 'customer':
       return '$customerId'
     case 'bank':
-      return { $ifNull: ['$bankName', 'Unassigned'] }
+      return { $ifNull: ['$resolvedBankName', 'Unassigned'] }
     case 'loanType':
       return '$loanTypeId'
     case 'time':
@@ -223,6 +229,7 @@ async function runSnapshotReport(
       .collection('loanCases')
       .aggregate([
         ...pipelinePrefix,
+        ...(groupBy === 'bank' && tenantIdObj && tenantIdHex ? leadBankResolutionStages(tenantIdObj, tenantIdHex) : []),
         {
           $group: {
             _id: groupId,
@@ -399,6 +406,7 @@ async function runSnapshotReport(
           }
         },
         { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+        ...(tenantIdObj && tenantIdHex ? leadBankResolutionStages(tenantIdObj, tenantIdHex) : []),
         ...disbursementLookup,
         {
           $project: {
@@ -408,7 +416,7 @@ async function runSnapshotReport(
             customerCountryCode: '$customer.countryCode',
             customerMobile: '$customer.mobile',
             loanTypeName: '$loanType.name',
-            bankName: 1,
+            bankName: '$resolvedBankName',
             stageName: '$stage.name',
             agentName: '$agent.name',
             approvedAmount: 1,
@@ -541,7 +549,10 @@ async function runHistoricalReport(
     leadDimensionFilter.customerId = new ObjectId(filters.customerId)
   if (filters.loanTypeId && ObjectId.isValid(filters.loanTypeId))
     leadDimensionFilter.loanTypeId = new ObjectId(filters.loanTypeId)
-  if (filters.bankName) leadDimensionFilter.bankName = filters.bankName
+
+  const bankMatch = await buildLeadBankNameMatch(db, tenantIdObj, filters.bankName)
+
+  applyLeadBankMatch(leadDimensionFilter, bankMatch)
 
   const basePipeline: Record<string, unknown>[] = [
     { $match: { $expr: { $and: auditMatchConditions } } },
@@ -652,7 +663,7 @@ async function runHistoricalReport(
       case 'customer':
         return '$customerId'
       case 'bank':
-        return { $ifNull: ['$bankName', 'Unassigned'] }
+        return { $ifNull: ['$resolvedBankName', 'Unassigned'] }
       case 'loanType':
         return '$loanTypeId'
       case 'time':
@@ -668,6 +679,7 @@ async function runHistoricalReport(
       .collection('auditLogs')
       .aggregate([
         ...basePipeline,
+        ...(groupBy === 'bank' ? leadBankResolutionStages(tenantIdObj, tenantIdHex) : []),
         {
           $group: {
             _id: historicalGroupField(),
@@ -824,6 +836,7 @@ async function runHistoricalReport(
           }
         },
         { $unwind: { path: '$currentStage', preserveNullAndEmptyArrays: true } },
+        ...leadBankResolutionStages(tenantIdObj, tenantIdHex),
         ...buildDisbursementTrackerDetailsLookupStages(tenantIdObj, tenantIdHex),
         {
           $project: {
@@ -833,7 +846,7 @@ async function runHistoricalReport(
             customerCountryCode: '$customer.countryCode',
             customerMobile: '$customer.mobile',
             loanTypeName: '$loanType.name',
-            bankName: 1,
+            bankName: '$resolvedBankName',
             stageName: '$currentStage.name',
             agentName: '$agent.name',
             approvedAmount: 1,
@@ -948,7 +961,8 @@ export async function GET(request: Request) {
       progressiveStages
     )
   } else {
-    const match = buildSnapshotMatch(tenantIdObj, userId, role, filters)
+    const bankMatch = await buildLeadBankNameMatch(db, tenantIdObj, filters.bankName)
+    const match = buildSnapshotMatch(tenantIdObj, userId, role, filters, bankMatch)
 
     result = await runSnapshotReport(
       db,
