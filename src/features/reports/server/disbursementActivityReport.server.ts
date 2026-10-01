@@ -1,6 +1,7 @@
 import { ObjectId, type Db } from 'mongodb'
 
 import { buildRoleScopedLeadFilter, endOfDayIso, startOfDayIso } from '@features/reports/server/reportContext.server'
+import { applyLeadBankMatch, buildLeadBankNameMatch, leadBankResolutionStages } from '@features/reports/server/leadBankReport.server'
 import { buildDisbursementTrackerDetailsLookupStages } from '@features/loan-cases/utils/progressivePaymentListFilter'
 import { resolveReportLeadAmount } from '@features/reports/utils/reportLeadAmount'
 
@@ -33,7 +34,7 @@ function buildLeadDimensionFilter(
     assignedAgentId?: string | null
     customerId?: string | null
     loanTypeId?: string | null
-    bankName?: string | null
+    bankMatch?: Record<string, unknown> | null
   } = {}
 ) {
   const filter: Record<string, unknown> = {
@@ -55,7 +56,7 @@ function buildLeadDimensionFilter(
     filter.loanTypeId = new ObjectId(options.loanTypeId)
   }
 
-  if (options.bankName) filter.bankName = options.bankName
+  applyLeadBankMatch(filter, options.bankMatch ?? null)
 
   return filter
 }
@@ -92,7 +93,8 @@ export async function getDisbursementActivityLeadsInRange(
 ): Promise<DisbursementActivityLeadRow[]> {
   if (!dateFrom && !dateTo) return []
 
-  const leadDimensionFilter = buildLeadDimensionFilter(tenantIdObj, userId, role, options)
+  const bankMatch = await buildLeadBankNameMatch(db, tenantIdObj, options.bankName ?? null)
+  const leadDimensionFilter = buildLeadDimensionFilter(tenantIdObj, userId, role, { ...options, bankMatch })
 
   const rows = await db
     .collection('loanDisbursements')
@@ -156,6 +158,7 @@ export async function getDisbursementActivityLeadsInRange(
         }
       },
       { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+      ...leadBankResolutionStages(tenantIdObj, tenantIdHex),
       ...buildDisbursementTrackerDetailsLookupStages(tenantIdObj, tenantIdHex),
       {
         $project: {
@@ -163,7 +166,7 @@ export async function getDisbursementActivityLeadsInRange(
           customerId: { $toString: '$customerId' },
           assignedAgentId: { $toString: '$assignedAgentId' },
           loanTypeId: { $toString: '$loanTypeId' },
-          bankName: 1,
+          bankName: '$resolvedBankName',
           leadCode: '$code',
           customerName: '$customer.fullName',
           customerCountryCode: '$customer.countryCode',
