@@ -132,7 +132,17 @@ const CustomersList = () => {
         </Box>
       </Box>
       <Drawer anchor='right' open={openAdd && !createCustomerLocked} onClose={() => setOpenAdd(false)} keepMounted>
-        <Box sx={{ width: { xs: '100vw', sm: 480, md: 520 }, p: 3, '& .MuiTextField-root': { mb: 1.5 } }}>
+        <Box
+          sx={{
+            width: { xs: '100vw', sm: 480, md: 520 },
+            maxWidth: '100vw',
+            boxSizing: 'border-box',
+            minWidth: 0,
+            overflowX: 'hidden',
+            p: 3,
+            '& .MuiTextField-root': { mb: 1.5 }
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant='h6' color='text.primary'>
               Add a Customer
