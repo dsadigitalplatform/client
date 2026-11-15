@@ -12,6 +12,7 @@ import { formatINR } from '../utils/exportReport'
 
 type Props = {
   summary: ReportSummary
+  periodTitle?: string
 }
 
 const baseCards = [
@@ -26,9 +27,10 @@ const disbursementCards = [
   { key: 'tracked', label: 'Trackers', icon: 'ri-pie-chart-2-line' }
 ] as const
 
-export default function ReportsSummarySection({ summary }: Props) {
+export default function ReportsSummarySection({ summary, periodTitle = 'This period' }: Props) {
   const theme = useTheme()
   const hasDisbursement = Boolean(summary.disbursementTrackedCases)
+  const hasPeriod = summary.periodDisbursedAmount != null
 
   const baseValues: Record<(typeof baseCards)[number]['key'], string> = {
     cases: String(summary.totalCases),
@@ -36,17 +38,21 @@ export default function ReportsSummarySection({ summary }: Props) {
     customers: String(summary.uniqueCustomers)
   }
 
-  const disbursementValues: Record<(typeof disbursementCards)[number]['key'], string> = {
-    disbursed: formatINR(summary.totalDisbursedAmount ?? 0),
-    remaining: formatINR(summary.totalRemainingAmount ?? 0),
-    tracked: [
-      `${summary.disbursementTrackedCases ?? 0} tracked`,
-      summary.disbursementPartial ? `${summary.disbursementPartial} partial` : null,
-      summary.disbursementCompleted ? `${summary.disbursementCompleted} done` : null,
-      summary.disbursementPending ? `${summary.disbursementPending} pending` : null
-    ]
-      .filter(Boolean)
-      .join(' · ')
+  const disbursementValues: Record<(typeof disbursementCards)[number]['key'], { value: string; hint?: string }> = {
+    disbursed: {
+      value: formatINR(hasPeriod ? (summary.periodDisbursedAmount ?? 0) : (summary.totalDisbursedAmount ?? 0))
+    },
+    remaining: { value: formatINR(summary.totalRemainingAmount ?? 0) },
+    tracked: {
+      value: [
+        `${summary.disbursementTrackedCases ?? 0} tracked`,
+        summary.disbursementPartial ? `${summary.disbursementPartial} partial` : null,
+        summary.disbursementCompleted ? `${summary.disbursementCompleted} done` : null,
+        summary.disbursementPending ? `${summary.disbursementPending} pending` : null
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    }
   }
 
   return (
@@ -115,15 +121,20 @@ export default function ReportsSummarySection({ summary }: Props) {
                   </Box>
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant='body2' color='text.secondary'>
-                      {card.label}
+                      {card.key === 'disbursed' && hasPeriod ? periodTitle : card.label}
                     </Typography>
                     <Typography
                       variant={card.key === 'tracked' ? 'subtitle1' : 'h5'}
                       fontWeight={700}
                       sx={{ wordBreak: 'break-word' }}
                     >
-                      {disbursementValues[card.key]}
+                      {disbursementValues[card.key].value}
                     </Typography>
+                    {disbursementValues[card.key].hint ? (
+                      <Typography variant='caption' color='text.secondary'>
+                        {disbursementValues[card.key].hint}
+                      </Typography>
+                    ) : null}
                   </Box>
                 </CardContent>
               </Card>

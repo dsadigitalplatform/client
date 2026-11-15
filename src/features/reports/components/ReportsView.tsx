@@ -17,7 +17,7 @@ import { useTenantModuleAccess } from '@features/subscriptions/hooks/useTenantMo
 
 import { useReports } from '../hooks/useReports'
 import type { ReportPreset } from '../reports.types'
-import { resolveStagedDateLabel } from '../utils/monthlyReportHelpers'
+import { reportPeriodTitle, resolveStagedDateLabel } from '../utils/monthlyReportHelpers'
 import ReportsBuilder from './ReportsBuilder'
 import ReportsChartSection from './ReportsChartSection'
 import ReportsExportActions from './ReportsExportActions'
@@ -56,6 +56,7 @@ export default function ReportsView() {
     () => resolveStagedDateLabel(data?.filtersApplied ?? {}, filterOptions?.stages ?? []),
     [data?.filtersApplied, filterOptions?.stages]
   )
+  const periodTitle = useMemo(() => reportPeriodTitle(data?.filtersApplied), [data?.filtersApplied])
 
   const actionsDisabled = locked || loading || optionsLoading
 
@@ -179,7 +180,7 @@ export default function ReportsView() {
 
       {showResults && data ? (
         <Box id='report-output' sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <ReportsSummarySection summary={data.summary} />
+          <ReportsSummarySection summary={data.summary} periodTitle={periodTitle} />
           <ReportsChartSection data={data} />
           <ReportsTableSection
             data={data}
