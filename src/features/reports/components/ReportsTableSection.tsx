@@ -88,7 +88,9 @@ function DisbursementStatusChip({ row }: { row: ReportDetailRow }) {
   if (row.disbursementStatus == null) return null
 
   const tone = disbursementStatusChipColor(row.disbursementStatus)
-  const palette = tone === 'default' ? theme.palette.grey : theme.palette[tone]
+  const paletteColor = tone === 'default' ? null : theme.palette[tone]
+  const accent = paletteColor?.main ?? theme.palette.text.secondary
+  const labelColor = paletteColor?.dark ?? theme.palette.text.secondary
 
   return (
     <Chip
@@ -100,8 +102,8 @@ function DisbursementStatusChip({ row }: { row: ReportDetailRow }) {
         fontWeight: 600,
         letterSpacing: 0.4,
         textTransform: 'uppercase',
-        bgcolor: alpha(palette.main, 0.12),
-        color: palette.dark ?? palette.main,
+        bgcolor: alpha(accent, 0.12),
+        color: labelColor,
         border: 0,
         '& .MuiChip-label': { px: 0.75, py: 0 }
       }}
