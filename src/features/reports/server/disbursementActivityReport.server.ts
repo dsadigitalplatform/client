@@ -75,6 +75,38 @@ function buildDisbursementDateMatch(tenantIdObj: ObjectId, dateFrom: string | nu
   return match
 }
 
+export async function getPeriodDisbursedAmountsByLeadIds(
+  db: Db,
+  tenantIdObj: ObjectId,
+  leadIds: string[],
+  dateFrom: string | null,
+  dateTo: string | null
+): Promise<Map<string, number>> {
+  const uniqueIds = [...new Set(leadIds.filter(id => ObjectId.isValid(id)))]
+
+  if (uniqueIds.length === 0 || (!dateFrom && !dateTo)) return new Map()
+
+  const rows = await db
+    .collection('loanDisbursements')
+    .aggregate([
+      {
+        $match: {
+          ...buildDisbursementDateMatch(tenantIdObj, dateFrom, dateTo),
+          leadId: { $in: uniqueIds.map(id => new ObjectId(id)) }
+        }
+      },
+      {
+        $group: {
+          _id: '$leadId',
+          periodDisbursedAmount: { $sum: '$amount' }
+        }
+      }
+    ])
+    .toArray()
+
+  return new Map(rows.map(row => [String(row._id), Number(row.periodDisbursedAmount || 0)]))
+}
+
 export async function getDisbursementActivityLeadsInRange(
   db: Db,
   tenantIdObj: ObjectId,

@@ -79,6 +79,9 @@ export type ReportDetailRow = {
   remainingAmount?: number | null
   progressPercent?: number | null
   trackerApprovedAmount?: number | null
+
+  /** Progressive payments recorded inside the selected report date range */
+  periodDisbursedAmount?: number | null
 }
 
 export type ReportSummary = {
@@ -90,6 +93,7 @@ export type ReportSummary = {
   disbursementTrackedCases?: number
   totalDisbursedAmount?: number
   totalRemainingAmount?: number
+  periodDisbursedAmount?: number
   disbursementPending?: number
   disbursementPartial?: number
   disbursementCompleted?: number

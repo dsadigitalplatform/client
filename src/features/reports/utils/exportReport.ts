@@ -6,6 +6,7 @@ import {
   buildGroupedDetailHtml,
   buildGroupedDetailSpreadsheetRows
 } from './groupedDetailExport'
+import { reportPeriodTitle } from './monthlyReportHelpers'
 import { buildDisbursementSummaryExportRows, toSpreadsheetAmount } from './reportDisbursement'
 import { downloadSpreadsheet, type SpreadsheetCell } from './reportSpreadsheetExport'
 import { chartImagesToHtml } from './reportChartSvg'
@@ -53,7 +54,7 @@ export async function exportReportExcel(data: ReportQueryResponse, meta: ReportE
     ['Total cases', String(data.summary.totalCases)],
     ['Total amount', toSpreadsheetAmount(data.summary.totalAmount)],
     ['Unique customers', String(data.summary.uniqueCustomers)],
-    ...buildDisbursementSummaryExportRows(data.summary, 'spreadsheet'),
+    ...buildDisbursementSummaryExportRows(data.summary, 'spreadsheet', reportPeriodTitle(data.filtersApplied)),
     []
   ]
 
@@ -132,7 +133,11 @@ function buildReportPrintHtml(data: ReportQueryResponse, meta: ReportExportMeta,
       : ''
 
   const disclaimer = meta.disclaimer ?? (isHistorical ? 'Historical audit-based report.' : 'Current snapshot report.')
-  const disbursementSummaryHtml = buildDisbursementSummaryExportRows(data.summary, 'display')
+  const disbursementSummaryHtml = buildDisbursementSummaryExportRows(
+    data.summary,
+    'display',
+    reportPeriodTitle(data.filtersApplied)
+  )
     .map(([label, value]) => `<div>${escapeHtml(String(label))}<strong>${escapeHtml(String(value || '—'))}</strong></div>`)
     .join('')
 

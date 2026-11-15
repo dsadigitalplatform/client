@@ -61,6 +61,25 @@ export function isFutureMonthRef(ref: MonthRef, now = new Date()) {
   return ref.year > now.getFullYear() || (ref.year === now.getFullYear() && ref.month > now.getMonth())
 }
 
+export function reportPeriodCaption(filters?: Partial<ReportFilters> | null, now = new Date()) {
+  if (!filters?.dateFrom || !filters?.dateTo) return 'this period'
+
+  const monthRef = parseMonthRefFromFilters(
+    {
+      ...DEFAULT_REPORT_FILTERS,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo
+    },
+    now
+  )
+
+  return monthRef ? 'this month' : 'this period'
+}
+
+export function reportPeriodTitle(filters?: Partial<ReportFilters> | null, now = new Date()) {
+  return reportPeriodCaption(filters, now) === 'this month' ? 'This month' : 'This period'
+}
+
 export function parseMonthRefFromFilters(filters: ReportFilters, now = new Date()): MonthRef | null {
   if (!filters.dateFrom || !filters.dateTo) return null
 

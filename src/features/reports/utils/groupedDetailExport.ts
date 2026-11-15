@@ -6,10 +6,15 @@ import {
 } from '../reports.types'
 import { buildDetailGroups } from './buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from './exportReport'
-import { disbursementStatusLabel, exportDisbursementCells, toSpreadsheetAmount } from './reportDisbursement'
+import { reportPeriodTitle } from './monthlyReportHelpers'
+import {
+  exportDisbursementCells,
+  exportDisbursementColumnCount,
+  exportDisbursementHeaders,
+  hasPeriodDisbursementData,
+  toSpreadsheetAmount
+} from './reportDisbursement'
 import type { SpreadsheetCell } from './reportSpreadsheetExport'
-
-const DISBURSEMENT_HEADERS = ['Status', 'Balance remaining', 'Disbursed'] as const
 
 type AmountExportMode = 'display' | 'spreadsheet'
 
@@ -22,9 +27,10 @@ function detailCells(
   isHistorical: boolean,
   mode: AmountExportMode,
   includeLoanType: boolean,
+  includePeriod: boolean,
   indent = ''
 ) {
-  const disbursementCells = exportDisbursementCells(row, mode)
+  const disbursementCells = exportDisbursementCells(row, mode, includePeriod)
   const loanTypeCell = includeLoanType ? [row.loanTypeName ?? ''] : []
 
   if (isHistorical) {
@@ -59,7 +65,12 @@ function detailCells(
   ]
 }
 
-function detailHeader(isHistorical: boolean, primaryLabel: string, includeLoanType: boolean) {
+function detailHeader(
+  isHistorical: boolean,
+  primaryLabel: string,
+  includeLoanType: boolean,
+  disbursementHeaders: string[]
+) {
   const loanTypeHeader = includeLoanType ? ['Loan type'] : []
 
   if (isHistorical) {
@@ -74,7 +85,7 @@ function detailHeader(isHistorical: boolean, primaryLabel: string, includeLoanTy
       'Staged date',
       'Agent',
       'Amount',
-      ...DISBURSEMENT_HEADERS,
+      ...disbursementHeaders,
       'Created',
       'Note'
     ]
@@ -90,7 +101,7 @@ function detailHeader(isHistorical: boolean, primaryLabel: string, includeLoanTy
     'Stage',
     'Agent',
     'Amount',
-    ...DISBURSEMENT_HEADERS,
+    ...disbursementHeaders,
     'Created',
     'Note'
   ]
@@ -133,10 +144,12 @@ export function buildGroupedDetailSpreadsheetRows(
   const isHistorical = data.dataMode === 'historical'
   const { primary, hasSecondary, secondary, groupingLabel, groups } = resolveDetailGrouping(data, groupBySecondary)
   const includeLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
-  const header = detailHeader(isHistorical, groupByLabel(primary), includeLoanType)
+  const includePeriod = hasPeriodDisbursementData(data.details)
+  const disbursementHeaders = exportDisbursementHeaders(includePeriod, reportPeriodTitle(data.filtersApplied))
+  const header = detailHeader(isHistorical, groupByLabel(primary), includeLoanType, disbursementHeaders)
   const rows: SpreadsheetCell[][] = [[`Grouped detail (${groupingLabel})`], header]
   const emptyLeadCols = (isHistorical ? 6 : 5) - (includeLoanType ? 0 : 1)
-  const emptyDisbursementCells: SpreadsheetCell[] = ['', '', '']
+  const emptyDisbursementCells: SpreadsheetCell[] = Array(exportDisbursementColumnCount(includePeriod)).fill('')
 
   groups.forEach(group => {
     rows.push([
@@ -164,12 +177,12 @@ export function buildGroupedDetailSpreadsheetRows(
         ])
 
         subgroup.rows.forEach(row => {
-          rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType)])
+          rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType, includePeriod)])
         })
       })
     } else {
       group.rows.forEach(row => {
-        rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType)])
+        rows.push(['DETAIL', ...detailCells(row, isHistorical, 'spreadsheet', includeLoanType, includePeriod)])
       })
     }
 
@@ -188,10 +201,12 @@ export function buildFlatDetailSpreadsheetRows(data: ReportQueryResponse): Sprea
 
   const isHistorical = data.dataMode === 'historical'
   const limitNote = data.details.length >= 500 ? ' (max 500 rows)' : ''
+  const includePeriod = hasPeriodDisbursementData(data.details)
+  const disbursementHeaders = exportDisbursementHeaders(includePeriod, reportPeriodTitle(data.filtersApplied))
 
   const header = isHistorical
-    ? ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage (audit)', 'Staged date', 'Agent', 'Amount', ...DISBURSEMENT_HEADERS, 'Created']
-    : ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage', 'Agent', 'Amount', ...DISBURSEMENT_HEADERS, 'Created']
+    ? ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage (audit)', 'Staged date', 'Agent', 'Amount', ...disbursementHeaders, 'Created']
+    : ['Customer', 'Lead code', 'Loan type', 'Bank', 'Stage', 'Agent', 'Amount', ...disbursementHeaders, 'Created']
 
   const rows: SpreadsheetCell[][] = [[`Detailed rows (flat list${limitNote})`], header]
 
@@ -207,7 +222,7 @@ export function buildFlatDetailSpreadsheetRows(data: ReportQueryResponse): Sprea
             row.auditStagedDate ?? '',
             row.agentName ?? '',
             toSpreadsheetAmount(row.requestedAmount),
-            ...exportDisbursementCells(row, 'spreadsheet'),
+            ...exportDisbursementCells(row, 'spreadsheet', includePeriod),
             formatDate(row.createdAt)
           ]
         : [
@@ -218,7 +233,7 @@ export function buildFlatDetailSpreadsheetRows(data: ReportQueryResponse): Sprea
             row.stageName ?? '',
             row.agentName ?? '',
             toSpreadsheetAmount(row.requestedAmount),
-            ...exportDisbursementCells(row, 'spreadsheet'),
+            ...exportDisbursementCells(row, 'spreadsheet', includePeriod),
             formatDate(row.createdAt)
           ]
     )
@@ -227,7 +242,13 @@ export function buildFlatDetailSpreadsheetRows(data: ReportQueryResponse): Sprea
   return rows
 }
 
-function disbursementDetailHtmlCells(row: ReportDetailRow) {
+function disbursementHeaderHtml(includePeriod: boolean, periodTitle: string) {
+  return exportDisbursementHeaders(includePeriod, periodTitle)
+    .map(label => `<th>${label}</th>`)
+    .join('')
+}
+
+function disbursementDetailHtmlCells(row: ReportDetailRow, includePeriod: boolean) {
   const escape = (value: string | null | undefined) =>
     String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -235,11 +256,13 @@ function disbursementDetailHtmlCells(row: ReportDetailRow) {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
 
-  if (row.disbursementStatus == null) {
-    return '<td></td><td class="num"></td><td class="num"></td>'
-  }
+  return exportDisbursementCells(row, 'display', includePeriod)
+    .map((value, index) => {
+      const tag = index === 0 ? '<td>' : '<td class="num">'
 
-  return `<td>${escape(disbursementStatusLabel(row.disbursementStatus))}</td><td class="num">${escape(formatINR(row.remainingAmount))}</td><td class="num">${escape(formatINR(row.totalDisbursedAmount))}</td>`
+      return `${tag}${escape(String(value))}</td>`
+    })
+    .join('')
 }
 
 export function buildFlatDetailHtml(data: ReportQueryResponse): string {
@@ -247,6 +270,8 @@ export function buildFlatDetailHtml(data: ReportQueryResponse): string {
 
   const isHistorical = data.dataMode === 'historical'
   const limitNote = data.details.length >= 500 ? ', max 500 shown' : ''
+  const includePeriod = hasPeriodDisbursementData(data.details)
+  const disbursementHeaders = disbursementHeaderHtml(includePeriod, reportPeriodTitle(data.filtersApplied))
 
   const escape = (value: string | null | undefined) =>
     String(value ?? '')
@@ -255,15 +280,13 @@ export function buildFlatDetailHtml(data: ReportQueryResponse): string {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
 
-  const disbursementHeaders = '<th>Status</th><th>Balance remaining</th><th>Disbursed</th>'
-
   const headerCells = isHistorical
     ? `<th>Customer</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage (audit)</th><th>Staged date</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
     : `<th>Customer</th><th>Lead code</th><th>Loan type</th><th>Bank</th><th>Stage</th><th>Agent</th><th>Amount</th>${disbursementHeaders}<th>Created</th>`
 
   const body = data.details
     .map(row => {
-      const disbursementCells = disbursementDetailHtmlCells(row)
+      const disbursementCells = disbursementDetailHtmlCells(row, includePeriod)
 
       return isHistorical
         ? `<tr><td>${escape(row.customerName)}</td><td>${escape(row.leadCode)}</td><td>${escape(row.loanTypeName)}</td><td>${escape(row.bankName)}</td><td>${escape(row.auditStageName ?? row.stageName)}</td><td>${escape(row.auditStagedDate)}</td><td>${escape(row.agentName)}</td><td class="num">${escape(formatINR(row.requestedAmount))}</td>${disbursementCells}<td>${escape(formatDate(row.createdAt))}</td></tr>`
@@ -283,6 +306,9 @@ export function buildGroupedDetailHtml(
   const isHistorical = data.dataMode === 'historical'
   const { primary, hasSecondary, secondary, groupingLabel, groups } = resolveDetailGrouping(data, groupBySecondary)
   const includeLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
+  const includePeriod = hasPeriodDisbursementData(data.details)
+  const disbursementColSpan = exportDisbursementColumnCount(includePeriod)
+  const disbursementHeaders = disbursementHeaderHtml(includePeriod, reportPeriodTitle(data.filtersApplied))
 
   const escape = (value: string | null | undefined) =>
     String(value ?? '')
@@ -291,7 +317,6 @@ export function buildGroupedDetailHtml(
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
 
-  const disbursementHeaders = '<th>Status</th><th>Balance remaining</th><th>Disbursed</th>'
   const emptyLeadColSpan = (isHistorical ? 6 : 5) - (includeLoanType ? 0 : 1)
   const loanTypeHeader = includeLoanType ? '<th>Loan type</th>' : ''
 
@@ -317,13 +342,13 @@ export function buildGroupedDetailHtml(
         <td class="num"><strong>${count}</strong></td>
         <td colspan="${emptyLeadColSpan}"></td>
         <td class="num amount-total"><strong>${escape(formatINR(amount))}</strong><div class="sum-label">${level === 'primary' ? 'Group total' : 'Subtotal'}</div></td>
-        <td colspan="3"></td>
+        <td colspan="${disbursementColSpan}"></td>
         <td></td>
       </tr>`
   }
 
   const detailRowHtml = (row: ReportDetailRow) => {
-    const disbursementCells = disbursementDetailHtmlCells(row)
+    const disbursementCells = disbursementDetailHtmlCells(row, includePeriod)
     const loanTypeCell = includeLoanType ? `<td>${escape(row.loanTypeName)}</td>` : ''
 
     return isHistorical

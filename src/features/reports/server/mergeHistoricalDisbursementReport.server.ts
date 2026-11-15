@@ -36,7 +36,8 @@ function buildDetailFromDisbursement(row: DisbursementActivityLeadRow): ReportDe
     createdAt: row.createdAt,
     auditStagedDate: row.lastDisbursedDate || null,
     auditStageName: 'Disbursed (payment)',
-    ...mapReportDisbursementFields(row.disbursementTracker)
+    ...mapReportDisbursementFields(row.disbursementTracker),
+    periodDisbursedAmount: Number(row.periodDisbursedAmount || 0)
   }
 }
 
@@ -75,7 +76,8 @@ function mergeDetailRows(
         customerPhone: existing.customerPhone || disbursementLead.customerPhone,
         bankName: existing.bankName || disbursementLead.bankName,
         stageName: existing.stageName || disbursementLead.stageName,
-        ...mapReportDisbursementFields(disbursementLead.disbursementTracker)
+        ...mapReportDisbursementFields(disbursementLead.disbursementTracker),
+        periodDisbursedAmount: Number(disbursementLead.periodDisbursedAmount || 0)
       })
     } else {
       byLead.set(disbursementLead.leadId, buildDetailFromDisbursement(disbursementLead))

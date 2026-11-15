@@ -31,10 +31,12 @@ import {
 } from '../reports.types'
 import { buildDetailGroups } from '../utils/buildDetailGroups'
 import { formatDate, formatINR, groupByLabel } from '../utils/exportReport'
+import { reportPeriodCaption, reportPeriodTitle } from '../utils/monthlyReportHelpers'
 import {
   disbursementStatusChipColor,
   disbursementStatusLabel,
-  hasReportDisbursementData
+  hasReportDisbursementData,
+  periodDisbursementAmount
 } from '../utils/reportDisbursement'
 
 type Props = {
@@ -74,44 +76,163 @@ function toggleGroupOnKeyDown(event: KeyboardEvent, onToggle: () => void) {
   }
 }
 
+function titleCaseCaption(caption: string) {
+  if (!caption) return caption
+
+  return caption.charAt(0).toUpperCase() + caption.slice(1)
+}
+
 function DisbursementStatusChip({ row }: { row: ReportDetailRow }) {
+  const theme = useTheme()
+
   if (row.disbursementStatus == null) return null
+
+  const tone = disbursementStatusChipColor(row.disbursementStatus)
+  const paletteColor = tone === 'default' ? null : theme.palette[tone]
+  const accent = paletteColor?.main ?? theme.palette.text.secondary
+  const labelColor = paletteColor?.dark ?? theme.palette.text.secondary
 
   return (
     <Chip
       size='small'
       label={disbursementStatusLabel(row.disbursementStatus)}
-      color={disbursementStatusChipColor(row.disbursementStatus)}
-      variant='outlined'
-      sx={{ height: 22 }}
+      sx={{
+        height: 18,
+        fontSize: '0.625rem',
+        fontWeight: 600,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+        bgcolor: alpha(accent, 0.12),
+        color: labelColor,
+        border: 0,
+        '& .MuiChip-label': { px: 0.75, py: 0 }
+      }}
     />
   )
 }
 
-function DisbursementBalanceCell({ row }: { row: ReportDetailRow }) {
-  if (row.disbursementStatus == null) return null
+function DisbursementMetricLine({
+  label,
+  value,
+  primary = false
+}: {
+  label: string
+  value: number | null | undefined
+  primary?: boolean
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.25, minWidth: 0 }}>
+      <Typography
+        variant='caption'
+        color='text.secondary'
+        sx={{ fontSize: '0.6875rem', lineHeight: 1.25, letterSpacing: 0.15 }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        variant='body2'
+        sx={{
+          fontWeight: primary ? 700 : 600,
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'nowrap',
+          color: 'text.primary',
+          lineHeight: 1.25,
+          letterSpacing: '-0.01em'
+        }}
+      >
+        {formatINR(value)}
+      </Typography>
+    </Box>
+  )
+}
+
+function DisbursementProgress({ row }: { row: ReportDetailRow }) {
+  const theme = useTheme()
+  const percent = row.progressPercent ?? 0
+  const complete = row.disbursementStatus === 'COMPLETED'
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75 }}>
+      <LinearProgress
+        variant='determinate'
+        value={percent}
+        color='inherit'
+        sx={{
+          flex: 1,
+          height: 3,
+          borderRadius: 99,
+          color: complete ? theme.palette.success.main : alpha(theme.palette.text.primary, 0.5),
+          bgcolor: alpha(theme.palette.text.primary, 0.08),
+          '& .MuiLinearProgress-bar': {
+            borderRadius: 99
+          }
+        }}
+      />
+      <Typography
+        variant='caption'
+        color='text.disabled'
+        sx={{ fontSize: '0.625rem', fontVariantNumeric: 'tabular-nums', lineHeight: 1, flexShrink: 0 }}
+      >
+        {percent}%
+      </Typography>
+    </Box>
+  )
+}
+
+function DisbursementFacts({
+  row,
+  periodCaption,
+  showHeading = false
+}: {
+  row: ReportDetailRow
+  periodCaption: string
+  showHeading?: boolean
+}) {
+  const periodAmount = periodDisbursementAmount(row)
+  const periodLabel = titleCaseCaption(periodCaption)
 
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Typography variant='body2' fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
-        {formatINR(row.remainingAmount)}
-      </Typography>
-      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.3 }}>
-        remaining
-      </Typography>
-      <Box sx={{ mt: 0.75, maxWidth: 120 }}>
-        <LinearProgress
-          variant='determinate'
-          value={row.progressPercent ?? 0}
-          color={row.disbursementStatus === 'COMPLETED' ? 'success' : 'primary'}
-          sx={{ height: 4, borderRadius: 2 }}
-        />
-        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.25 }}>
-          {formatINR(row.totalDisbursedAmount)} paid
-        </Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: showHeading ? 'space-between' : 'flex-start',
+          gap: 1,
+          mb: 0.75
+        }}
+      >
+        {showHeading ? (
+          <Typography variant='caption' color='text.secondary' fontWeight={600} sx={{ letterSpacing: 0.2 }}>
+            Disbursement
+          </Typography>
+        ) : null}
+        <DisbursementStatusChip row={row} />
       </Box>
+      {periodAmount != null ? (
+        <>
+          <DisbursementMetricLine label={periodLabel} value={periodAmount} primary />
+          <Box sx={{ mt: 0.45 }}>
+            <DisbursementMetricLine label='Remaining' value={row.remainingAmount} />
+          </Box>
+        </>
+      ) : (
+        <>
+          <DisbursementMetricLine label='Remaining' value={row.remainingAmount} primary />
+          <Box sx={{ mt: 0.45 }}>
+            <DisbursementMetricLine label='Paid' value={row.totalDisbursedAmount} />
+          </Box>
+        </>
+      )}
+      <DisbursementProgress row={row} />
     </Box>
   )
+}
+
+function DisbursementMetricsCell({ row, periodCaption }: { row: ReportDetailRow; periodCaption: string }) {
+  if (row.disbursementStatus == null) return null
+
+  return <DisbursementFacts row={row} periodCaption={periodCaption} />
 }
 
 const CUSTOMER_AVATAR_TONES = ['primary', 'success', 'warning', 'info', 'secondary', 'error'] as const
@@ -275,6 +396,7 @@ function HistoricalStageSummary({ row }: { row: ReportDetailRow }) {
 const CUSTOMER_COLUMN_WIDTH = 300
 const LEVEL_COLUMN_WIDTH = 44
 const AMOUNT_COLUMN_WIDTH = 128
+const DISBURSEMENT_COLUMN_WIDTH = 196
 
 function stickyLevelCellSx(bgcolor: string, zIndex = 2) {
   return {
@@ -346,7 +468,8 @@ function DetailRowCells({
   showDisbursement,
   showLoanType,
   indent = 0,
-  stickyBgcolor
+  stickyBgcolor,
+  periodCaption
 }: {
   row: ReportDetailRow
   isHistorical: boolean
@@ -354,6 +477,7 @@ function DetailRowCells({
   showLoanType: boolean
   indent?: number
   stickyBgcolor: string
+  periodCaption: string
 }) {
   return (
     <>
@@ -366,17 +490,14 @@ function DetailRowCells({
       {isHistorical ? <TableCell>{row.auditStagedDate ?? '—'}</TableCell> : null}
       <TableCell>{row.agentName ?? '—'}</TableCell>
       <TableCell data-sticky align='right' sx={stickyAmountCellSx(stickyBgcolor)}>
-        <Typography variant='body2'>{formatINR(row.requestedAmount)}</Typography>
+        <Typography variant='body2' sx={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatINR(row.requestedAmount)}
+        </Typography>
       </TableCell>
       {showDisbursement ? (
-        <>
-          <TableCell>
-            <DisbursementStatusChip row={row} />
-          </TableCell>
-          <TableCell align='right'>
-            <DisbursementBalanceCell row={row} />
-          </TableCell>
-        </>
+        <TableCell align='right' sx={{ width: DISBURSEMENT_COLUMN_WIDTH, minWidth: DISBURSEMENT_COLUMN_WIDTH }}>
+          <DisbursementMetricsCell row={row} periodCaption={periodCaption} />
+        </TableCell>
       ) : null}
       {!isHistorical ? <TableCell>{formatDate(row.createdAt)}</TableCell> : null}
     </>
@@ -572,39 +693,12 @@ function MobileDetailField({ label, value }: { label: string; value: ReactNode }
   )
 }
 
-function MobileDisbursementBlock({ row }: { row: ReportDetailRow }) {
+function MobileDisbursementBlock({ row, periodCaption }: { row: ReportDetailRow; periodCaption: string }) {
   if (row.disbursementStatus == null) return null
 
   return (
-    <Box sx={{ mt: 1.25, p: 1.25, borderRadius: 1.5, bgcolor: 'action.hover' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-        <Typography variant='caption' color='text.secondary' fontWeight={600}>
-          Disbursement
-        </Typography>
-        <DisbursementStatusChip row={row} />
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
-        <Box>
-          <Typography variant='caption' color='text.secondary' display='block'>
-            Balance left
-          </Typography>
-          <Typography variant='subtitle2' fontWeight={800}>
-            {formatINR(row.remainingAmount)}
-          </Typography>
-        </Box>
-        <Typography variant='caption' color='text.secondary' textAlign='right'>
-          {formatINR(row.totalDisbursedAmount)} of {formatINR(row.trackerApprovedAmount)}
-        </Typography>
-      </Box>
-      <LinearProgress
-        variant='determinate'
-        value={row.progressPercent ?? 0}
-        color={row.disbursementStatus === 'COMPLETED' ? 'success' : 'primary'}
-        sx={{ height: 6, borderRadius: 3 }}
-      />
-      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-        {row.progressPercent ?? 0}% disbursed
-      </Typography>
+    <Box sx={{ mt: 1.25, px: 1.5, py: 1.25, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+      <DisbursementFacts row={row} periodCaption={periodCaption} showHeading />
     </Box>
   )
 }
@@ -614,15 +708,21 @@ function MobileDetailCard({
   isHistorical,
   showDisbursement,
   showLoanType,
-  stagedDateLabel
+  stagedDateLabel,
+  periodCaption,
+  periodTitle
 }: {
   row: ReportDetailRow
   isHistorical: boolean
   showDisbursement: boolean
   showLoanType: boolean
   stagedDateLabel: string
+  periodCaption: string
+  periodTitle: string
 }) {
   const stageValue = isHistorical ? <HistoricalStageSummary row={row} /> : row.stageName ?? '—'
+  const periodAmount = periodDisbursementAmount(row)
+  const amountLabel = periodAmount != null && Number(row.requestedAmount) === periodAmount ? periodTitle : 'Amount'
 
   return (
     <Card variant='outlined' sx={{ borderColor: 'divider' }}>
@@ -644,7 +744,7 @@ function MobileDetailCard({
           <MobileDetailField label={isHistorical ? 'Stage → current' : 'Stage'} value={stageValue} />
           <MobileDetailField label='Agent' value={row.agentName ?? '—'} />
           <MobileDetailField
-            label='Amount'
+            label={amountLabel}
             value={
               <Typography component='span' fontWeight={700}>
                 {formatINR(row.requestedAmount)}
@@ -656,7 +756,7 @@ function MobileDetailCard({
             value={isHistorical ? (row.auditStagedDate ?? '—') : formatDate(row.createdAt)}
           />
         </Box>
-        {showDisbursement ? <MobileDisbursementBlock row={row} /> : null}
+        {showDisbursement ? <MobileDisbursementBlock row={row} periodCaption={periodCaption} /> : null}
       </CardContent>
     </Card>
   )
@@ -668,6 +768,8 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
   const isHistorical = data.dataMode === 'historical'
   const hasSecondary = Boolean(groupBySecondary && groupBySecondary !== data.groupBy)
   const showDisbursement = useMemo(() => hasReportDisbursementData(data.details), [data.details])
+  const periodCaption = reportPeriodCaption(data.filtersApplied)
+  const periodTitle = reportPeriodTitle(data.filtersApplied)
   const showLoanType = showsLoanTypeDetailColumn(data.groupBy, groupBySecondary)
   const groupBannerColSpan = (isHistorical ? 5 : 4) + (showLoanType ? 1 : 0)
 
@@ -679,7 +781,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
     if (showLoanType) width += 110
     if (isHistorical) width += 120 // staged date
     else width += 110 // created
-    if (showDisbursement) width += 250
+    if (showDisbursement) width += DISBURSEMENT_COLUMN_WIDTH
 
     return width
   })()
@@ -770,7 +872,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
           <Typography variant='body2' color='text.secondary'>
             Nested by {groupingLabel}
             {data.details.length >= 500 ? ' (showing first 500 rows)' : ''}
-            {showDisbursement ? ' · Includes disbursement balance & status' : ''}
+            {showDisbursement ? ` · Includes ${periodCaption} disbursement and remaining balance` : ''}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
             <Button size='small' variant='outlined' onClick={expandAll}>
@@ -832,6 +934,8 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                     showDisbursement={showDisbursement}
                                     showLoanType={showLoanType}
                                     stagedDateLabel={stagedDateLabel}
+                                    periodCaption={periodCaption}
+                                    periodTitle={periodTitle}
                                   />
                                 ))}
                               </Box>
@@ -847,6 +951,8 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                           showDisbursement={showDisbursement}
                           showLoanType={showLoanType}
                           stagedDateLabel={stagedDateLabel}
+                          periodCaption={periodCaption}
+                          periodTitle={periodTitle}
                         />
                       ))}
                 </Box>
@@ -867,7 +973,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
             <Typography variant='body2' color='text.secondary'>
               Nested by {groupingLabel}
               {data.details.length >= 500 ? ' (showing first 500 rows)' : ''}
-              {showDisbursement ? ' · Includes disbursement balance & status' : ''}
+              {showDisbursement ? ` · Includes ${periodCaption} disbursement and remaining balance` : ''}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -919,12 +1025,9 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                   Amount
                 </TableCell>
                 {showDisbursement ? (
-                  <>
-                    <TableCell sx={{ width: 110 }}>Status</TableCell>
-                    <TableCell align='right' sx={{ width: 140 }}>
-                      Balance
-                    </TableCell>
-                  </>
+                  <TableCell align='right' sx={{ width: DISBURSEMENT_COLUMN_WIDTH, minWidth: DISBURSEMENT_COLUMN_WIDTH }}>
+                    Disbursement
+                  </TableCell>
                 ) : null}
                 {!isHistorical ? <TableCell>Created</TableCell> : null}
               </TableRow>
@@ -955,12 +1058,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                         colSpan={groupBannerColSpan}
                       />
                       <GroupAmountCell amount={group.amount} label='Group total' stickyBgcolor={stickyPrimary} />
-                      {showDisbursement ? (
-                        <>
-                          <TableCell />
-                          <TableCell />
-                        </>
-                      ) : null}
+                      {showDisbursement ? <TableCell /> : null}
                       {!isHistorical ? <TableCell /> : null}
                     </TableRow>
 
@@ -991,12 +1089,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                   colSpan={groupBannerColSpan}
                                 />
                                 <GroupAmountCell amount={subgroup.amount} label='Subtotal' stickyBgcolor={stickySecondary} />
-                                {showDisbursement ? (
-                                  <>
-                                    <TableCell />
-                                    <TableCell />
-                                  </>
-                                ) : null}
+                                {showDisbursement ? <TableCell /> : null}
                                 {!isHistorical ? <TableCell /> : null}
                               </TableRow>
 
@@ -1019,6 +1112,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                                         showLoanType={showLoanType}
                                         indent={2}
                                         stickyBgcolor={stickyDetail}
+                                        periodCaption={periodCaption}
                                       />
                                     </TableRow>
                                   ))
@@ -1047,6 +1141,7 @@ export default function ReportsTableSection({ data, groupBySecondary, stagedDate
                               showLoanType={showLoanType}
                               indent={1}
                               stickyBgcolor={stickyDetail}
+                              periodCaption={periodCaption}
                             />
                           </TableRow>
                         ))

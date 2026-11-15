@@ -33,11 +33,15 @@ import {
   resolveReportLeadAmount
 } from '@features/reports/utils/reportLeadAmount'
 import {
+  applyPeriodDisbursedAmounts,
   enrichSummaryWithDisbursement,
   mapReportDisbursementFields
 } from '@features/reports/utils/reportDisbursement'
 import { buildStageAuditMatchCondition } from '@features/reports/server/stageAuditMatch.server'
-import { getDisbursementActivityLeadsInRange } from '@features/reports/server/disbursementActivityReport.server'
+import {
+  getDisbursementActivityLeadsInRange,
+  getPeriodDisbursedAmountsByLeadIds
+} from '@features/reports/server/disbursementActivityReport.server'
 import { assertModuleEnabled } from '@features/subscriptions/services/entitlements.server'
 import { mergeHistoricalWithDisbursementActivity } from '@features/reports/server/mergeHistoricalDisbursementReport.server'
 import {
@@ -449,6 +453,32 @@ async function runSnapshotReport(
   return { summary: enrichSummaryWithDisbursement(summary, details), breakdown, trend, details }
 }
 
+async function withPeriodDisbursements(
+  db: ReportDb,
+  tenantIdObj: ObjectId,
+  result: {
+    summary: ReportSummary
+    breakdown: ReportBreakdownRow[]
+    trend: ReportTrendRow[]
+    details: ReportDetailRow[]
+  },
+  dateFrom: string | null,
+  dateTo: string | null
+) {
+  const trackerLeadIds = result.details
+    .filter(row => row.disbursementStatus != null && !(Number(row.periodDisbursedAmount) > 0))
+    .map(row => row.leadId)
+  const periodByLead = await getPeriodDisbursedAmountsByLeadIds(db, tenantIdObj, trackerLeadIds, dateFrom, dateTo)
+  const details = applyPeriodDisbursedAmounts(result.details, periodByLead)
+
+  return {
+    summary: enrichSummaryWithDisbursement(result.summary, details),
+    breakdown: result.breakdown,
+    trend: result.trend,
+    details
+  }
+}
+
 async function runHistoricalReport(
   db: ReportDb,
   tenantIdObj: ObjectId,
@@ -490,12 +520,7 @@ async function runHistoricalReport(
 
     const merged = mergeHistoricalWithDisbursementActivity(emptyHistorical, disbursementLeads, groupBy)
 
-    return {
-      summary: enrichSummaryWithDisbursement(merged.summary, merged.details),
-      breakdown: merged.breakdown,
-      trend: merged.trend,
-      details: merged.details
-    }
+    return withPeriodDisbursements(db, tenantIdObj, merged, filters.dateFrom, filters.dateTo)
   }
 
   const auditMatchConditions: Record<string, unknown>[] = [
@@ -903,12 +928,7 @@ async function runHistoricalReport(
     result = mergeHistoricalWithDisbursementActivity(result, disbursementLeads, groupBy)
   }
 
-  return {
-    summary: enrichSummaryWithDisbursement(result.summary, result.details),
-    breakdown: result.breakdown,
-    trend: result.trend,
-    details: result.details
-  }
+  return withPeriodDisbursements(db, tenantIdObj, result, filters.dateFrom, filters.dateTo)
 }
 
 export async function GET(request: Request) {
